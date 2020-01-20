@@ -1,4 +1,4 @@
-const c = @cImport({
+pub const c = @cImport({
     @cInclude("SDL.h");
 });
 const assert = @import("std").debug.assert;
@@ -61,9 +61,7 @@ pub fn MainGameLoop(screen: *c.SDL_Window, renderer: *c.SDL_Renderer) void {
         SimWorld.WritableInstance().GameTick();
 
         //TODO update presentation
-        _ = c.SDL_RenderClear(renderer);
         Presentation.RenderFrame(renderer, SimWorld.Instance());
-        c.SDL_RenderPresent(renderer);
 
         c.SDL_Delay(17);
     }

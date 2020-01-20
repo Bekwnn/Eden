@@ -1,10 +1,10 @@
 const debug = @import("std").debug;
 const EntityManager = @import("EntityManager.zig").EntityManager;
 
-var instance: SimWorld;
+var instance = SimWorld{};
 
-const SimWorld = struct {
-    m_entityManager: EntityManager,
+pub const SimWorld = struct {
+    m_entityManager: EntityManager = EntityManager{},
 
     pub fn GameTick(self: SimWorld) void {
         debug.warn("GameTick");

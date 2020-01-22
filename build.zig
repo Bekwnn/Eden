@@ -5,9 +5,11 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("sdl-zig-demo", "main.zig");
     exe.setBuildMode(mode);
 
-    exe.addIncludeDir("SDL2/include");
+    exe.addIncludeDir("dependency/SDL2/include");
+    exe.addIncludeDir("dependency/glew-2.1.0/include");
     exe.linkSystemLibrary("c");
     exe.linkSystemLibrary("SDL2");
+    exe.linkSystemLibrary("glew32");
     exe.install();
 
     const run_exe_cmd = exe.run();

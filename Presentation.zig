@@ -1,4 +1,4 @@
-const c = @import("main.zig").c;
+const c = @import("c.zig");
 const SimWorld = @import("SimWorld.zig").SimWorld;
 
 pub fn Initialize(renderer: *c.SDL_Renderer) void {

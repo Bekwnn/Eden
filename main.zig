@@ -1,6 +1,4 @@
-pub const c = @cImport({
-    @cInclude("SDL.h");
-});
+const c = @import("c.zig");
 const assert = @import("std").debug.assert;
 
 const SimWorld = @import("SimWorld.zig");
@@ -14,29 +12,49 @@ inline fn SDL_RWclose(ctx: [*]c.SDL_RWops) c_int {
     return ctx[0].close.?(ctx);
 }
 
+const InitError = error{
+    GlewInit,
+    SDLInit,
+};
+
 pub fn main() !void {
+    // Setting pre-init attributes
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 3);
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MINOR_VERSION), 1);
 
     // Init
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
         c.SDL_Log(c"Unable to initialize SDL: %s", c.SDL_GetError());
-        return error.SDLInitializationFailed;
+        return InitError.SDLInit;
     }
     defer c.SDL_Quit();
 
     // Window Creation
-    const screen = c.SDL_CreateWindow(c"My Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1200, 700, c.SDL_WINDOW_OPENGL) orelse
+    const screen = c.SDL_CreateWindow(c"My Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1200, 700, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE) orelse
         {
         c.SDL_Log(c"Unable to create window: %s", c.SDL_GetError());
-        return error.SDLInitializetionFailed;
+        return InitError.SDLInit;
     };
     defer c.SDL_DestroyWindow(screen);
 
     // Renderer
     const renderer = c.SDL_CreateRenderer(screen, -1, 0) orelse {
         c.SDL_Log(c"Unable to create renderer: %s", c.SDL_GetError());
-        return error.SDLInitializetionFailed;
+        return InitError.SDLInit;
     };
     defer c.SDL_DestroyRenderer(renderer);
+
+    // Create context
+    const glContext: c.SDL_GLContext = c.SDL_GL_CreateContext(screen);
+    //    if (@intCast(u32, glContext) == 0) {
+    //        return InitError.SDLInit;
+    //    }
+
+    // Glew init
+    var err: c.GLenum = c.glewInit();
+    if (c.GLEW_OK != err) {
+        return InitError.GlewInit;
+    }
 
     Presentation.Initialize(renderer);
 

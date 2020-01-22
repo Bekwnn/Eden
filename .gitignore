@@ -3,9 +3,12 @@ zig-cache/
 build/
 build-*/
 
-# SDL ignores
-SDL*.*
-SDL2/
+# Foreign ignores
+dependency/
+
+# lib/dll ignores
+*.lib
+*.dll
 
 # Vim ignores
 # Swap

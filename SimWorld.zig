@@ -7,7 +7,7 @@ pub const SimWorld = struct {
     m_entityManager: EntityManager = EntityManager{},
 
     pub fn GameTick(self: SimWorld) void {
-        debug.warn("GameTick");
+        //debug.warn("GameTick\n");
     }
 };
 

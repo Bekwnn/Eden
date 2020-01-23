@@ -15,6 +15,7 @@ inline fn SDL_RWclose(ctx: [*]c.SDL_RWops) c_int {
 const InitError = error{
     GlewInit,
     SDLInit,
+    OpenGLInit,
 };
 
 pub fn main() !void {
@@ -22,7 +23,7 @@ pub fn main() !void {
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 3);
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MINOR_VERSION), 1);
 
-    // Init
+    // SDL init
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
         c.SDL_Log(c"Unable to initialize SDL: %s", c.SDL_GetError());
         return InitError.SDLInit;
@@ -55,6 +56,8 @@ pub fn main() !void {
     if (c.GLEW_OK != err) {
         return InitError.GlewInit;
     }
+    // vsync on
+    _ = c.SDL_GL_SetSwapInterval(1);
 
     Presentation.Initialize(renderer);
 

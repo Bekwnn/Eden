@@ -1,5 +1,7 @@
 const c = @import("c.zig");
-const assert = @import("std").debug.assert;
+const debug = @import("std").debug;
+const assert = debug.assert;
+const mem = @import("std").mem;
 
 const SimWorld = @import("SimWorld.zig");
 const Presentation = @import("Presentation.zig");
@@ -20,8 +22,8 @@ const InitError = error{
 
 pub fn main() !void {
     // Setting pre-init attributes
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 3);
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MINOR_VERSION), 1);
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 4);
+    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MINOR_VERSION), 6);
 
     // SDL init
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
@@ -31,8 +33,7 @@ pub fn main() !void {
     defer c.SDL_Quit();
 
     // Window Creation
-    const screen = c.SDL_CreateWindow(c"My Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1200, 700, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE) orelse
-        {
+    const screen = c.SDL_CreateWindow(c"My Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1200, 700, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE) orelse {
         c.SDL_Log(c"Unable to create window: %s", c.SDL_GetError());
         return InitError.SDLInit;
     };
@@ -47,19 +48,23 @@ pub fn main() !void {
 
     // Create context
     const glContext: c.SDL_GLContext = c.SDL_GL_CreateContext(screen);
-    //    if (@intCast(u32, glContext) == 0) {
-    //        return InitError.SDLInit;
-    //    }
+    if (@ptrToInt(glContext) == 0) {
+        return InitError.SDLInit;
+    }
 
     // Glew init
     var err: c.GLenum = c.glewInit();
     if (c.GLEW_OK != err) {
         return InitError.GlewInit;
     }
+    const glVer: [*]const u8 = c.glGetString(c.GL_VERSION);
+    if (@ptrToInt(glVer) != 0) {
+        debug.warn("OpenGL version supported by this platform: {}\n", glVer[0..mem.len(u8, glVer)]);
+    }
     // vsync on
     _ = c.SDL_GL_SetSwapInterval(1);
 
-    Presentation.Initialize(renderer);
+    //Presentation.Initialize(renderer);
 
     MainGameLoop(screen, renderer);
 }

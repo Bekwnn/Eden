@@ -64,7 +64,7 @@ pub fn main() !void {
     // vsync on
     _ = c.SDL_GL_SetSwapInterval(1);
 
-    //Presentation.Initialize(renderer);
+    Presentation.Initialize(renderer);
 
     MainGameLoop(screen, renderer);
 }

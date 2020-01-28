@@ -2,17 +2,19 @@ const c = @import("c.zig");
 const SimWorld = @import("SimWorld.zig").SimWorld;
 const debug = @import("std").debug;
 
+var curShader: ?c.GLuint = null;
+
 pub fn Initialize(renderer: *c.SDL_Renderer) void {
-    _ = c.SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    const shader: c.GLuint = LoadShader("basic.vert", "basic.frag");
-    if (shader != 0) {
-        c.glUseProgram(shader);
-    }
+    c.glEnable(c.GL_DEPTH_TEST);
+    c.glDepthFunc(c.GL_LESS);
+    _ = c.SDL_SetRenderDrawColor(renderer, 20, 20, 40, 255);
+    curShader = LoadShader("basic.vert", "basic.frag");
+    BindVAO();
 }
 
 //vertex shader: build, compile, link
 // TODO should live in its own file
-pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) c.GLuint {
+pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) ?c.GLuint {
     var compileResult: c.GLint = c.GL_FALSE;
 
     // convert and compile
@@ -29,7 +31,7 @@ pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) c.GLuint {
         var errLog: []u8 = undefined;
         c.glGetShaderInfoLog(vertShaderObject, errLogLength, &errLogLength, &errLog[0]);
         debug.warn("{}\n", errLog[0..@intCast(usize, errLogLength)]);
-        return 0;
+        return null;
     } else {
         debug.warn("Vertex shader {} compiled successfully.\n", vertFile);
     }
@@ -48,7 +50,7 @@ pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) c.GLuint {
         var errLog: []u8 = undefined;
         c.glGetShaderInfoLog(fragShaderObject, errLogLength, &errLogLength, &errLog[0]);
         debug.warn("{}\n", errLog[0..@intCast(usize, errLogLength)]);
-        return 0;
+        return null;
     } else {
         debug.warn("Fragment shader {} compiled successfully.\n", fragFile);
     }
@@ -67,7 +69,7 @@ pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) c.GLuint {
         var errLog: []u8 = undefined;
         c.glGetProgramInfoLog(shaderObject, errLogLength, &errLogLength, &errLog[0]);
         debug.warn("{}\n", errLog[0..@intCast(usize, errLogLength)]);
-        return 0;
+        return null;
     }
     debug.warn("Shader program {} and {} linked successfully.\n", vertFile, fragFile);
 
@@ -110,14 +112,32 @@ const vertices = [_]f32{
     0.0,  0.5,  0.0,
 };
 
+var triVAO: c.GLuint = 0;
+var triVBO: c.GLuint = 0;
+
+fn BindVAO() void {
+    c.glGenBuffers(1, &triVBO);
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, triVBO);
+    c.glBufferData(c.GL_ARRAY_BUFFER, 9 * @sizeOf(f32), &vertices[0], c.GL_STATIC_DRAW);
+
+    c.glGenVertexArrays(1, &triVAO);
+    c.glBindVertexArray(triVAO);
+    c.glEnableVertexAttribArray(0);
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, triVBO);
+    c.glVertexAttribPointer(0, 3, c.GL_FLOAT, c.GL_FALSE, 3 * @sizeOf(f32), null);
+}
+
 pub fn RenderFrame(renderer: *c.SDL_Renderer, simWorld: *const SimWorld) void {
     _ = c.SDL_RenderClear(renderer);
 
-    var VBO: c.GLuint = undefined;
-
-    c.glGenBuffers(1, &VBO);
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, VBO);
-    c.glBufferData(c.GL_ARRAY_BUFFER, vertices.len, &vertices[0], c.GL_STATIC_DRAW);
+    if (curShader) |s| {
+        c.glUseProgram(s);
+    } else {
+        debug.warn("panic!");
+        return;
+    }
+    c.glBindVertexArray(triVAO);
+    c.glDrawArrays(c.GL_TRIANGLES, 0, 3);
 
     c.SDL_RenderPresent(renderer); // End of Frame
 }

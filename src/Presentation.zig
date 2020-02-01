@@ -74,8 +74,6 @@ pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) ?c.GLuint {
     debug.warn("Shader program {} and {} linked successfully.\n", vertFile, fragFile);
 
     // compiled shaders are linked to program, cleanup/delete source
-    c.glDetachShader(shaderObject, vertShaderObject);
-    c.glDetachShader(shaderObject, fragShaderObject);
     c.glDeleteShader(vertShaderObject);
     c.glDeleteShader(fragShaderObject);
 
@@ -102,42 +100,54 @@ fn ReadFShader(shaderFileName: []const u8) [*]const u8 {
         c\\void main()
         c\\{
         c\\    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
-        c\\} 
+        c\\}
     ;
 }
 
 const vertices = [_]f32{
-    -0.5, -0.5, 0.0,
+    0.5,  0.5,  0.0,
     0.5,  -0.5, 0.0,
-    0.0,  0.5,  0.0,
+    -0.5, -0.5, 0.0,
+    0.5,  0.5,  0.0,
 };
 
-var triVAO: c.GLuint = 0;
-var triVBO: c.GLuint = 0;
+const indices = [_]u32{
+    0, 1, 3,
+    1, 2, 3,
+};
+
+var VAO: c.GLuint = 0;
+var VBO: c.GLuint = 0;
+var EBO: c.GLuint = 0;
 
 fn BindVAO() void {
-    c.glGenBuffers(1, &triVBO);
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, triVBO);
-    c.glBufferData(c.GL_ARRAY_BUFFER, 9 * @sizeOf(f32), &vertices[0], c.GL_STATIC_DRAW);
+    c.glGenVertexArrays(1, &VAO);
+    c.glGenBuffers(1, &VBO);
+    c.glGenBuffers(1, &EBO);
 
-    c.glGenVertexArrays(1, &triVAO);
-    c.glBindVertexArray(triVAO);
-    c.glEnableVertexAttribArray(0);
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, triVBO);
+    c.glBindVertexArray(VAO);
+
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, VBO);
+    c.glBufferData(c.GL_ARRAY_BUFFER, vertices.len * @sizeOf(f32), &vertices, c.GL_STATIC_DRAW);
+
+    c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, EBO);
+    c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, indices.len * @sizeOf(u32), &indices, c.GL_STATIC_DRAW);
+
     c.glVertexAttribPointer(0, 3, c.GL_FLOAT, c.GL_FALSE, 3 * @sizeOf(f32), null);
+    c.glEnableVertexAttribArray(0);
+
+    c.glBindVertexArray(0);
 }
 
-pub fn RenderFrame(renderer: *c.SDL_Renderer, simWorld: *const SimWorld) void {
+pub fn RenderFrame(renderer: *c.SDL_Renderer, screen: *c.SDL_Window, simWorld: *const SimWorld) void {
     _ = c.SDL_RenderClear(renderer);
+    c.glClear(c.GL_COLOR_BUFFER_BIT);
 
     if (curShader) |s| {
         c.glUseProgram(s);
-    } else {
-        debug.warn("panic!");
-        return;
     }
-    c.glBindVertexArray(triVAO);
-    c.glDrawArrays(c.GL_TRIANGLES, 0, 3);
+    c.glBindVertexArray(VAO);
+    c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
 
-    c.SDL_RenderPresent(renderer); // End of Frame
+    c.SDL_GL_SwapWindow(screen);
 }

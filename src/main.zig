@@ -47,12 +47,14 @@ pub fn main() !void {
     defer c.SDL_DestroyRenderer(renderer);
 
     // Create context
-    const glContext: c.SDL_GLContext = c.SDL_GL_CreateContext(screen);
+    const glContext = c.SDL_GL_CreateContext(screen);
     if (@ptrToInt(glContext) == 0) {
         return InitError.SDLInit;
     }
+    _ = c.SDL_GL_MakeCurrent(screen, glContext);
 
     // Glew init
+    c.glewExperimental = c.GL_TRUE;
     var err: c.GLenum = c.glewInit();
     if (c.GLEW_OK != err) {
         return InitError.GlewInit;
@@ -87,7 +89,7 @@ pub fn MainGameLoop(screen: *c.SDL_Window, renderer: *c.SDL_Renderer) void {
         SimWorld.WritableInstance().GameTick();
 
         //TODO update presentation
-        Presentation.RenderFrame(renderer, SimWorld.Instance());
+        Presentation.RenderFrame(renderer, screen, SimWorld.Instance());
 
         c.SDL_Delay(17);
     }

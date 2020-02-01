@@ -3,13 +3,6 @@ zig-cache/
 build/
 build-*/
 
-# Foreign ignores
-dependency/
-
-# lib/dll ignores
-*.lib
-*.dll
-
 # Vim ignores
 # Swap
 [._]*.s[a-v][a-z]

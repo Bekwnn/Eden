@@ -3,7 +3,7 @@ const debug = @import("std").debug;
 const assert = debug.assert;
 const mem = @import("std").mem;
 
-const SimWorld = @import("SimWorld.zig");
+const GameWorld = @import("GameWorld.zig");
 const Presentation = @import("Presentation.zig");
 
 const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);
@@ -86,10 +86,10 @@ pub fn MainGameLoop(screen: *c.SDL_Window, renderer: *c.SDL_Renderer) void {
         }
 
         //TODO update simulation
-        SimWorld.WritableInstance().GameTick();
+        GameWorld.WritableInstance().GameTick();
 
         //TODO update presentation
-        Presentation.RenderFrame(renderer, screen, SimWorld.Instance());
+        Presentation.RenderFrame(renderer, screen, GameWorld.Instance());
 
         c.SDL_Delay(17);
     }

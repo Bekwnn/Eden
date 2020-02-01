@@ -1,4 +1,4 @@
-const SimWorld = @import("SimWorld.zig").SimWorld;
+const GameWorld = @import("GameWorld.zig").GameWorld;
 const debug = @import("std").debug;
 
 usingnamespace @import("c.zig");
@@ -139,7 +139,7 @@ fn BindVAO() void {
     glBindVertexArray(0);
 }
 
-pub fn RenderFrame(renderer: *SDL_Renderer, screen: *SDL_Window, simWorld: *const SimWorld) void {
+pub fn RenderFrame(renderer: *SDL_Renderer, screen: *SDL_Window, gameWorld: *const GameWorld) void {
     glClear(GL_COLOR_BUFFER_BIT);
 
     if (curShader) |s| {

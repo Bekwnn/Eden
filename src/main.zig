@@ -1,4 +1,4 @@
-const c = @import("c.zig");
+const c = @import("c.zig"); //can't use usingnamespace because of main() definition conflict
 const debug = @import("std").debug;
 const assert = debug.assert;
 const mem = @import("std").mem;

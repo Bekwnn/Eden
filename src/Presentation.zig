@@ -1,35 +1,35 @@
-const c = @import("c.zig");
 const SimWorld = @import("SimWorld.zig").SimWorld;
 const debug = @import("std").debug;
 
-var curShader: ?c.GLuint = null;
+usingnamespace @import("c.zig");
 
-pub fn Initialize(renderer: *c.SDL_Renderer) void {
-    c.glEnable(c.GL_DEPTH_TEST);
-    c.glDepthFunc(c.GL_LESS);
-    _ = c.SDL_SetRenderDrawColor(renderer, 20, 20, 40, 255);
-    curShader = LoadShader("basic.vert", "basic.frag");
+var curShader: ?GLuint = null;
+
+pub fn Initialize(renderer: *SDL_Renderer) void {
+    glDepthFunc(GL_LESS);
+    glClearColor(0.1, 0.1, 0.2, 1.0);
+    curShader = LoadShader("basivert", "basifrag");
     BindVAO();
 }
 
 //vertex shader: build, compile, link
 // TODO should live in its own file
-pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) ?c.GLuint {
-    var compileResult: c.GLint = c.GL_FALSE;
+pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) ?GLuint {
+    var compileResult: GLint = GL_FALSE;
 
     // convert and compile
     debug.warn("Compiling {}...\n", vertFile);
     const vertProgramText = ReadVShader(vertFile); // needs to be GLchar*
-    const vertShaderObject: c.GLuint = c.glCreateShader(c.GL_VERTEX_SHADER);
-    c.glShaderSource(vertShaderObject, 1, &vertProgramText, 0);
-    c.glCompileShader(vertShaderObject);
+    const vertShaderObject: GLuint = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertShaderObject, 1, &vertProgramText, 0);
+    glCompileShader(vertShaderObject);
 
-    c.glGetShaderiv(vertShaderObject, c.GL_COMPILE_STATUS, &compileResult);
-    if (compileResult == c.GL_FALSE) {
-        var errLogLength: c.GLint = 0;
-        c.glGetShaderiv(vertShaderObject, c.GL_INFO_LOG_LENGTH, &errLogLength);
+    glGetShaderiv(vertShaderObject, GL_COMPILE_STATUS, &compileResult);
+    if (compileResult == GL_FALSE) {
+        var errLogLength: GLint = 0;
+        glGetShaderiv(vertShaderObject, GL_INFO_LOG_LENGTH, &errLogLength);
         var errLog: []u8 = undefined;
-        c.glGetShaderInfoLog(vertShaderObject, errLogLength, &errLogLength, &errLog[0]);
+        glGetShaderInfoLog(vertShaderObject, errLogLength, &errLogLength, &errLog[0]);
         debug.warn("{}\n", errLog[0..@intCast(usize, errLogLength)]);
         return null;
     } else {
@@ -39,16 +39,16 @@ pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) ?c.GLuint {
     // fragment shader: build, compile, link
     debug.warn("Compiling {}...\n", fragFile);
     const fragProgramText = ReadFShader(fragFile); // needs to be GLchar*
-    const fragShaderObject: c.GLuint = c.glCreateShader(c.GL_FRAGMENT_SHADER);
-    c.glShaderSource(fragShaderObject, 1, &fragProgramText, 0);
-    c.glCompileShader(fragShaderObject);
+    const fragShaderObject: GLuint = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragShaderObject, 1, &fragProgramText, 0);
+    glCompileShader(fragShaderObject);
 
-    c.glGetShaderiv(fragShaderObject, c.GL_COMPILE_STATUS, &compileResult);
-    if (compileResult == c.GL_FALSE) {
-        var errLogLength: c.GLint = 0;
-        c.glGetShaderiv(fragShaderObject, c.GL_INFO_LOG_LENGTH, &errLogLength);
+    glGetShaderiv(fragShaderObject, GL_COMPILE_STATUS, &compileResult);
+    if (compileResult == GL_FALSE) {
+        var errLogLength: GLint = 0;
+        glGetShaderiv(fragShaderObject, GL_INFO_LOG_LENGTH, &errLogLength);
         var errLog: []u8 = undefined;
-        c.glGetShaderInfoLog(fragShaderObject, errLogLength, &errLogLength, &errLog[0]);
+        glGetShaderInfoLog(fragShaderObject, errLogLength, &errLogLength, &errLog[0]);
         debug.warn("{}\n", errLog[0..@intCast(usize, errLogLength)]);
         return null;
     } else {
@@ -57,25 +57,25 @@ pub fn LoadShader(vertFile: []const u8, fragFile: []const u8) ?c.GLuint {
 
     // link shaders
     debug.warn("Linking shader programs {} and {}...\n", vertFile, fragFile);
-    const shaderObject: c.GLuint = c.glCreateProgram();
-    c.glAttachShader(shaderObject, vertShaderObject);
-    c.glAttachShader(shaderObject, fragShaderObject);
-    c.glLinkProgram(shaderObject);
+    const shaderObject: GLuint = glCreateProgram();
+    glAttachShader(shaderObject, vertShaderObject);
+    glAttachShader(shaderObject, fragShaderObject);
+    glLinkProgram(shaderObject);
 
-    c.glGetProgramiv(shaderObject, c.GL_LINK_STATUS, &compileResult);
-    if (compileResult == c.GL_FALSE) {
-        var errLogLength: c.GLint = 0;
-        c.glGetProgramiv(shaderObject, c.GL_INFO_LOG_LENGTH, &errLogLength);
+    glGetProgramiv(shaderObject, GL_LINK_STATUS, &compileResult);
+    if (compileResult == GL_FALSE) {
+        var errLogLength: GLint = 0;
+        glGetProgramiv(shaderObject, GL_INFO_LOG_LENGTH, &errLogLength);
         var errLog: []u8 = undefined;
-        c.glGetProgramInfoLog(shaderObject, errLogLength, &errLogLength, &errLog[0]);
+        glGetProgramInfoLog(shaderObject, errLogLength, &errLogLength, &errLog[0]);
         debug.warn("{}\n", errLog[0..@intCast(usize, errLogLength)]);
         return null;
     }
     debug.warn("Shader program {} and {} linked successfully.\n", vertFile, fragFile);
 
     // compiled shaders are linked to program, cleanup/delete source
-    c.glDeleteShader(vertShaderObject);
-    c.glDeleteShader(fragShaderObject);
+    glDeleteShader(vertShaderObject);
+    glDeleteShader(fragShaderObject);
 
     return shaderObject;
 }
@@ -108,7 +108,7 @@ const vertices = [_]f32{
     0.5,  0.5,  0.0,
     0.5,  -0.5, 0.0,
     -0.5, -0.5, 0.0,
-    0.5,  0.5,  0.0,
+    -0.5, 0.5,  0.0,
 };
 
 const indices = [_]u32{
@@ -116,38 +116,37 @@ const indices = [_]u32{
     1, 2, 3,
 };
 
-var VAO: c.GLuint = 0;
-var VBO: c.GLuint = 0;
-var EBO: c.GLuint = 0;
+var VAO: GLuint = 0;
+var VBO: GLuint = 0;
+var EBO: GLuint = 0;
 
 fn BindVAO() void {
-    c.glGenVertexArrays(1, &VAO);
-    c.glGenBuffers(1, &VBO);
-    c.glGenBuffers(1, &EBO);
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
 
-    c.glBindVertexArray(VAO);
+    glBindVertexArray(VAO);
 
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, VBO);
-    c.glBufferData(c.GL_ARRAY_BUFFER, vertices.len * @sizeOf(f32), &vertices, c.GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.len * @sizeOf(f32), &vertices, GL_STATIC_DRAW);
 
-    c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, EBO);
-    c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, indices.len * @sizeOf(u32), &indices, c.GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.len * @sizeOf(u32), &indices, GL_STATIC_DRAW);
 
-    c.glVertexAttribPointer(0, 3, c.GL_FLOAT, c.GL_FALSE, 3 * @sizeOf(f32), null);
-    c.glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * @sizeOf(f32), null);
+    glEnableVertexAttribArray(0);
 
-    c.glBindVertexArray(0);
+    glBindVertexArray(0);
 }
 
-pub fn RenderFrame(renderer: *c.SDL_Renderer, screen: *c.SDL_Window, simWorld: *const SimWorld) void {
-    _ = c.SDL_RenderClear(renderer);
-    c.glClear(c.GL_COLOR_BUFFER_BIT);
+pub fn RenderFrame(renderer: *SDL_Renderer, screen: *SDL_Window, simWorld: *const SimWorld) void {
+    glClear(GL_COLOR_BUFFER_BIT);
 
     if (curShader) |s| {
-        c.glUseProgram(s);
+        glUseProgram(s);
     }
-    c.glBindVertexArray(VAO);
-    c.glDrawElements(c.GL_TRIANGLES, 6, c.GL_UNSIGNED_INT, null);
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null);
 
-    c.SDL_GL_SwapWindow(screen);
+    SDL_GL_SwapWindow(screen);
 }

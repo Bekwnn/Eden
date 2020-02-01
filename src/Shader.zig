@@ -107,9 +107,6 @@ pub const Shader = struct {
         }
         debug.warn("Shader program {} and {} linked successfully.\n", vertFile, fragFile);
 
-        // compiled shaders are linked to program, cleanup/delete source
-        glDeleteShader(fragShaderObject);
-
         return Shader{.gl_id = shaderObject};
     }
 };

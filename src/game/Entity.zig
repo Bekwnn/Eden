@@ -1,14 +1,25 @@
 const Vec3 = @import("../math/Vec3.zig");
+const assert = @import("std").debug.assert;
 
 // [start, end), 1m entities for now (more...?)
+const k_eidCount: u32 = 1000000;
 const k_eidStart: u32 = 1000;
-const k_eidEnd: u32 = 1001000;
+const k_eidEnd: u32 = k_eidStart + k_eidCount;
 
 pub const Entity = struct {
     m_eid: u32 = 0,
     m_pos: Vec3 = Vec3{},
 
-    pub fn CheckEID(eid: u32) bool {
+    // Just says whether or not an eid is in the range of [eidStart, eidEnd)
+    pub fn CheckEid(eid: u32) bool {
         return eid >= k_eidStart and eid < k_eidEnd;
+    }
+
+    pub fn GetEntityMaxCount() u32 {
+        return k_eidCount;
+    }
+
+    pub fn GetEidStart() u32 {
+        return k_eidStart;
     }
 };

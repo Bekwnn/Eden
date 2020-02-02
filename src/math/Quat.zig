@@ -7,7 +7,6 @@ pub const Quat = struct {
 
 //TODO
 //pub fn Equals(lhs: *Quat, rhs: *Quat) bool {
-//    return false;
 //}
 
 //TODO lerp

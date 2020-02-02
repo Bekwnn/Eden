@@ -1,10 +1,9 @@
 const c = @import("c.zig"); //can't use usingnamespace because of main() definition conflict
-const debug = @import("std").debug;
-const assert = debug.assert;
-const mem = @import("std").mem;
+const std = @import("std");
+const debug = std.debug;
 
-const GameWorld = @import("GameWorld.zig");
-const Presentation = @import("Presentation.zig");
+const GameWorld = @import("game/GameWorld.zig");
+const Presentation = @import("presentation/Presentation.zig");
 
 const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);
 
@@ -61,12 +60,13 @@ pub fn main() !void {
     }
     const glVer: [*]const u8 = c.glGetString(c.GL_VERSION);
     if (@ptrToInt(glVer) != 0) {
-        debug.warn("OpenGL version supported by this platform: {}\n", glVer[0..mem.len(u8, glVer)]);
+        debug.warn("OpenGL version supported by this platform: {}\n", glVer[0..std.mem.len(u8, glVer)]);
     }
     // vsync on
     _ = c.SDL_GL_SetSwapInterval(1);
 
     Presentation.Initialize(renderer);
+    GameWorld.Initialize();
 
     MainGameLoop(screen, renderer);
 }

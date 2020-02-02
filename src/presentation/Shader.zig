@@ -1,19 +1,16 @@
 const std = @import("std");
 const debug = std.debug;
 const File = std.fs.File;
-//const path = std.fs.path;
 const Allocator = std.mem.Allocator;
 
-usingnamespace @import("c.zig");
+usingnamespace @import("../c.zig");
 
 var allocator = std.heap.direct_allocator;
 
-const ShaderCompileErr = error {
-    SeeLog,
-};
+const ShaderCompileErr = error{SeeLog};
 
 fn ShaderTypeStr(shaderType: GLenum) []const u8 {
-    return switch (shaderType){
+    return switch (shaderType) {
         GL_VERTEX_SHADER => "Vertex",
         GL_FRAGMENT_SHADER => "Fragment",
         GL_COMPUTE_SHADER => "Compute",
@@ -37,7 +34,7 @@ fn CompileShader(relativePath: []const u8, shaderType: GLenum) !GLuint {
     defer allocator.free(fullPath);
     std.mem.copy(u8, fullPath[0..], cwd);
     std.mem.copy(u8, fullPath[cwd.len..], "\\");
-    std.mem.copy(u8, fullPath[cwd.len+1..], relativePath);
+    std.mem.copy(u8, fullPath[cwd.len + 1 ..], relativePath);
 
     debug.warn("Full Path: {}\n", fullPath);
 
@@ -77,15 +74,14 @@ pub const Shader = struct {
         const vertShaderObject = CompileShader(vertFile, GL_VERTEX_SHADER) catch |err| {
             debug.warn("Unable to compile {} shader with path {}, error: {}\n", ShaderTypeStr(GL_VERTEX_SHADER), vertFile, err);
             return null;
-        }; 
+        };
         defer glDeleteShader(vertShaderObject);
 
         // fragment shader: build, compile, link
-        // vert shader: build, compile, link
         const fragShaderObject = CompileShader(fragFile, GL_FRAGMENT_SHADER) catch |err| {
             debug.warn("Unable to compile {} shader with path {}, error: {}\n", ShaderTypeStr(GL_FRAGMENT_SHADER), fragFile, err);
             return null;
-        }; 
+        };
         defer glDeleteShader(fragShaderObject);
 
         // link shaders
@@ -107,7 +103,6 @@ pub const Shader = struct {
         }
         debug.warn("Shader program {} and {} linked successfully.\n", vertFile, fragFile);
 
-        return Shader{.gl_id = shaderObject};
+        return Shader{ .gl_id = shaderObject };
     }
 };
-

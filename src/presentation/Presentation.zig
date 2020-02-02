@@ -1,16 +1,15 @@
-const GameWorld = @import("GameWorld.zig").GameWorld;
-const Shader = @import("Shader.zig").Shader;
 const debug = @import("std").debug;
+const Shader = @import("Shader.zig").Shader;
 
-usingnamespace @import("c.zig");
+const GameWorld = @import("../game/GameWorld.zig").GameWorld;
+
+usingnamespace @import("../c.zig");
 
 var curShader: ?Shader = null;
 
 pub fn Initialize(renderer: *SDL_Renderer) void {
     glClearColor(0.1, 0.1, 0.2, 1.0);
-    curShader = Shader.init(
-    "src\\shaders\\basic.vert", 
-    "src\\shaders\\basic.frag");
+    curShader = Shader.init("src\\shaders\\basic.vert", "src\\shaders\\basic.frag");
     BindVAO();
 }
 

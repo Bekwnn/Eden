@@ -1,6 +1,6 @@
 const std = @import("std");
 const EntityManager = @import("EntityManager.zig").EntityManager;
-const Entity = @import("Entity.zig").Entity; // TODO delete
+const Entity = @import("Entity.zig").Entity;
 
 const debug = std.debug;
 const time = std.time;
@@ -24,17 +24,6 @@ pub const GameWorld = struct {
 
 pub fn Initialize() void {
     instance = GameWorld{ .m_entityManager = EntityManager.Initialize() };
-}
-
-//TODO delete
-fn LogEntities() void {
-    for (instance.m_entityManager.m_entities.items) |item| {
-        if (item.m_e) |entity| {
-            std.debug.warn("Entity: {}\n", entity.m_eid);
-        } else {
-            std.debug.warn("null\n");
-        }
-    }
 }
 
 pub fn Instance() *const GameWorld {

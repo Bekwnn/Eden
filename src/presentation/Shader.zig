@@ -9,7 +9,7 @@ var allocator = std.heap.direct_allocator;
 
 const ShaderCompileErr = error{SeeLog};
 
-fn ShaderTypeStr(shaderType: GLenum) []const u8 {
+fn ShaderTypeStr(comptime shaderType: GLenum) []const u8 {
     return switch (shaderType) {
         GL_VERTEX_SHADER => "Vertex",
         GL_FRAGMENT_SHADER => "Fragment",
@@ -22,7 +22,7 @@ fn ShaderTypeStr(shaderType: GLenum) []const u8 {
 }
 
 // return needs to be cleaned up with glDeleteShader
-fn CompileShader(relativePath: []const u8, shaderType: GLenum) !GLuint {
+fn CompileShader(relativePath: []const u8, comptime shaderType: GLenum) !GLuint {
     var compileResult: GLint = GL_FALSE;
 
     debug.warn("Compiling {} Shader {}...\n", ShaderTypeStr(shaderType), relativePath);

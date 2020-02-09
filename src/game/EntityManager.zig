@@ -1,12 +1,13 @@
 const std = @import("std");
-const GameWorld = @import("GameWorld.zig").GameWorld;
+const gameWorld = @import("GameWorld.zig");
 const ent = @import("Entity.zig");
 
+const GameWorld = gameWorld.GameWorld;
 const Entity = ent.Entity;
 const ArrayList = std.ArrayList;
 const mem = std.mem;
 
-var allocator = std.heap.direct_allocator;
+const allocator = std.heap.direct_allocator;
 const k_entityAllocChunk = 100; //scales with Entity sizeof
 
 const EntityError = error{
@@ -25,17 +26,13 @@ const EntityEntry = struct {
 };
 
 pub const EntityManager = struct {
-    //TODO should probably allocate in chunks of entities or something to make things a bit slicker
-    m_entityFastTable: ArrayList(EntityFastLookup),
-    m_entities: ArrayList(EntityEntry),
+    m_entityFastTable: ArrayList(EntityFastLookup) = ArrayList(EntityFastLookup).init(allocator),
+    m_entities: ArrayList(EntityEntry) = ArrayList(EntityEntry).init(allocator),
     m_endOfEids: u32 = Entity.GetEidStart(),
     m_firstFreeEntitySlot: u32 = 0, // potentially speed up KillEntity a bit on average...
 
     pub fn Initialize() EntityManager {
-        return EntityManager{
-            .m_entityFastTable = ArrayList(EntityFastLookup).init(allocator),
-            .m_entities = ArrayList(EntityEntry).init(allocator),
-        };
+        return EntityManager{};
         // will probably do additional initialization later on...
     }
 
@@ -94,3 +91,25 @@ pub const EntityManager = struct {
         return &self.m_entityFastTable.items[eid - Entity.GetEidStart()];
     }
 };
+
+pub fn EntityUpdateBehaviour() void {
+    const entityManager: *EntityManager = &gameWorld.WritableInstance().m_entityManager;
+    var i: u32 = 0;
+    const count = entityManager.m_entities.count();
+    while (i < count) {
+        defer i += 1;
+        var entity = entityManager.m_entities.items[i].m_e orelse continue;
+        entity.Update();
+    }
+}
+
+pub fn EntityFixedUpdateBehaviour() void {
+    const entityManager: *EntityManager = &gameWorld.WritableInstance().m_entityManager;
+    var i: u32 = 0;
+    const count = entityManager.m_entities.count();
+    while (i < count) {
+        defer i += 1;
+        var entity = entityManager.m_entities.items[i].m_e orelse continue;
+        entity.FixedUpdate();
+    }
+}

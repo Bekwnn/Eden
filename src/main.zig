@@ -2,8 +2,8 @@ const c = @import("c.zig"); //can't use usingnamespace because of main() definit
 const std = @import("std");
 const debug = std.debug;
 
-const GameWorld = @import("game/GameWorld.zig");
-const Presentation = @import("presentation/Presentation.zig");
+const gameWorld = @import("game/GameWorld.zig");
+const presentation = @import("presentation/Presentation.zig");
 
 const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);
 
@@ -65,8 +65,11 @@ pub fn main() !void {
     // vsync on
     _ = c.SDL_GL_SetSwapInterval(1);
 
-    Presentation.Initialize(renderer);
-    GameWorld.Initialize();
+    presentation.Initialize(renderer);
+    gameWorld.Initialize();
+
+    //TODO delete, useful in the interim to test everything is working
+    _ = gameWorld.WritableInstance().CreateEntity();
 
     MainGameLoop(screen, renderer);
 }
@@ -86,10 +89,11 @@ pub fn MainGameLoop(screen: *c.SDL_Window, renderer: *c.SDL_Renderer) void {
         }
 
         //TODO update simulation
-        GameWorld.WritableInstance().GameTick();
+        gameWorld.WritableInstance().Update(1.0 / 60.0);
+        gameWorld.WritableInstance().FixedUpdate();
 
         //TODO update presentation
-        Presentation.RenderFrame(renderer, screen, GameWorld.Instance());
+        presentation.RenderFrame(renderer, screen, gameWorld.Instance());
 
         c.SDL_Delay(17);
     }

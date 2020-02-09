@@ -105,4 +105,6 @@ pub const Shader = struct {
 
         return Shader{ .gl_id = shaderObject };
     }
+
+//    pub fn PushUniform(
 };

@@ -1,5 +1,8 @@
 const Vec3 = @import("../math/Vec3.zig");
-const assert = @import("std").debug.assert;
+const debug = @import("std").debug;
+
+const assert = debug.assert;
+const warn = debug.warn;
 
 // [start, end), 1m entities for now (more...?)
 const k_eidCount: u32 = 1000000;
@@ -22,4 +25,8 @@ pub const Entity = struct {
     pub fn GetEidStart() u32 {
         return k_eidStart;
     }
+
+    pub fn Update(self: *Entity) void {}
+
+    pub fn FixedUpdate(self: *Entity) void {}
 };

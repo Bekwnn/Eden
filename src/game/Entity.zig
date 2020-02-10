@@ -11,22 +11,18 @@ const k_eidEnd: u32 = k_eidStart + k_eidCount;
 
 pub const Entity = struct {
     m_eid: u32 = 0,
-    m_pos: Vec3 = Vec3{},
-
-    // Just says whether or not an eid is in the range of [eidStart, eidEnd)
-    pub fn CheckEid(eid: u32) bool {
-        return eid >= k_eidStart and eid < k_eidEnd;
-    }
-
-    pub fn GetEntityMaxCount() u32 {
-        return k_eidCount;
-    }
-
-    pub fn GetEidStart() u32 {
-        return k_eidStart;
-    }
-
-    pub fn Update(self: *Entity) void {}
-
-    pub fn FixedUpdate(self: *Entity) void {}
 };
+
+// Just says whether or not an eid is in the range of [eidStart, eidEnd)
+pub fn CheckEid(eid: u32) bool {
+    return eid >= k_eidStart and eid < k_eidEnd;
+}
+
+pub fn GetEntityMaxCount() u32 {
+    return k_eidCount;
+}
+
+pub fn GetEidStart() u32 {
+    return k_eidStart;
+}
+

@@ -28,7 +28,7 @@ const EntityEntry = struct {
 pub const EntityManager = struct {
     m_entityFastTable: ArrayList(EntityFastLookup) = ArrayList(EntityFastLookup).init(allocator),
     m_entities: ArrayList(EntityEntry) = ArrayList(EntityEntry).init(allocator),
-    m_endOfEids: u32 = Entity.GetEidStart(),
+    m_endOfEids: u32 = ent.GetEidStart(),
     m_firstFreeEntitySlot: u32 = 0, // potentially speed up KillEntity a bit on average...
 
     pub fn Initialize() EntityManager {
@@ -37,7 +37,7 @@ pub const EntityManager = struct {
     }
 
     pub fn CreateEntity(self: *EntityManager) !*Entity {
-        if (!Entity.CheckEid(self.m_endOfEids)) return EntityError.MaxEntities;
+        if (!ent.CheckEid(self.m_endOfEids)) return EntityError.MaxEntities;
 
         var newEntityIdx: u32 = 0;
         if (self.m_firstFreeEntitySlot == self.m_entities.count()) { // append new
@@ -85,31 +85,9 @@ pub const EntityManager = struct {
     }
 
     fn FastLookup(self: *EntityManager, eid: u32) ?*EntityFastLookup {
-        if (!Entity.CheckEid(eid) or eid >= self.m_endOfEids) {
+        if (!ent.entid(eid) or eid >= self.m_endOfEids) {
             return null;
         }
-        return &self.m_entityFastTable.items[eid - Entity.GetEidStart()];
+        return &self.m_entityFastTable.items[eid - ent.GetEidStart()];
     }
 };
-
-pub fn EntityUpdateBehaviour() void {
-    const entityManager: *EntityManager = &gameWorld.WritableInstance().m_entityManager;
-    var i: u32 = 0;
-    const count = entityManager.m_entities.count();
-    while (i < count) {
-        defer i += 1;
-        var entity = entityManager.m_entities.items[i].m_e orelse continue;
-        entity.Update();
-    }
-}
-
-pub fn EntityFixedUpdateBehaviour() void {
-    const entityManager: *EntityManager = &gameWorld.WritableInstance().m_entityManager;
-    var i: u32 = 0;
-    const count = entityManager.m_entities.count();
-    while (i < count) {
-        defer i += 1;
-        var entity = entityManager.m_entities.items[i].m_e orelse continue;
-        entity.FixedUpdate();
-    }
-}

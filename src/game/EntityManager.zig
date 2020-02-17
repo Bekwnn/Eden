@@ -1,6 +1,7 @@
 const std = @import("std");
 const gameWorld = @import("GameWorld.zig");
 const ent = @import("Entity.zig");
+const componentData = @import("ComponentData.zig");
 
 const GameWorld = gameWorld.GameWorld;
 const Entity = ent.Entity;
@@ -85,7 +86,7 @@ pub const EntityManager = struct {
     }
 
     fn FastLookup(self: *EntityManager, eid: u32) ?*EntityFastLookup {
-        if (!ent.entid(eid) or eid >= self.m_endOfEids) {
+        if (!ent.CheckEid(eid) or eid >= self.m_endOfEids) {
             return null;
         }
         return &self.m_entityFastTable.items[eid - ent.GetEidStart()];

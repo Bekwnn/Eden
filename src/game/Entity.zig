@@ -25,4 +25,3 @@ pub fn GetEntityMaxCount() u32 {
 pub fn GetEidStart() u32 {
     return k_eidStart;
 }
-

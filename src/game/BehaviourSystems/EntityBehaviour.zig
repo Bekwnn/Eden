@@ -33,3 +33,11 @@ pub fn EntityFixedUpdateBehaviour() void {
         EntityFixedUpdate(entity);
     }
 }
+
+pub fn EntityOnSpawnBehaviour(eid: u32) void {
+    std.debug.warn("Entity {} spawned.", eid);
+}
+
+pub fn EntityOnDestroyBehaviour(eid: u32) void {
+    std.debug.warn("Entity {} destroyed.", eid);
+}

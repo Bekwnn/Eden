@@ -5,6 +5,9 @@ const debug = std.debug;
 const gameWorld = @import("game/GameWorld.zig");
 const presentation = @import("presentation/Presentation.zig");
 
+//TODO delete
+const TransformComp = @import("game/ComponentData/TransformComp.zig").TransformComp;
+
 const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);
 
 extern fn SDL_PollEvent(event: *c.SDL_Event) c_int;
@@ -69,7 +72,18 @@ pub fn main() !void {
     gameWorld.Initialize();
 
     //TODO delete, useful in the interim to test everything is working
-    _ = gameWorld.WritableInstance().CreateEntity();
+    debug.warn("\n");
+    const newEntity = gameWorld.WritableInstance().CreateEntity();
+    debug.warn("newEntityId: {}\n", newEntity.m_eid);
+    const newCompID = gameWorld.WritableInstance().m_componentManager.AddComponent(TransformComp, newEntity.m_eid);
+    debug.warn("newTransformCompID: {}\n", newCompID);
+    debug.warn("{}\n", gameWorld.WritableInstance().m_componentManager.m_transformCompData.m_compData.count());
+    if (gameWorld.WritableInstance().m_componentManager.GetComponent(TransformComp, newCompID)) |compData| {
+        debug.warn("scale: {}, {}, {}\n", compData.scale.x, compData.scale.y, compData.scale.z);
+    }
+    if (gameWorld.WritableInstance().m_componentManager.GetComponentOwnerId(TransformComp, newCompID)) |ownerId| {
+        debug.warn("ownerId: {}\n", ownerId);
+    }
 
     MainGameLoop(screen, renderer);
 }

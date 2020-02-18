@@ -1,5 +1,6 @@
 const Vec3 = @import("../math/Vec3.zig");
 const debug = @import("std").debug;
+const componentData = @import("ComponentData.zig");
 
 const assert = debug.assert;
 const warn = debug.warn;
@@ -11,6 +12,7 @@ const k_eidEnd: u32 = k_eidStart + k_eidCount;
 
 pub const Entity = struct {
     m_eid: u32 = 0,
+    m_componentIds: [componentData.compTypeEnumCount]?u16 = [_]?u16{null} ** componentData.compTypeEnumCount,
 };
 
 // Just says whether or not an eid is in the range of [eidStart, eidEnd)

@@ -1,5 +1,5 @@
-const Vec3 = @import("../../math/Vec3.zig");
-const Quat = @import("../../math/Quat.zig");
+const Vec3 = @import("../../math/Vec3.zig").Vec3;
+const Quat = @import("../../math/Quat.zig").Quat;
 
 pub const TransformComp = struct {
     position: Vec3 = Vec3{},

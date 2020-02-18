@@ -23,6 +23,5 @@ pub const s_onDestroy = [_]fn (u32) void{
     EntityBehaviour.EntityOnDestroyBehaviour,
 };
 
-//TODO events
-// Enable event
-// Disable event
+//TODO does enabling/disabling components or behaviours even make sense? I don't think it does...
+// or at least components would just have an enabled bool on ones that are disable-able which behaviours could then process...

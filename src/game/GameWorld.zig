@@ -2,6 +2,7 @@ const std = @import("std");
 const Entity = @import("Entity.zig").Entity;
 const EntityManager = @import("EntityManager.zig").EntityManager;
 const behaviourSystems = @import("BehaviourSystems.zig");
+const ComponentManager = @import("ComponentData.zig").ComponentManager;
 
 const debug = std.debug;
 const time = std.time;
@@ -16,6 +17,7 @@ pub var deltaTime: comptime f32 = 1.0 / 60.0;
 
 pub const GameWorld = struct {
     m_entityManager: EntityManager,
+    m_componentManager: ComponentManager,
     m_updateBehaviours: [behaviourSystems.s_update.len]fn () void = behaviourSystems.s_update,
     m_fixedUpdateBehaviours: [behaviourSystems.s_fixedUpdate.len]fn () void = behaviourSystems.s_fixedUpdate,
     m_onSpawnBehaviours: [behaviourSystems.s_onSpawn.len]fn (u32) void = behaviourSystems.s_onSpawn,
@@ -62,7 +64,10 @@ pub const GameWorld = struct {
 };
 
 pub fn Initialize() void {
-    instance = GameWorld{ .m_entityManager = EntityManager.Initialize() };
+    instance = GameWorld{
+        .m_entityManager = EntityManager.Initialize(),
+        .m_componentManager = ComponentManager.Initialize(),
+    };
 }
 
 pub fn Instance() *const GameWorld {

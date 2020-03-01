@@ -68,6 +68,10 @@ pub fn main() !void {
     // vsync on
     _ = c.SDL_GL_SetSwapInterval(1);
 
+    //TODO not working
+    //var windowIsOpen: bool = false;
+    //c.igShowDemoWindow(&windowIsOpen);
+
     presentation.Initialize(renderer);
     gameWorld.Initialize();
 

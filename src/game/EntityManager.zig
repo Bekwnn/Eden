@@ -41,15 +41,15 @@ pub const EntityManager = struct {
         if (!ent.CheckEid(self.m_endOfEids)) return EntityError.MaxEntities;
 
         var newEntityIdx: u32 = 0;
-        if (self.m_firstFreeEntitySlot == self.m_entities.count()) { // append new
+        if (self.m_firstFreeEntitySlot == self.m_entities.len) { // append new
             const newEntry = Entity{ .m_eid = self.m_endOfEids };
             try self.m_entities.append(EntityEntry{ .m_e = newEntry });
-            newEntityIdx = @intCast(u32, self.m_entities.count()) - 1;
+            newEntityIdx = @intCast(u32, self.m_entities.len) - 1;
             self.m_firstFreeEntitySlot += 1;
         } else { // use existing freed slot
             self.m_entities.items[self.m_firstFreeEntitySlot].m_e = Entity{ .m_eid = self.m_endOfEids };
             newEntityIdx = self.m_firstFreeEntitySlot;
-            while (self.m_firstFreeEntitySlot < self.m_entities.count() and self.m_entities.items[self.m_firstFreeEntitySlot].m_e != null) {
+            while (self.m_firstFreeEntitySlot < self.m_entities.len and self.m_entities.items[self.m_firstFreeEntitySlot].m_e != null) {
                 self.m_firstFreeEntitySlot += 1;
             }
         }

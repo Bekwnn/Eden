@@ -43,7 +43,7 @@ pub const GameWorld = struct {
 
     pub fn CreateEntity(self: *GameWorld) *Entity {
         const newEntity = instance.m_entityManager.CreateEntity() catch |err| {
-            debug.panic("{}", err);
+            debug.panic("{}", .{err});
         };
         var i: u32 = 0;
         while (i < self.m_onSpawnBehaviours.len) {

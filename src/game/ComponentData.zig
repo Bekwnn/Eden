@@ -11,7 +11,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const allocator = std.heap.direct_allocator;
 
-pub const compTypeEnumCount: comptime u32 = comptime @memberCount(EComponentType);
+pub const compTypeEnumCount: comptime u32 = @typeInfo(EComponentType).Enum.fields.len;
 pub const EComponentType = enum {
     Health,
     Input,
@@ -37,7 +37,7 @@ fn ComponentDataArray(comptime compType: type) type {
         m_compData: ArrayList(ComponentDataPair(compType)) = ArrayList(ComponentDataPair(compType)).init(allocator),
 
         pub fn GetComp(self: *ComponentDataArray(compType), id: u16) ?*compType {
-            if (id >= self.m_compData.count()) {
+            if (id >= self.m_compData.len) {
                 return null;
             } else {
                 return &self.m_compData.items[id].m_data;
@@ -45,7 +45,7 @@ fn ComponentDataArray(comptime compType: type) type {
         }
 
         pub fn GetOwnerId(self: *ComponentDataArray(compType), id: u16) ?u32 {
-            if (id >= self.m_compData.count()) {
+            if (id >= self.m_compData.len) {
                 return null;
             } else {
                 return self.m_compData.items[id].m_ownerEid;
@@ -56,7 +56,7 @@ fn ComponentDataArray(comptime compType: type) type {
             self.m_compData.append(ComponentDataPair(compType){ .m_ownerEid = owner }) catch |err| {
                 @panic("Could not add new component to array.");
             };
-            const addedCompId = @intCast(u16, self.m_compData.count() - 1);
+            const addedCompId = @intCast(u16, self.m_compData.len - 1);
             //TODO add compId to entity's m_componentIds
             return addedCompId;
         }

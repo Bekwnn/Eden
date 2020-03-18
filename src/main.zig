@@ -29,21 +29,21 @@ pub fn main() !void {
 
     // SDL init
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
-        c.SDL_Log(c"Unable to initialize SDL: %s", c.SDL_GetError());
+        debug.warn("Unable to initialize SDL: {}", .{c.SDL_GetError()});
         return InitError.SDLInit;
     }
     defer c.SDL_Quit();
 
     // Window Creation
-    const screen = c.SDL_CreateWindow(c"My Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1200, 700, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE) orelse {
-        c.SDL_Log(c"Unable to create window: %s", c.SDL_GetError());
+    const screen = c.SDL_CreateWindow("My Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1200, 700, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE) orelse {
+        debug.warn("Unable to create window: {}", .{c.SDL_GetError()});
         return InitError.SDLInit;
     };
     defer c.SDL_DestroyWindow(screen);
 
     // Renderer
     const renderer = c.SDL_CreateRenderer(screen, -1, 0) orelse {
-        c.SDL_Log(c"Unable to create renderer: %s", c.SDL_GetError());
+        debug.warn("Unable to create renderer: {}", .{c.SDL_GetError()});
         return InitError.SDLInit;
     };
     defer c.SDL_DestroyRenderer(renderer);
@@ -51,43 +51,34 @@ pub fn main() !void {
     // Create context
     const glContext = c.SDL_GL_CreateContext(screen);
     if (@ptrToInt(glContext) == 0) {
+        debug.warn("Unable to create GLContext: {}", .{c.SDL_GetError()});
         return InitError.SDLInit;
     }
+
     _ = c.SDL_GL_MakeCurrent(screen, glContext);
 
     // Glew init
     c.glewExperimental = c.GL_TRUE;
     var err: c.GLenum = c.glewInit();
     if (c.GLEW_OK != err) {
+        debug.warn("GlewInit failed", .{});
         return InitError.GlewInit;
     }
-    const glVer: [*]const u8 = c.glGetString(c.GL_VERSION);
+    const glVer: [*:0]const u8 = c.glGetString(c.GL_VERSION);
     if (@ptrToInt(glVer) != 0) {
-        debug.warn("OpenGL version supported by this platform: {}\n", glVer[0..std.mem.len(u8, glVer)]);
+        debug.warn("OpenGL version supported by this platform: {}\n", .{glVer[0..std.mem.len(glVer)]});
     }
     // vsync on
     _ = c.SDL_GL_SetSwapInterval(1);
 
     //TODO not working
-    //var windowIsOpen: bool = false;
-    //c.igShowDemoWindow(&windowIsOpen);
+    _ = c.igCreateContext(null);
+    defer c.igDestroyContext(null);
 
     presentation.Initialize(renderer);
     gameWorld.Initialize();
 
     //TODO delete, useful in the interim to test everything is working
-    debug.warn("\n");
-    const newEntity = gameWorld.WritableInstance().CreateEntity();
-    debug.warn("newEntityId: {}\n", newEntity.m_eid);
-    const newCompID = gameWorld.WritableInstance().m_componentManager.AddComponent(TransformComp, newEntity.m_eid);
-    debug.warn("newTransformCompID: {}\n", newCompID);
-    debug.warn("{}\n", gameWorld.WritableInstance().m_componentManager.m_transformCompData.m_compData.count());
-    if (gameWorld.WritableInstance().m_componentManager.GetComponent(TransformComp, newCompID)) |compData| {
-        debug.warn("scale: {}, {}, {}\n", compData.scale.x, compData.scale.y, compData.scale.z);
-    }
-    if (gameWorld.WritableInstance().m_componentManager.GetComponentOwnerId(TransformComp, newCompID)) |ownerId| {
-        debug.warn("ownerId: {}\n", ownerId);
-    }
 
     MainGameLoop(screen, renderer);
 }
@@ -114,5 +105,21 @@ pub fn MainGameLoop(screen: *c.SDL_Window, renderer: *c.SDL_Renderer) void {
         presentation.RenderFrame(renderer, screen, gameWorld.Instance());
 
         c.SDL_Delay(17);
+    }
+}
+
+test "create entity" {
+    //TODO
+    debug.warn("\n", .{});
+    const newEntity = gameWorld.WritableInstance().CreateEntity();
+    debug.warn("newEntityId: {}\n", .{newEntity.m_eid});
+    const newCompID = gameWorld.WritableInstance().m_componentManager.AddComponent(TransformComp, newEntity.m_eid);
+    debug.warn("newTransformCompID: {}\n", .{newCompID});
+    debug.warn("{}\n", .{gameWorld.WritableInstance().m_componentManager.m_transformCompData.m_compData.len});
+    if (gameWorld.WritableInstance().m_componentManager.GetComponent(TransformComp, newCompID)) |compData| {
+        debug.warn("scale: {}, {}, {}\n", .{ compData.scale.x, compData.scale.y, compData.scale.z });
+    }
+    if (gameWorld.WritableInstance().m_componentManager.GetComponentOwnerId(TransformComp, newCompID)) |ownerId| {
+        debug.warn("ownerId: {}\n", .{ownerId});
     }
 }

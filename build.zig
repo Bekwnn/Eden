@@ -4,6 +4,38 @@ const fs = std.fs;
 const Builder = buildns.Builder;
 const Version = buildns.Version;
 
+fn deleteOldSDLLib() !void {
+    // delete existing dll if it's there
+    const workingDir = fs.cwd();
+    var binDir = try workingDir.openDirTraverse("zig-cache");
+    binDir = try binDir.openDirTraverse("bin");
+    try binDir.deleteFile("SDL2.dll");
+}
+
+fn copySDLLib() !void {
+    deleteOldSDLLib() catch |e| {}; // don't care if this fails
+
+    // Copy files to zig-cache/bin
+    const sdlDLLName = "SDL2.dll";
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = &arena.allocator;
+
+    const srcPath = fs.path.resolve(allocator, &[_][]const u8{ "dependency", "SDL2", "lib", "x64", sdlDLLName }) catch |e| {
+        std.debug.warn("Unable to resolve src path\n", .{});
+        return e;
+    };
+    const dstPath = fs.path.resolve(allocator, &[_][]const u8{ "zig-cache", "bin", sdlDLLName }) catch |e| {
+        std.debug.warn("Unable to resolve dst path\n", .{});
+        return e;
+    };
+    fs.copyFile(srcPath, dstPath) catch |e| {
+        std.debug.warn("Unable to copy file from {} to {}\n", .{ srcPath, dstPath });
+        return e;
+    };
+}
+
 pub fn build(b: *Builder) void {
     const mode = b.standardReleaseOptions();
     const exe = b.addExecutable("sdl-zig-demo", "src/main.zig");
@@ -50,6 +82,10 @@ pub fn build(b: *Builder) void {
     exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_opengl3.cpp", imgui_flags);
 
     exe.install();
+
+    copySDLLib() catch |e| {
+        std.debug.warn("Could not copy SDL2.dll, {}\n", .{e});
+    };
 
     const run_exe_cmd = exe.run();
     run_exe_cmd.step.dependOn(b.getInstallStep());

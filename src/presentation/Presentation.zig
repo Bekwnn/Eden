@@ -83,9 +83,15 @@ pub fn RenderFrame(renderer: *SDL_Renderer, screen: *SDL_Window, gameWorld: *con
         @panic("imguiIO is null");
     }
 
+    //TODO SDL_PollEvent and ImGui_ImplSDL2_ProcessEvent
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame(screen);
     igNewFrame();
+
     igShowDemoWindow(null);
+
     igRender();
+    ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
 
     SDL_GL_SwapWindow(screen);
 }

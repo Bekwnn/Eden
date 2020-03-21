@@ -71,14 +71,15 @@ pub fn main() !void {
     // vsync on
     _ = c.SDL_GL_SetSwapInterval(1);
 
-    //TODO not working
+    // imgui setup TODO relocate TODO handle returns
     _ = c.igCreateContext(null);
     defer c.igDestroyContext(null);
 
+    _ = c.ImGui_ImplSDL2_InitForOpenGL(screen, glContext);
+    _ = c.ImGui_ImplOpenGL3_Init(null);
+
     presentation.Initialize(renderer);
     gameWorld.Initialize();
-
-    //TODO delete, useful in the interim to test everything is working
 
     MainGameLoop(screen, renderer);
 }

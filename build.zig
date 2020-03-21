@@ -13,7 +13,13 @@ fn deleteOldSDLLib() !void {
 }
 
 fn copySDLLib() !void {
-    deleteOldSDLLib() catch |e| {}; // don't care if this fails
+    deleteOldSDLLib() catch |e| { // this is allowed to fail
+        // make dir if it doesn't exist
+        const workingDir = fs.cwd();
+        workingDir.makeDir("zig-cache") catch |e2| {}; // may already exist
+        var cacheDir = try workingDir.openDirTraverse("zig-cache");
+        cacheDir.makeDir("bin") catch |e2| {}; // may already exist
+    };
 
     // Copy files to zig-cache/bin
     const sdlDLLName = "SDL2.dll";
@@ -52,6 +58,25 @@ pub fn build(b: *Builder) void {
 
     exe.addIncludeDir("src");
 
+    exe.addIncludeDir("dependency/cimgui");
+    exe.addIncludeDir("dependency/cimgui/imgui");
+    exe.addIncludeDir("dependency/cimgui/imgui/examples");
+    const imgui_flags = &[_][]const u8{
+        "-std=c++11",
+        "-Wno-return-type-c-linkage",
+        "-DIMGUI_IMPL_OPENGL_LOADER_GLEW=1",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-Wno-pragma-pack",
+    };
+    exe.addCSourceFile("dependency/cimgui/cimgui.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/imgui.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/imgui_demo.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_opengl3.cpp", imgui_flags);
+
     exe.addIncludeDir("dependency/glew-2.1.0/include");
     exe.addLibPath("dependency/glew-2.1.0/lib/Release/x64");
     exe.linkSystemLibrary("glew32s"); //only include 1 of the 2 glew libs
@@ -62,24 +87,6 @@ pub fn build(b: *Builder) void {
 
     exe.linkSystemLibrary("user32");
     exe.linkSystemLibrary("gdi32");
-
-    exe.addIncludeDir("dependency/cimgui");
-    exe.addIncludeDir("dependency/cimgui/imgui");
-    exe.addIncludeDir("dependency/cimgui/imgui/examples");
-    const imgui_flags = &[_][]const u8{
-        "-std=c++11",
-        "-Wno-return-type-c-linkage",
-        "-DIMGUI_IMPL_OPENGL_LOADER_GLEW=1",
-        "-fno-exceptions",
-        "-fno-rtti",
-    };
-    exe.addCSourceFile("dependency/cimgui/cimgui.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui_demo.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_opengl3.cpp", imgui_flags);
 
     exe.install();
 

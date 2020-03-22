@@ -1,6 +1,7 @@
 const c = @import("c.zig"); //can't use usingnamespace because of main() definition conflict
 const std = @import("std");
 const debug = std.debug;
+const Vec2 = @import("math/Vec2.zig").Vec2;
 
 const gameWorld = @import("game/GameWorld.zig");
 const presentation = @import("presentation/Presentation.zig");

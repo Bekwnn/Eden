@@ -7,9 +7,25 @@ const Version = buildns.Version;
 fn deleteOldSDLLib() !void {
     // delete existing dll if it's there
     const workingDir = fs.cwd();
-    var binDir = try workingDir.openDirTraverse("zig-cache");
-    binDir = try binDir.openDirTraverse("bin");
+    var binDir = try workingDir.openDir("zig-cache", .{});
+    binDir = try binDir.openDir("bin", .{});
     try binDir.deleteFile("SDL2.dll");
+}
+
+fn openSDLSrcDir() !fs.Dir {
+    const workingDir = fs.cwd();
+    var srcPath = try workingDir.openDir("dependency", .{});
+    srcPath = try srcPath.openDir("SDL2", .{});
+    srcPath = try srcPath.openDir("lib", .{});
+    srcPath = try srcPath.openDir("x64", .{});
+    return srcPath;
+}
+
+fn openSDLDstDir() !fs.Dir {
+    const workingDir = fs.cwd();
+    var dstPath = try workingDir.openDir("zig-cache", .{});
+    dstPath = try dstPath.openDir("bin", .{});
+    return dstPath;
 }
 
 fn copySDLLib() !void {
@@ -17,26 +33,22 @@ fn copySDLLib() !void {
         // make dir if it doesn't exist
         const workingDir = fs.cwd();
         workingDir.makeDir("zig-cache") catch |e2| {}; // may already exist
-        var cacheDir = try workingDir.openDirTraverse("zig-cache");
+        var cacheDir = try workingDir.openDir("zig-cache", .{});
         cacheDir.makeDir("bin") catch |e2| {}; // may already exist
     };
 
     // Copy files to zig-cache/bin
     const sdlDLLName = "SDL2.dll";
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = &arena.allocator;
-
-    const srcPath = fs.path.resolve(allocator, &[_][]const u8{ "dependency", "SDL2", "lib", "x64", sdlDLLName }) catch |e| {
+    const srcPath = openSDLSrcDir() catch |e| {
         std.debug.warn("Unable to resolve src path\n", .{});
         return e;
     };
-    const dstPath = fs.path.resolve(allocator, &[_][]const u8{ "zig-cache", "bin", sdlDLLName }) catch |e| {
+    const dstPath = openSDLDstDir() catch |e| {
         std.debug.warn("Unable to resolve dst path\n", .{});
         return e;
     };
-    fs.copyFile(srcPath, dstPath) catch |e| {
+    srcPath.copyFile(sdlDLLName, dstPath, sdlDLLName, .{}) catch |e| {
         std.debug.warn("Unable to copy file from {} to {}\n", .{ srcPath, dstPath });
         return e;
     };

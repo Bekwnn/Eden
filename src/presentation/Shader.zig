@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 
 usingnamespace @import("../c.zig");
 
-var allocator = std.heap.direct_allocator;
+var allocator = std.heap.page_allocator;
 
 const ShaderCompileErr = error{SeeLog};
 

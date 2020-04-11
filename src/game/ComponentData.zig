@@ -9,7 +9,7 @@ pub const PhysicsComp = @import("ComponentData/PhysicsComp.zig").PhysicsComp;
 const std = @import("std");
 
 const ArrayList = std.ArrayList;
-const allocator = std.heap.direct_allocator;
+const allocator = std.heap.page_allocator;
 
 pub const compTypeEnumCount: comptime u32 = @typeInfo(EComponentType).Enum.fields.len;
 pub const EComponentType = enum {

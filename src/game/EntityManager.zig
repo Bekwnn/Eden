@@ -8,7 +8,7 @@ const Entity = ent.Entity;
 const ArrayList = std.ArrayList;
 const mem = std.mem;
 
-const allocator = std.heap.direct_allocator;
+const allocator = std.heap.page_allocator;
 const k_entityAllocChunk = 100; //scales with Entity sizeof
 
 const EntityError = error{

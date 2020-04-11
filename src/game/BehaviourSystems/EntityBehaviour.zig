@@ -11,7 +11,7 @@ fn EntityUpdate(self: *Entity) void {
 pub fn EntityUpdateBehaviour() void {
     const entityManager: *EntityManager = &gameWorld.WritableInstance().m_entityManager;
     var i: u32 = 0;
-    while (i < entityManager.m_entities.len) {
+    while (i < entityManager.m_entities.items.len) {
         defer i += 1;
         var entity = &(entityManager.m_entities.items[i].m_e orelse continue);
         EntityUpdate(entity);
@@ -25,7 +25,7 @@ fn EntityFixedUpdate(self: *Entity) void {
 pub fn EntityFixedUpdateBehaviour() void {
     const entityManager: *EntityManager = &gameWorld.WritableInstance().m_entityManager;
     var i: u32 = 0;
-    while (i < entityManager.m_entities.len) {
+    while (i < entityManager.m_entities.items.len) {
         defer i += 1;
         var entity = &(entityManager.m_entities.items[i].m_e orelse continue);
         EntityFixedUpdate(entity);

@@ -37,10 +37,9 @@ pub const Vec2 = struct {
         };
     }
 
-    const epsilonf32Sqrd: comptime f32 = std.math.f32_epsilon * std.math.f32_epsilon;
     // equals with a default tolerance of f32_epsilon
     pub inline fn Equals(self: *const Vec2, rhs: Vec2) bool {
-        return self.Sub(rhs).LengthSqrd() <= epsilonf32Sqrd;
+        return self.x == rhs.x and self.y == rhs.y;
     }
 
     pub inline fn EqualsT(self: *const Vec2, rhs: Vec2, tolerance: comptime f32) bool {
@@ -63,8 +62,7 @@ pub const Vec2 = struct {
         return self.Sub(rhs).Length();
     }
 
-    //TODO panics in debug build only maybe?
-
+    //TODO panic checks in debug build only maybe?
     pub inline fn ClampToMinSize(self: *Vec2, size: f32) void {
         const lengthSqrd = self.LengthSqrd();
         const sizeSqrd = size * size;

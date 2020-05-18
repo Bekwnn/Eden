@@ -1,4 +1,5 @@
-const std = @import("std");
+const math = @import("std").math;
+usingnamespace @import("MathUtil.zig");
 
 pub const Vec3 = struct {
     x: f32 = 0.0,
@@ -51,14 +52,15 @@ pub const Vec3 = struct {
         };
     }
 
-    const epsilonf32Sqrd: comptime f32 = std.math.f32_epsilon * std.math.f32_epsilon;
     // equals with a default tolerance of f32_epsilon
     pub inline fn Equals(self: *const Vec3, rhs: Vec3) bool {
-        return self.Sub(rhs).LengthSqrd() <= epsilonf32Sqrd;
+        return self.EqualsT(rhs, math.f32_epsilon);
     }
 
-    pub inline fn EqualsT(self: *const Vec3, rhs: Vec3, tolerance: comptime f32) bool {
-        return self.Sub(rhs).LengthSqrd() <= tolerance * tolerance;
+    pub inline fn EqualsT(self: *const Vec3, rhs: Vec3, tolerance: f32) bool {
+        return EqualWithinTolerance(f32, self.x, rhs.x, tolerance) and
+            EqualWithinTolerance(f32, self.y, rhs.y, tolerance) and
+            EqualWithinTolerance(f32, self.z, rhs.z, tolerance);
     }
 
     pub inline fn LengthSqrd(self: *const Vec3) f32 {
@@ -66,7 +68,7 @@ pub const Vec3 = struct {
     }
 
     pub inline fn Length(self: *const Vec3) f32 {
-        return std.math.sqrt(self.LengthSqrd);
+        return math.sqrt(self.LengthSqrd());
     }
 
     pub inline fn DistSqrd(self: *const Vec3, rhs: Vec3) f32 {
@@ -84,7 +86,7 @@ pub const Vec3 = struct {
         const sizeSqrd = size * size;
         if (lengthSqrd < sizeSqrd) {
             if (lengthSqrd == 0.0) @panic("Clamping vector with length 0");
-            const inv = size / std.math.sqrt(lengthSqrd);
+            const inv = size / math.sqrt(lengthSqrd);
             self.x *= inv;
             self.y *= inv;
             self.z *= inv;
@@ -96,7 +98,7 @@ pub const Vec3 = struct {
         const sizeSqrd = size * size;
         if (lengthSqrd > sizeSqrd) {
             if (lengthSqrd == 0.0) @panic("Clamping vector with length 0");
-            const inv = size / std.math.sqrt(lengthSqrd);
+            const inv = size / math.sqrt(lengthSqrd);
             self.x *= inv;
             self.y *= inv;
             self.z *= inv;
@@ -108,7 +110,7 @@ pub const Vec3 = struct {
         const sizeSqrd = size * size;
         if (lengthSqrd < sizeSqrd) {
             if (lengthSqrd == 0.0) @panic("Clamping vector with length 0");
-            const inv = size / std.math.sqrt(lengthSqrd);
+            const inv = size / math.sqrt(lengthSqrd);
             return Vec3{
                 .x = self.x * inv,
                 .y = self.y * inv,
@@ -122,7 +124,7 @@ pub const Vec3 = struct {
         const sizeSqrd = size * size;
         if (lengthSqrd > sizeSqrd) {
             if (lengthSqrd == 0.0) @panic("Clamping vector with length 0");
-            const inv = size / std.math.sqrt(lengthSqrd);
+            const inv = size / math.sqrt(lengthSqrd);
             return Vec3{
                 .x = self.x * inv,
                 .y = self.y * inv,
@@ -178,7 +180,8 @@ pub inline fn Vec3_0xy(v2: *const Vec2) Vec3 {
 
 //TODO testing
 test "eden.math.Vec3" {
-    const assert = std.debug.assert;
+    const debug = @import("std").debug;
+    const assert = debug.assert;
     {
         const v1 = Vec3{ .x = 1.0, .y = 2.0, .z = 3.0 };
         const v2 = Vec3{ .x = 3.0, .y = 2.0, .z = 3.0 };

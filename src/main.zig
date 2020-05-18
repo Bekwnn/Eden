@@ -6,7 +6,7 @@ const Vec2 = @import("math/Vec2.zig").Vec2;
 const gameWorld = @import("game/GameWorld.zig");
 const presentation = @import("presentation/Presentation.zig");
 
-//TODO delete
+//TODO move test and delete
 const TransformComp = @import("game/ComponentData/TransformComp.zig").TransformComp;
 
 const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);

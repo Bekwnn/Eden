@@ -7,6 +7,7 @@ usingnamespace @import("../c.zig");
 
 var curShader: ?Shader = null;
 
+//TODO imgui test
 var imguiIO: ?*ImGuiIO = null;
 
 pub fn Initialize(renderer: *SDL_Renderer) void {
@@ -82,6 +83,7 @@ pub fn RenderFrame(renderer: *SDL_Renderer, screen: *SDL_Window, gameWorld: *con
         @panic("imguiIO is null");
     }
 
+    //TODO SDL_PollEvent and ImGui_ImplSDL2_ProcessEvent
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(screen);
     igNewFrame();

@@ -31,6 +31,7 @@ pub const EntityManager = struct {
     m_entities: ArrayList(EntityEntry) = ArrayList(EntityEntry).init(allocator),
     m_endOfEids: u32 = ent.GetEidStart(),
     m_firstFreeEntitySlot: u32 = 0, // potentially speed up KillEntity a bit on average...
+    //TODO should eids be re-used?
 
     pub fn Initialize() EntityManager {
         return EntityManager{};

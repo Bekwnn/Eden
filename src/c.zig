@@ -8,3 +8,4 @@ pub usingnamespace @cImport({
     @cInclude("imgui_impl_sdl.h");
     @cInclude("imgui_impl_opengl3.h");
 });
+//TODO: should this be broken apart into separate files for relevant parts? (imgui, sdl)

@@ -83,7 +83,6 @@ pub fn RenderFrame(renderer: *SDL_Renderer, screen: *SDL_Window, gameWorld: *con
         @panic("imguiIO is null");
     }
 
-    //TODO SDL_PollEvent and ImGui_ImplSDL2_ProcessEvent
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(screen);
     igNewFrame();

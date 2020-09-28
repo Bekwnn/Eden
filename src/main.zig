@@ -91,6 +91,7 @@ pub fn MainGameLoop(screen: *c.SDL_Window, renderer: *c.SDL_Renderer) void {
     while (!quit) {
         var event: c.SDL_Event = undefined;
         while (SDL_PollEvent(&event) != 0) {
+            _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
             switch (event.@"type") {
                 c.SDL_QUIT => {
                     quit = true;
@@ -99,11 +100,9 @@ pub fn MainGameLoop(screen: *c.SDL_Window, renderer: *c.SDL_Renderer) void {
             }
         }
 
-        //TODO update simulation
         gameWorld.WritableInstance().Update(1.0 / 60.0);
         gameWorld.WritableInstance().FixedUpdate();
 
-        //TODO update presentation
         presentation.RenderFrame(renderer, screen, gameWorld.Instance());
 
         c.SDL_Delay(17);

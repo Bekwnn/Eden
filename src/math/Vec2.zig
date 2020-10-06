@@ -38,11 +38,11 @@ pub const Vec2 = struct {
     }
 
     // equals with a default tolerance of f32_epsilon
-    pub inline fn Equals(self: *const Vec2, rhs: Vec2) bool {
+    pub inline fn Equals(self: *const Vec2, rhs: *const Vec2) bool {
         return self.x == rhs.x and self.y == rhs.y;
     }
 
-    pub inline fn EqualsT(self: *const Vec2, rhs: Vec2, tolerance: comptime f32) bool {
+    pub inline fn EqualsT(self: *const Vec2, rhs: *const Vec2, tolerance: comptime f32) bool {
         return self.Sub(rhs).LengthSqrd() <= tolerance * tolerance;
     }
 

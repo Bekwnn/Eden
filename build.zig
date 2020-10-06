@@ -97,6 +97,10 @@ pub fn build(b: *Builder) void {
     exe.addLibPath("dependency/SDL2/lib/x64");
     exe.linkSystemLibrary("SDL2");
 
+    exe.addIncludeDir("dependency/assimp/include");
+    exe.addLibPath("dependency/assimp/lib/Release");
+    exe.linkSystemLibrary("assimp-vc142-mt");
+
     exe.linkSystemLibrary("user32");
     exe.linkSystemLibrary("gdi32");
 

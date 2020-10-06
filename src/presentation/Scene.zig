@@ -3,8 +3,15 @@ usingnamespace @import("../math/math.zig");
 
 pub const Scene = struct {
     //TODO create ID lookup tables (maybe even make a standardized one and also use it in entitymanager?)
-    m_materials: []Material,
     m_meshes: []Mesh,
+    m_meshInstances: []MeshInstance,
+    m_materials: []Material,
+    m_shaders: []Shader,
+
+    m_cameras: []Camera,
+    m_currentCameraID: u32,
+
+    //TODO add functions to add things to the scene
 };
 
 //TODO some of these may deserve their own file later
@@ -42,10 +49,8 @@ pub const Camera = struct {
 };
 
 pub const Material = struct {
-    //TODO how does this relate to the shader? Material instances?
+    m_name: []u8,
+    m_shader: u32,
+    // parameters unique to this material but not to the shader
 };
 
-pub const MaterialInstance = struct {
-    m_material: u32,
-    //TODO what does material instancing look like for different shaders with different params?
-};

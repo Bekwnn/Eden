@@ -79,6 +79,11 @@ pub fn main() !void {
     _ = c.ImGui_ImplSDL2_InitForOpenGL(screen, glContext);
     _ = c.ImGui_ImplOpenGL3_Init(null);
 
+    //Assimp test, TODO delete
+    const importedScene = c.aiImportFile("test.fbx", c.aiProcess_CalcTangentSpace |
+        c.aiProcess_Triangulate | c.aiProcess_JoinIdenticalVertices | c.aiProcess_SortByPType);
+    defer c.aiReleaseImport(importedScene);
+
     presentation.Initialize(renderer);
     gameWorld.Initialize();
 

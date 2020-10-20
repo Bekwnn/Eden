@@ -1,7 +1,7 @@
 usingnamespace @import("../c.zig");
 
 pub const Mesh = struct {
-    m_name: []u8,
+    m_name: []const u8,
     m_meshVAO: GLuint,
     m_positionBO: GLuint,
     m_texCoordBO: GLuint,

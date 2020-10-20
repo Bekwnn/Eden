@@ -26,9 +26,8 @@ const InitError = error{
 
 fn ReportSDLError(message: [:0]const u8) void {
     const errStr = c.SDL_GetError();
-    debug.warn("{}: {}", .{message, errStr[0..std.mem.len(errStr)]});
+    debug.warn("{}: {}", .{ message, errStr[0..std.mem.len(errStr)] });
 }
-
 
 pub fn main() !void {
     // Setting pre-init attributes
@@ -86,8 +85,7 @@ pub fn main() !void {
     _ = c.ImGui_ImplSDL2_InitForOpenGL(screen, glContext);
     _ = c.ImGui_ImplOpenGL3_Init(null);
 
-    _ = assimp.ImportMesh("F:/Dev Demos and Content/Zig/Eden/test-assets/test.fbx") catch |meshErr|
-    {
+    _ = assimp.ImportMesh("F:/Dev Demos and Content/Zig/Eden/test-assets/test.obj") catch |meshErr| {
         debug.warn("Error importing mesh: {}\n", .{meshErr});
     };
 

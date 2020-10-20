@@ -7,15 +7,13 @@ const ImportError = error{
     AIImportError, //assimp failed to import the scene
     ZeroMeshes, //scene contains 0 meshes
     MultipleMeshes, //scene contains more than 1 mesh
+    AssetPath, //issue with path to asset
 };
 
 pub fn ImportMesh(filePath: [:0]const u8) !Mesh {
-    //TODO verify existance of file
-    //TODO set filename as m_name
-    //TODO set and bind buffer objects (BO)
+    _ = try std.fs.openFileAbsolute(filePath, .{}); //sanity check accessing the file before trying to import
 
     //TODO Assimp WIP
-    debug.warn("Import about to happen\n", .{});
     const importedScene: *const aiScene = aiImportFile(filePath, aiProcess_CalcTangentSpace |
         aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_SortByPType) orelse
         {
@@ -23,7 +21,6 @@ pub fn ImportMesh(filePath: [:0]const u8) !Mesh {
         debug.warn("{}\n", .{errStr[0..std.mem.len(errStr)]});
         return ImportError.AIImportError;
     };
-    debug.warn("Import happened\n", .{});
     defer aiReleaseImport(importedScene);
 
     if (importedScene.mNumMeshes > 1) {
@@ -32,8 +29,15 @@ pub fn ImportMesh(filePath: [:0]const u8) !Mesh {
         return ImportError.ZeroMeshes;
     }
 
+    const mesh: *const aiMesh = importedScene.mMeshes[0];
+    const fileName = std.fs.path.basename(filePath);
+    debug.warn("Imported {} successfully\n", .{fileName});
+    debug.warn("Vertices: {}\n", .{mesh.mNumVertices}); //TODO delete
+
+    //TODO set and bind buffer objects (BO)
+
     return Mesh{
-        .m_name = "",
+        .m_name = fileName,
         .m_meshVAO = 0,
         .m_positionBO = 0,
         .m_texCoordBO = 0,

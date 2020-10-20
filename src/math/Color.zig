@@ -5,33 +5,33 @@ pub const colorsRGBA8 = @import("ColorRGBA8.zig");
 pub const colorsRGBA = @import("ColorRGBA.zig");
 pub const colorsRGB = @import("ColorRGB.zig");
 
-pub const ColorRGB = struct {
+pub const ColorRGB = packed struct {
     r: f32,
     g: f32,
     b: f32,
 };
 
-pub const ColorRGB8 = struct {
+pub const ColorRGB8 = packed struct {
     r: u8,
     g: u8,
     b: u8,
 };
 
-pub const ColorRGBA = struct {
+pub const ColorRGBA = packed struct {
     r: f32,
     g: f32,
     b: f32,
     a: f32,
 };
 
-pub const ColorRGBA8 = struct {
+pub const ColorRGBA8 = packed struct {
     r: u8,
     g: u8,
     b: u8,
     a: u8,
 };
 
-pub const ColorHSV = struct {
+pub const ColorHSV = packed struct {
     h: f32, // angle in degrees
     s: f32, // 0 to 1
     v: f32, // 0 to 1
@@ -71,7 +71,7 @@ pub inline fn RGBToHSV(color: *const ColorRGB) ColorHSV {
     var outHSV = ColorHSV{ .h = 0.0, .s = 0.0, .v = max };
 
     if (delta < zigm.f32_epsilon) //grey-scale color
-        {
+    {
         return outHSV;
     } else {
         outHSV.s = (delta / max);

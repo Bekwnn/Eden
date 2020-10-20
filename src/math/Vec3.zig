@@ -1,7 +1,7 @@
 const math = @import("std").math;
 usingnamespace @import("MathUtil.zig");
 
-pub const Vec3 = struct {
+pub const Vec3 = packed struct {
     x: f32 = 0.0,
     y: f32 = 0.0,
     z: f32 = 0.0,

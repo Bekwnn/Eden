@@ -5,6 +5,7 @@ const Vec2 = @import("math/Vec2.zig").Vec2;
 
 const gameWorld = @import("game/GameWorld.zig");
 const presentation = @import("presentation/Presentation.zig");
+const assimp = @import("presentation/AssImpInterface.zig");
 
 //TODO move test and delete
 const TransformComp = @import("game/ComponentData/TransformComp.zig").TransformComp;
@@ -23,6 +24,12 @@ const InitError = error{
     OpenGLInit,
 };
 
+fn ReportSDLError(message: [:0]const u8) void {
+    const errStr = c.SDL_GetError();
+    debug.warn("{}: {}", .{message, errStr[0..std.mem.len(errStr)]});
+}
+
+
 pub fn main() !void {
     // Setting pre-init attributes
     _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 4);
@@ -30,21 +37,21 @@ pub fn main() !void {
 
     // SDL init
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
-        debug.warn("Unable to initialize SDL: {}", .{c.SDL_GetError()});
+        ReportSDLError("Unable to initialize SDL");
         return InitError.SDLInit;
     }
     defer c.SDL_Quit();
 
     // Window Creation
     const screen = c.SDL_CreateWindow("My Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1200, 700, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE) orelse {
-        debug.warn("Unable to create window: {}", .{c.SDL_GetError()});
+        ReportSDLError("Unable to create window");
         return InitError.SDLInit;
     };
     defer c.SDL_DestroyWindow(screen);
 
     // Renderer
     const renderer = c.SDL_CreateRenderer(screen, -1, 0) orelse {
-        debug.warn("Unable to create renderer: {}", .{c.SDL_GetError()});
+        ReportSDLError("Unable to create renderer");
         return InitError.SDLInit;
     };
     defer c.SDL_DestroyRenderer(renderer);
@@ -52,7 +59,7 @@ pub fn main() !void {
     // Create context
     const glContext = c.SDL_GL_CreateContext(screen);
     if (@ptrToInt(glContext) == 0) {
-        debug.warn("Unable to create GLContext: {}", .{c.SDL_GetError()});
+        ReportSDLError("Unable to create GLContext");
         return InitError.SDLInit;
     }
 
@@ -60,8 +67,8 @@ pub fn main() !void {
 
     // Glew init
     c.glewExperimental = c.GL_TRUE;
-    var err: c.GLenum = c.glewInit();
-    if (c.GLEW_OK != err) {
+    var glewInitErr: c.GLenum = c.glewInit();
+    if (c.GLEW_OK != glewInitErr) {
         debug.warn("GlewInit failed", .{});
         return InitError.GlewInit;
     }
@@ -79,10 +86,10 @@ pub fn main() !void {
     _ = c.ImGui_ImplSDL2_InitForOpenGL(screen, glContext);
     _ = c.ImGui_ImplOpenGL3_Init(null);
 
-    //Assimp test, TODO delete
-    const importedScene = c.aiImportFile("test.fbx", c.aiProcess_CalcTangentSpace |
-        c.aiProcess_Triangulate | c.aiProcess_JoinIdenticalVertices | c.aiProcess_SortByPType);
-    defer c.aiReleaseImport(importedScene);
+    _ = assimp.ImportMesh("F:/Dev Demos and Content/Zig/Eden/test-assets/test.fbx") catch |meshErr|
+    {
+        debug.warn("Error importing mesh: {}\n", .{meshErr});
+    };
 
     presentation.Initialize(renderer);
     gameWorld.Initialize();

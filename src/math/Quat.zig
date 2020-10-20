@@ -3,7 +3,7 @@ usingnamespace @import("Vec3.zig");
 
 const math = @import("std").math;
 
-pub const Quat = struct {
+pub const Quat = packed struct {
     x: f32 = 0.0,
     y: f32 = 0.0,
     z: f32 = 0.0,

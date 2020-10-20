@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const Vec2 = struct {
+pub const Vec2 = packed struct {
     x: f32 = 0.0,
     y: f32 = 0.0,
 

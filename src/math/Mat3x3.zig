@@ -1,4 +1,4 @@
-pub const Mat3x3 = struct {
+pub const Mat3x3 = packed struct {
     m = [3][3]f32{
         [3]f32{ 1.0, 0.0, 0.0 },
         [3]f32{ 0.0, 1.0, 0.0 },

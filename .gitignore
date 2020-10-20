@@ -3,6 +3,9 @@ zig-cache/
 build/
 build-*/
 
+# Ignore test asset folder
+test-assets/
+
 # Vim ignores
 # Swap
 [._]*.s[a-v][a-z]

@@ -11,5 +11,7 @@ pub const mat3x3 = @import("Mat3x3.zig");
 pub const Mat3x3 = mat3x3.Mat3x3;
 pub const mat4x4 = @import("Mat4x4.zig");
 pub const Mat4x4 = mat4x4.Mat4x4;
+pub const transform = @import("Transform.zig");
+pub const Transform = transform.Transform;
 
 usingnamespace @import("MathUtil.zig");

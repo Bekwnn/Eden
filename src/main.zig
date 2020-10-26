@@ -85,10 +85,6 @@ pub fn main() !void {
     _ = c.ImGui_ImplSDL2_InitForOpenGL(screen, glContext);
     _ = c.ImGui_ImplOpenGL3_Init(null);
 
-    _ = assimp.ImportMesh("F:/Dev Demos and Content/Zig/Eden/test-assets/test.obj") catch |meshErr| {
-        debug.warn("Error importing mesh: {}\n", .{meshErr});
-    };
-
     presentation.Initialize(renderer);
     gameWorld.Initialize();
 

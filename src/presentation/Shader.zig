@@ -15,8 +15,8 @@ fn ShaderTypeStr(comptime shaderType: GLenum) []const u8 {
         GL_FRAGMENT_SHADER => "Fragment",
         GL_COMPUTE_SHADER => "Compute",
         GL_GEOMETRY_SHADER => "Geometry",
-        GL_TESS_CONTROL_SHADER => "Tessalation Control",
-        GL_TESS_EVALUATION_SHADER => "Tessalation Evaluation",
+        GL_TESS_CONTROL_SHADER => "Tesselation Control",
+        GL_TESS_EVALUATION_SHADER => "Tesselation Evaluation",
         else => return "Unknown",
     };
 }

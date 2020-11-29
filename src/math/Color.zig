@@ -5,16 +5,42 @@ pub const colorsRGBA8 = @import("ColorRGBA8.zig");
 pub const colorsRGBA = @import("ColorRGBA.zig");
 pub const colorsRGB = @import("ColorRGB.zig");
 
+fn ColorEquals(comptime colorType: type, lhs: *const colorType, rhs: *const colorType) bool {
+    const fieldNames = .{
+        "r",
+        "g",
+        "b",
+        "a",
+        "h",
+        "s",
+        "v",
+    };
+
+    inline for (fieldNames) |fieldName| {
+        if (@hasDecl(colorType, fieldName)) {
+            if (@field(lhs, fieldName) != @field(rhs, fieldName)) return false;
+        }
+    }
+    return true;
+}
+
 pub const ColorRGB = packed struct {
     r: f32,
     g: f32,
     b: f32,
+
+    pub fn Equals(self: *const ColorRGB, other: *const ColorRGB) bool {
+        return ColorEquals(ColorRGB, self, other);
+    }
 };
 
 pub const ColorRGB8 = packed struct {
     r: u8,
     g: u8,
     b: u8,
+    pub fn Equals(self: *const ColorRGB8, other: *const ColorRGB8) bool {
+        return ColorEquals(ColorRGB8, self, other);
+    }
 };
 
 pub const ColorRGBA = packed struct {
@@ -22,6 +48,9 @@ pub const ColorRGBA = packed struct {
     g: f32,
     b: f32,
     a: f32,
+    pub fn Equals(self: *const ColorRGBA, other: *const ColorRGBA) bool {
+        return ColorEquals(ColorRGBA, self, other);
+    }
 };
 
 pub const ColorRGBA8 = packed struct {
@@ -29,12 +58,19 @@ pub const ColorRGBA8 = packed struct {
     g: u8,
     b: u8,
     a: u8,
+    pub fn Equals(self: *const ColorRGBA8, other: *const ColorRGBA8) bool {
+        return ColorEquals(ColorRGBA8, self, other);
+    }
 };
 
 pub const ColorHSV = packed struct {
     h: f32, // angle in degrees
     s: f32, // 0 to 1
     v: f32, // 0 to 1
+
+    pub fn Equals(self: *const ColorHSV, other: *const ColorHSV) bool {
+        return ColorEquals(ColorHSV, self, other);
+    }
 };
 
 // FromHSV
@@ -64,13 +100,13 @@ pub inline fn HSVToRGB(color: *const ColorHSV) ColorRGB {
 // ToHSV
 //TODO HSV8 / RGB8 version
 pub inline fn RGBToHSV(color: *const ColorRGB) ColorHSV {
-    const min = zigm.min(zigm.min(color.r, color.g), color.b);
-    const max = zigm.max(zigm.max(color.r, color.g), color.b);
+    const min = stdm.min(stdm.min(color.r, color.g), color.b);
+    const max = stdm.max(stdm.max(color.r, color.g), color.b);
     const delta = max - min;
 
     var outHSV = ColorHSV{ .h = 0.0, .s = 0.0, .v = max };
 
-    if (delta < zigm.f32_epsilon) //grey-scale color
+    if (delta < stdm.f32_epsilon) //grey-scale color
     {
         return outHSV;
     } else {
@@ -97,54 +133,156 @@ pub inline fn RGBToHSV(color: *const ColorRGB) ColorHSV {
 
 // ToRGB
 pub inline fn RGB8ToRGB(color: *const ColorRGB8) ColorRGB {
-    return ColorRGB{ .r = color.r / 255.0, .g = color.g / 255.0, .b = color.b / 255 };
+    return ColorRGB{
+        .r = @intToFloat(f32, color.r) / 255.0,
+        .g = @intToFloat(f32, color.g) / 255.0,
+        .b = @intToFloat(f32, color.b) / 255.0,
+    };
 }
 
 pub inline fn RGBAToRGB(color: *const ColorRGBA) ColorRGB {
-    return ColorRGB{ .r = color.r, .g = color.g, .b = color.b };
+    return ColorRGB{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+    };
 }
 
 pub inline fn RGBA8ToRGB(color: *const ColorRGBA8) ColorRGB {
-    return ColorRGB{ .r = color.r, .g = color.g, .b = color.b };
+    return ColorRGB{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+    };
 }
 
 // ToRGB8
 pub inline fn RGBToRGB8(color: *const ColorRGB) ColorRGB8 {
-    return ColorRGB8{ .r = zigm.round32(color.r), .g = zigm.round32(color.g), .b = zigm.round32(color.b) };
+    return ColorRGB8{
+        .r = @floatToInt(u8, stdm.round(color.r)),
+        .g = @floatToInt(u8, stdm.round(color.g)),
+        .b = @floatToInt(u8, stdm.round(color.b)),
+    };
 }
 
 pub inline fn RGBAToRGB8(color: *const ColorRGBA) ColorRGB8 {
-    return ColorRGB8{ .r = zigm.round32(color.r), .g = zigm.round32(color.g), .b = zigm.round32(color.b) };
+    return ColorRGB8{
+        .r = @floatToInt(u8, stdm.round(color.r)),
+        .g = @floatToInt(u8, stdm.round(color.g)),
+        .b = @floatToInt(u8, stdm.round(color.b)),
+    };
 }
 
 pub inline fn RGBA8ToRGB8(color: *const ColorRGB) ColorRGB8 {
-    return ColorRGB8{ .r = color.r, .g = color.g, .b = color.b };
+    return ColorRGB8{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+    };
 }
 
 // ToRGBA
 pub inline fn RGBToRGBA(color: *const ColorRGB) ColorRGBA {
-    return ColorRGBA{ .r = color.r, .g = color.g, .b = color.b, .a = 1.0 };
+    return ColorRGBA{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = 1.0,
+    };
 }
 
-pub inline fn RGB8ToRGBA(color: *const ColorRGBA) ColorRGBA {
-    return ColorRGBA{ .r = color.r / 255.0, .g = color.g / 255.0, .b = color.b / 255.0, .a = 1.0 };
+pub inline fn RGB8ToRGBA(color: *const ColorRGB8) ColorRGBA {
+    return ColorRGBA{
+        .r = @intToFloat(f32, color.r) / 255.0,
+        .g = @intToFloat(f32, color.g) / 255.0,
+        .b = @intToFloat(f32, color.b) / 255.0,
+        .a = 1.0,
+    };
 }
 
-pub inline fn RGBA8ToRGBA(color: *const ColorRGB8) ColorRGBA {
-    return ColorRGBA{ .r = color.r / 255.0, .g = color.g / 255.0, .b = color.b / 255.0, .a = color.a / 255.0 };
+pub inline fn RGBA8ToRGBA(color: *const ColorRGBA8) ColorRGBA {
+    return ColorRGBA{
+        .r = @intToFloat(f32, color.r) / 255.0,
+        .g = @intToFloat(f32, color.g) / 255.0,
+        .b = @intToFloat(f32, color.b) / 255.0,
+        .a = @intToFloat(f32, color.a) / 255.0,
+    };
 }
 
 // ToRGBA8
 pub inline fn RGBToRGBA8(color: *const ColorRGB) ColorRGBA8 {
-    return ColorRGBA8{ .r = zigm.round32(color.r * 255.0), .g = zigm.round32(color.g * 255.0), .b = zigm.round32(color.b * 255.0), .a = 255 };
+    return ColorRGBA8{
+        .r = @floatToInt(u8, stdm.round(color.r * 255.0)),
+        .g = @floatToInt(u8, stdm.round(color.g * 255.0)),
+        .b = @floatToInt(u8, stdm.round(color.b * 255.0)),
+        .a = 255,
+    };
 }
 
 pub inline fn RGBAToRGBA8(color: *const ColorRGBA) ColorRGBA8 {
-    return ColorRGBA8{ .r = zigm.round32(color.r * 255.0), .g = zigm.round32(color.g * 255.0), .b = zigm.round32(color.b * 255.0), .a = zigm.round32(color.a * 255.0) };
+    return ColorRGBA8{
+        .r = @floatToInt(u8, stdm.round(color.r * 255.0)),
+        .g = @floatToInt(u8, stdm.round(color.g * 255.0)),
+        .b = @floatToInt(u8, stdm.round(color.b * 255.0)),
+        .a = @floatToInt(u8, stdm.round(color.a * 255.0)),
+    };
 }
 
-pub inline fn RGB8ToRGBA8(color: *const ColorRGB) ColorRGBA8 {
-    return ColorRGBA8{ .r = color.r, .g = color.g, .b = color.b, .a = 255 };
+pub inline fn RGB8ToRGBA8(color: *const ColorRGB8) ColorRGBA8 {
+    return ColorRGBA8{
+        .r = color.r,
+        .g = color.g,
+        .b = color.b,
+        .a = 255,
+    };
 }
 
-//TODO testing: conversions back and forth?
+const expect = @import("std").testing.expect;
+
+test "Color f32 to 8bit conversion" {
+    const testColors = [_]ColorRGB8{
+        colorsRGB8.Red,
+        colorsRGB8.Green,
+        colorsRGB8.Blue,
+        colorsRGB8.Cyan,
+        colorsRGB8.Yellow,
+        colorsRGB8.Magenta,
+    };
+    for (testColors) |color| {
+        const colorConverted = RGB8ToRGB(&color);
+        const colorConvertedBack = RGBToRGB8(&colorConverted);
+        expect(color.Equals(&colorConvertedBack));
+    }
+}
+
+test "Color f32 to 8bit conversion with alpha" {
+    const testColors = [_]ColorRGBA8{
+        colorsRGBA8.Red,
+        colorsRGBA8.Green,
+        colorsRGBA8.Blue,
+        colorsRGBA8.Cyan,
+        colorsRGBA8.Yellow,
+        colorsRGBA8.Magenta,
+    };
+    for (testColors) |color| {
+        const colorConverted = RGBA8ToRGBA(&color);
+        const colorConvertedBack = RGBAToRGBA8(&colorConverted);
+        expect(color.Equals(&colorConvertedBack));
+    }
+}
+
+test "Color RGB to HSV and HSV to RGB" {
+    const testColors = [_]ColorRGB{
+        colorsRGB.Red,
+        colorsRGB.Green,
+        colorsRGB.Blue,
+        colorsRGB.Cyan,
+        colorsRGB.Yellow,
+        colorsRGB.Magenta,
+    };
+    for (testColors) |color| {
+        const colorConverted = RGBToHSV(&color);
+        const colorConvertedBack = HSVToRGB(&colorConverted);
+        expect(color.Equals(&colorConvertedBack));
+    }
+}

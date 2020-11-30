@@ -17,7 +17,7 @@ fn ColorEquals(comptime colorType: type, lhs: *const colorType, rhs: *const colo
     };
 
     inline for (fieldNames) |fieldName| {
-        if (@hasDecl(colorType, fieldName)) {
+        if (@hasField(colorType, fieldName)) {
             if (@field(lhs, fieldName) != @field(rhs, fieldName)) return false;
         }
     }
@@ -159,17 +159,17 @@ pub inline fn RGBA8ToRGB(color: *const ColorRGBA8) ColorRGB {
 // ToRGB8
 pub inline fn RGBToRGB8(color: *const ColorRGB) ColorRGB8 {
     return ColorRGB8{
-        .r = @floatToInt(u8, stdm.round(color.r)),
-        .g = @floatToInt(u8, stdm.round(color.g)),
-        .b = @floatToInt(u8, stdm.round(color.b)),
+        .r = @floatToInt(u8, stdm.round(color.r * 255.0)),
+        .g = @floatToInt(u8, stdm.round(color.g * 255.0)),
+        .b = @floatToInt(u8, stdm.round(color.b * 255.0)),
     };
 }
 
 pub inline fn RGBAToRGB8(color: *const ColorRGBA) ColorRGB8 {
     return ColorRGB8{
-        .r = @floatToInt(u8, stdm.round(color.r)),
-        .g = @floatToInt(u8, stdm.round(color.g)),
-        .b = @floatToInt(u8, stdm.round(color.b)),
+        .r = @floatToInt(u8, stdm.round(color.r * 255.0)),
+        .g = @floatToInt(u8, stdm.round(color.g * 255.0)),
+        .b = @floatToInt(u8, stdm.round(color.b * 255.0)),
     };
 }
 
@@ -237,9 +237,10 @@ pub inline fn RGB8ToRGBA8(color: *const ColorRGB8) ColorRGBA8 {
     };
 }
 
-const expect = @import("std").testing.expect;
+const std = @import("std");
+const expect = std.testing.expect;
 
-test "Color f32 to 8bit conversion" {
+test "Color 8bit to f32 conversion" {
     const testColors = [_]ColorRGB8{
         colorsRGB8.Red,
         colorsRGB8.Green,
@@ -255,7 +256,7 @@ test "Color f32 to 8bit conversion" {
     }
 }
 
-test "Color f32 to 8bit conversion with alpha" {
+test "Color 8bit to f32 conversion with alpha" {
     const testColors = [_]ColorRGBA8{
         colorsRGBA8.Red,
         colorsRGBA8.Green,

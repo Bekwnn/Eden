@@ -1,14 +1,25 @@
-const debug = @import("std").debug;
+const std = @import("std");
+const debug = std.debug;
+
 const Shader = @import("Shader.zig").Shader;
 const Mesh = @import("Mesh.zig").Mesh;
 const assimp = @import("AssImpInterface.zig");
+const Camera = @import("Camera.zig").Camera;
+const mat4x4 = @import("../math/Mat4x4.zig");
 
+const game = @import("../game/GameWorld.zig");
 const GameWorld = @import("../game/GameWorld.zig").GameWorld;
 
+const c = @import("../c.zig");
 usingnamespace @import("../c.zig");
 
 var curShader: ?Shader = null;
 var curMesh: ?Mesh = null;
+var curMesh2: ?Mesh = null;
+var curCamera = Camera{};
+var curTime: f32 = 0.0;
+var circleTime: f32 = 1.0 / (2.0 * std.math.pi);
+const circleRadius: f32 = 0.5;
 
 var imguiIO: ?*ImGuiIO = null;
 
@@ -16,7 +27,7 @@ pub fn Initialize(renderer: *SDL_Renderer) void {
     glClearColor(0.1, 0.1, 0.2, 1.0);
     curShader = Shader.init("src\\shaders\\basic_mesh.vert", "src\\shaders\\basic_mesh.frag");
 
-    if (assimp.ImportMesh("F:/Dev Demos and Content/Zig/Eden/test-assets/test.obj")) |mesh| {
+    if (assimp.ImportMesh("F:/Dev-Demos-and-Content/Zig/Eden/test-assets/test.obj")) |mesh| {
         curMesh = mesh;
     } else |meshErr| {
         debug.warn("Error importing mesh: {}\n", .{meshErr});
@@ -24,7 +35,27 @@ pub fn Initialize(renderer: *SDL_Renderer) void {
 
     if (curMesh != null) {
         curMesh.?.PushDataToBuffers();
+    } else {
+        debug.warn("No mesh, no data pushed to buffers!\n", .{});
     }
+    curMesh2 = curMesh;
+    if (curMesh2 != null) {
+        curMesh2.?.PushDataToBuffers();
+    } else {
+        debug.warn("No mesh, no data pushed to buffers!\n", .{});
+    }
+
+    curCamera.m_pos.z -= 2.0;
+
+    const modelMat = mat4x4.identity;
+    const viewMat = curCamera.GetViewMatrix();
+    const projectionMat = curCamera.GetProjectionMatrix();
+    debug.warn("Model matrix:\n", .{});
+    mat4x4.DebugLogMat4x4(&modelMat);
+    debug.warn("View matrix:\n", .{});
+    mat4x4.DebugLogMat4x4(&viewMat);
+    debug.warn("Projection matrix:\n", .{});
+    mat4x4.DebugLogMat4x4(&projectionMat);
 
     // imgui init
     imguiIO = igGetIO();
@@ -43,9 +74,18 @@ pub fn RenderFrame(renderer: *SDL_Renderer, screen: *SDL_Window, gameWorld: *con
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
+    curTime += game.deltaTime;
+    curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
+    curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
+
     if (curMesh) |m| {
         if (curShader) |s| {
-            m.Draw(s.gl_id);
+            m.Draw(&curCamera, s.gl_id);
+        }
+    }
+    if (curMesh2) |m| {
+        if (curShader) |s| {
+            m.Draw(&curCamera, s.gl_id);
         }
     }
 

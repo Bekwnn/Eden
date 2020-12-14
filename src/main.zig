@@ -26,14 +26,20 @@ const InitError = error{
 
 fn ReportSDLError(message: [:0]const u8) void {
     const errStr = c.SDL_GetError();
-    debug.warn("{}: {}", .{ message, errStr[0..std.mem.len(errStr)] });
+    debug.warn(" {}: {}", .{ message, errStr[0..std.mem.len(errStr)] });
+}
+
+fn SetSDLAttribute(attribute: c_int, setVal: c_int) !c_int {
+    const result = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, attribute), setVal);
+    if (result < 0) {
+        ReportSDLError("Unable to set attribute");
+        return InitError.SDLInit;
+    }
+
+    return result;
 }
 
 pub fn main() !void {
-    // Setting pre-init attributes
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MAJOR_VERSION), 4);
-    _ = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, c.SDL_GL_CONTEXT_MINOR_VERSION), 6);
-
     // SDL init
     if (c.SDL_Init(c.SDL_INIT_VIDEO) != 0) {
         ReportSDLError("Unable to initialize SDL");
@@ -41,8 +47,14 @@ pub fn main() !void {
     }
     defer c.SDL_Quit();
 
+    // Setting attributes; required for renderdoc
+    // TODO: query system support, set highest version, give warnings on lower versions
+    _ = try SetSDLAttribute(c.SDL_GL_CONTEXT_PROFILE_MASK, c.SDL_GL_CONTEXT_PROFILE_CORE);
+    _ = try SetSDLAttribute(c.SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    _ = try SetSDLAttribute(c.SDL_GL_CONTEXT_MINOR_VERSION, 6);
+
     // Window Creation
-    const screen = c.SDL_CreateWindow("My Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1200, 700, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE) orelse {
+    const screen = c.SDL_CreateWindow("My Game Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE) orelse {
         ReportSDLError("Unable to create window");
         return InitError.SDLInit;
     };

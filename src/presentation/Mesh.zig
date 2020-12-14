@@ -3,6 +3,10 @@ const std = @import("std");
 
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec2 = @import("../math/Vec2.zig").Vec2;
+const mat4x4 = @import("../math/Mat4x4.zig");
+const Mat4x4 = mat4x4.Mat4x4;
+
+const Camera = @import("Camera.zig").Camera;
 
 const ArrayList = std.ArrayList;
 
@@ -14,7 +18,7 @@ pub const Mesh = struct {
     m_vertices: ArrayList(Vec3),
     m_normals: ArrayList(Vec3),
     m_texCoords: ArrayList(Vec2), //currently only one coord channel
-    m_indices: ArrayList(u32), 
+    m_indices: ArrayList(u32),
 
     m_vertexBO: GLuint,
     m_normalBO: GLuint,
@@ -22,26 +26,56 @@ pub const Mesh = struct {
     m_indexBO: GLuint,
 
     //TODO testing; handle different shaders and different attrib layouts
-    pub fn Draw(self: *const Mesh, shader: GLuint) void {
+    pub fn Draw(self: *const Mesh, camera: *const Camera, shader: GLuint) void {
         glUseProgram(shader);
 
-        glEnableVertexAttribArray(0);
+        var vao: GLuint = 0;
+        glGenVertexArrays(1, &vao);
+        glBindVertexArray(vao);
+
         glBindBuffer(GL_ARRAY_BUFFER, self.m_vertexBO);
+        //glBindBuffer(GL_ARRAY_BUFFER, self.m_normalBO);
+        //glBindBuffer(GL_ARRAY_BUFFER, self.m_texCoordBO);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.m_indexBO);
+
+        glEnableVertexAttribArray(0);
+        //glEnableVertexAttribArray(1);
+        //glEnableVertexAttribArray(2);
+
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, noPointerOffset);
+        //glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, noPointerOffset);
+        //glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, noPointerOffset);
 
-        glEnableVertexAttribArray(1);
-        glBindBuffer(GL_ARRAY_BUFFER, self.m_normalBO);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, noPointerOffset);
+        //TODO fix model
+        const model = mat4x4.identity;
+        const projection = camera.GetProjectionMatrix();
+        const view = camera.GetViewMatrix();
 
-        glEnableVertexAttribArray(2);
-        glBindBuffer(GL_ARRAY_BUFFER, self.m_texCoordBO);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, noPointerOffset);
+        const mLocation: GLint = glGetUniformLocation(shader, "model");
+        if (mLocation == -1) {
+            std.debug.warn("failed to find camera matrix uniform location in shader\n", .{});
+        } else {
+            glUniformMatrix4fv(mLocation, 1, GL_FALSE, &model.m[0][0]);
+        }
+        const pLocation: GLint = glGetUniformLocation(shader, "projection");
+        if (pLocation == -1) {
+            std.debug.warn("failed to find camera matrix uniform location in shader\n", .{});
+        } else {
+            glUniformMatrix4fv(pLocation, 1, GL_FALSE, &projection.m[0][0]);
+        }
+        const vLocation: GLint = glGetUniformLocation(shader, "view");
+        if (vLocation == -1) {
+            std.debug.warn("failed to find camera matrix uniform location in shader\n", .{});
+        } else {
+            glUniformMatrix4fv(vLocation, 1, GL_FALSE, &view.m[0][0]);
+        }
 
-        glDrawElements(GL_TRIANGLES, @intCast(c_int, self.m_indices.items.len), GL_UNSIGNED_INT, &self.m_indices.items[0]);
+        glDrawElements(GL_TRIANGLES, @intCast(c_int, self.m_indices.items.len), GL_UNSIGNED_INT, noPointerOffset);
 
         glDisableVertexAttribArray(0);
-        glDisableVertexAttribArray(1);
-        glDisableVertexAttribArray(2);
+        glBindVertexArray(0);
+        //glDisableVertexAttribArray(1);
+        //glDisableVertexAttribArray(2);
     }
 
     pub fn PushDataToBuffers(self: *Mesh) void {
@@ -49,6 +83,7 @@ pub const Mesh = struct {
         self.m_vertexBO = try self.LoadMeshIntoVertexBO();
         self.m_normalBO = try self.LoadMeshIntoNormalBO();
         self.m_texCoordBO = try self.LoadMeshIntoTexCoordBO();
+        self.m_indexBO = try self.LoadMeshIntoIndexBO();
     }
 
     fn LoadMeshIntoVertexBO(mesh: *const Mesh) !GLuint {

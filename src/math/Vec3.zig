@@ -1,6 +1,14 @@
 const math = @import("std").math;
 usingnamespace @import("MathUtil.zig");
 
+const Quat = @import("Quat.zig").Quat;
+
+pub const zero = Vec3{};
+pub const one = Vec3{ .x = 1.0, .y = 1.0, .z = 1.0 };
+pub const xAxis = Vec3{ .x = 1.0, .y = 0.0, .z = 0.0 };
+pub const yAxis = Vec3{ .x = 0.0, .y = 1.0, .z = 0.0 };
+pub const zAxis = Vec3{ .x = 0.0, .y = 0.0, .z = 1.0 };
+
 pub const Vec3 = packed struct {
     x: f32 = 0.0,
     y: f32 = 0.0,
@@ -147,7 +155,7 @@ pub const Vec3 = packed struct {
         return self.GetScaled(scaleAmount);
     }
 
-    pub inline fn Normalized(self: *Vec3) Vec3 {
+    pub inline fn Normalized(self: *const Vec3) Vec3 {
         const length = self.Length();
         if (length == 0.0) @panic("Normalizing vector with length 0");
         return Vec3{
@@ -163,6 +171,18 @@ pub const Vec3 = packed struct {
         self.x /= length;
         self.y /= length;
         self.z /= length;
+    }
+
+    pub inline fn RotatedByQuat(self: *const Vec3, q: Quat) Vec3 {
+        const qxyz = Vec3{ .x = q.x, .y = q.y, .z = q.z };
+        const t = qxyz.Cross(self.*).GetScaled(2.0);
+        return self.Add(t.GetScaled(q.w)).Add(qxyz.Cross(t));
+    }
+
+    pub inline fn RotateByQuat(self: *Vec3, q: Quat) void {
+        const qxyz = Vec3{ .x = q.x, .y = q.y, .z = q.z };
+        const t = qxyz.Cross(self.*).GetScaled(2.0);
+        self = self.Add(t.GetScaled(q.w).Add(qxyz.Cross(t)));
     }
 };
 

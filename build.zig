@@ -4,32 +4,34 @@ const fs = std.fs;
 const Builder = buildns.Builder;
 const Version = buildns.Version;
 
-fn deleteOldSDLLib() !void {
+fn deleteOldDll(dllNameExt: []const u8) !void {
     // delete existing dll if it's there
     const workingDir = fs.cwd();
     var binDir = try workingDir.openDir("zig-cache", .{});
     binDir = try binDir.openDir("bin", .{});
-    try binDir.deleteFile("SDL2.dll");
+    try binDir.deleteFile(dllNameExt);
 }
 
-fn openSDLSrcDir() !fs.Dir {
-    const workingDir = fs.cwd();
-    var srcPath = try workingDir.openDir("dependency", .{});
-    srcPath = try srcPath.openDir("SDL2", .{});
-    srcPath = try srcPath.openDir("lib", .{});
-    srcPath = try srcPath.openDir("x64", .{});
+fn openDllSrcDir(comptime dllDir: []const []const u8) !fs.Dir {
+    var srcPath = fs.cwd();
+    for (dllDir) |dir| {
+        srcPath = try srcPath.openDir(dir, .{});
+    }
     return srcPath;
 }
 
-fn openSDLDstDir() !fs.Dir {
+fn openDllDstDir() !fs.Dir {
     const workingDir = fs.cwd();
     var dstPath = try workingDir.openDir("zig-cache", .{});
     dstPath = try dstPath.openDir("bin", .{});
     return dstPath;
 }
 
-fn copySDLLib() !void {
-    deleteOldSDLLib() catch |e| { // this is allowed to fail
+fn copyDllToBin(comptime dllDir: []const []const u8, comptime dllName: []const u8) !void {
+    // Copy files to zig-cache/bin
+    const dllNameExt = dllName ++ ".dll";
+
+    deleteOldDll(dllNameExt) catch |e| { // this is allowed to fail
         // make dir if it doesn't exist
         const workingDir = fs.cwd();
         workingDir.makeDir("zig-cache") catch |e2| {}; // may already exist
@@ -37,25 +39,23 @@ fn copySDLLib() !void {
         cacheDir.makeDir("bin") catch |e2| {}; // may already exist
     };
 
-    // Copy files to zig-cache/bin
-    const sdlDLLName = "SDL2.dll";
-
-    const srcPath = openSDLSrcDir() catch |e| {
+    const srcPath = openDllSrcDir(dllDir) catch |e| {
         std.debug.warn("Unable to resolve src path\n", .{});
         return e;
     };
-    const dstPath = openSDLDstDir() catch |e| {
+    const dstPath = openDllDstDir() catch |e| {
         std.debug.warn("Unable to resolve dst path\n", .{});
         return e;
     };
-    srcPath.copyFile(sdlDLLName, dstPath, sdlDLLName, .{}) catch |e| {
+    srcPath.copyFile(dllNameExt, dstPath, dllNameExt, .{}) catch |e| {
         std.debug.warn("Unable to copy file from {} to {}\n", .{ srcPath, dstPath });
         return e;
     };
 }
 
 pub fn build(b: *Builder) void {
-    const mode = b.standardReleaseOptions();
+    const isDebug = false;
+    const mode = if (isDebug) std.builtin.Mode.Debug else b.standardReleaseOptions();
     const exe = b.addExecutable("sdl-zig-demo", "src/main.zig");
     exe.setBuildMode(mode);
 
@@ -64,6 +64,8 @@ pub fn build(b: *Builder) void {
     // for build debugging
     //exe.setVerboseLink(true);
     //exe.setVerboseCC(true);
+
+    const wkdir = "F:/Dev-Demos-and-Content/Zig/Eden/";
 
     exe.linkSystemLibrary("c");
     exe.linkSystemLibrary("opengl32");
@@ -96,19 +98,29 @@ pub fn build(b: *Builder) void {
     exe.addIncludeDir("dependency/SDL2/include");
     exe.addLibPath("dependency/SDL2/lib/x64");
     exe.linkSystemLibrary("SDL2");
+    const sdl2DllPath = &[_][]const u8{ "dependency", "SDL2", "lib", "x64" };
+    copyDllToBin(sdl2DllPath, "SDL2") catch |e| {
+        std.debug.warn("Could not copy SDL2.dll, {}\n", .{e});
+        @panic("Build failure.");
+    };
 
     exe.addIncludeDir("dependency/assimp/include");
-    exe.addLibPath("dependency/assimp/lib/Release");
     exe.linkSystemLibrary("assimp-vc142-mt");
+    if (isDebug) {
+        exe.addLibPath("dependency/assimp/lib/RelWithDebInfo");
+    } else {
+        exe.addLibPath("dependency/assimp/lib/Release");
+    }
+    const assimpDllPath = if (isDebug) &[_][]const u8{ "dependency", "assimp", "bin", "RelWithDebInfo" } else &[_][]const u8{ "dependency", "assimp", "bin", "Release" };
+    copyDllToBin(assimpDllPath, "assimp-vc142-mt") catch |e| {
+        std.debug.warn("Could not copy assimp-vc142-mt.dll, {}\n", .{e});
+        @panic("Build failure.");
+    };
 
     exe.linkSystemLibrary("user32");
     exe.linkSystemLibrary("gdi32");
 
     exe.install();
-
-    copySDLLib() catch |e| {
-        std.debug.warn("Could not copy SDL2.dll, {}\n", .{e});
-    };
 
     const run_exe_cmd = exe.run();
     run_exe_cmd.step.dependOn(b.getInstallStep());

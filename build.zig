@@ -72,11 +72,15 @@ pub fn build(b: *Builder) void {
 
     exe.addIncludeDir("src");
 
+    exe.addIncludeDir("dependency/glew-2.1.0/include");
+    exe.addLibPath("dependency/glew-2.1.0/lib/Release/x64");
+    exe.linkSystemLibrary("glew32s"); //only include 1 of the 2 glew libs
+
     exe.addIncludeDir("dependency/cimgui");
     exe.addIncludeDir("dependency/cimgui/imgui");
     exe.addIncludeDir("dependency/cimgui/imgui/examples");
     const imgui_flags = &[_][]const u8{
-        "-std=c++11",
+        "-std=c++17",
         "-Wno-return-type-c-linkage",
         "-DIMGUI_IMPL_OPENGL_LOADER_GLEW=1",
         "-fno-exceptions",
@@ -90,10 +94,6 @@ pub fn build(b: *Builder) void {
     exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
     exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
     exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_opengl3.cpp", imgui_flags);
-
-    exe.addIncludeDir("dependency/glew-2.1.0/include");
-    exe.addLibPath("dependency/glew-2.1.0/lib/Release/x64");
-    exe.linkSystemLibrary("glew32s"); //only include 1 of the 2 glew libs
 
     exe.addIncludeDir("dependency/SDL2/include");
     exe.addLibPath("dependency/SDL2/lib/x64");

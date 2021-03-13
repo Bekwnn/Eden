@@ -21,7 +21,7 @@ pub fn ImportMesh(filePath: [:0]const u8) !Mesh {
 
     const importedScene: *const aiScene = aiImportFile(filePath, aiProcess_Triangulate) orelse {
         const errStr = aiGetErrorString();
-        debug.warn("{}\n", .{errStr[0..std.mem.len(errStr)]});
+        debug.warn("{s}\n", .{errStr[0..std.mem.len(errStr)]});
         return ImportError.AIImportError;
     };
     defer aiReleaseImport(importedScene);
@@ -78,7 +78,7 @@ pub fn ImportMesh(filePath: [:0]const u8) !Mesh {
         }
     }
 
-    debug.warn("Imported {} successfully with {} vertices, {} normals, {} texCoords, and {} indices\n", .{
+    debug.warn("Imported {s} successfully with {} vertices, {} normals, {} texCoords, and {} indices\n", .{
         fileName,
         returnMesh.m_vertices.items.len,
         returnMesh.m_normals.items.len,

@@ -2,7 +2,7 @@ const debug = @import("std").debug;
 const Vec3 = @import("Vec3.zig").Vec3;
 
 //TODO is there some sort of better swap?
-inline fn swap(lhs: *f32, rhs: *f32) void {
+fn swap(lhs: *f32, rhs: *f32) void {
     const temp = lhs;
     lhs = rhs;
     rhs = temp;

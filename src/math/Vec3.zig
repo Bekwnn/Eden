@@ -14,13 +14,13 @@ pub const Vec3 = packed struct {
     y: f32 = 0.0,
     z: f32 = 0.0,
 
-    pub inline fn Scale(self: *Vec3, scalar: f32) void {
+    pub fn Scale(self: *Vec3, scalar: f32) void {
         self.x *= scalar;
         self.y *= scalar;
         self.z *= scalar;
     }
 
-    pub inline fn GetScaled(self: *const Vec3, scalar: f32) Vec3 {
+    pub fn GetScaled(self: *const Vec3, scalar: f32) Vec3 {
         return Vec3{
             .x = self.x * scalar,
             .y = self.y * scalar,
@@ -28,7 +28,7 @@ pub const Vec3 = packed struct {
         };
     }
 
-    pub inline fn Add(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Add(self: *const Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = self.x + rhs.x,
             .y = self.y + rhs.y,
@@ -36,7 +36,7 @@ pub const Vec3 = packed struct {
         };
     }
 
-    pub inline fn Sub(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Sub(self: *const Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = self.x - rhs.x,
             .y = self.y - rhs.y,
@@ -44,7 +44,7 @@ pub const Vec3 = packed struct {
         };
     }
 
-    pub inline fn Dot(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Dot(self: *const Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = self.x * rhs.x,
             .y = self.y * rhs.y,
@@ -52,7 +52,7 @@ pub const Vec3 = packed struct {
         };
     }
 
-    pub inline fn Cross(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Cross(self: *const Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = self.y * rhs.z - self.z * rhs.y,
             .y = self.z * rhs.x - self.x * rhs.z,
@@ -61,35 +61,35 @@ pub const Vec3 = packed struct {
     }
 
     // equals with a default tolerance of f32_epsilon
-    pub inline fn Equals(self: *const Vec3, rhs: Vec3) bool {
+    pub fn Equals(self: *const Vec3, rhs: Vec3) bool {
         return self.EqualsT(rhs, math.f32_epsilon);
     }
 
-    pub inline fn EqualsT(self: *const Vec3, rhs: Vec3, tolerance: f32) bool {
+    pub fn EqualsT(self: *const Vec3, rhs: Vec3, tolerance: f32) bool {
         return EqualWithinTolerance(f32, self.x, rhs.x, tolerance) and
             EqualWithinTolerance(f32, self.y, rhs.y, tolerance) and
             EqualWithinTolerance(f32, self.z, rhs.z, tolerance);
     }
 
-    pub inline fn LengthSqrd(self: *const Vec3) f32 {
+    pub fn LengthSqrd(self: *const Vec3) f32 {
         return self.x * self.x + self.y * self.y + self.z * self.z;
     }
 
-    pub inline fn Length(self: *const Vec3) f32 {
+    pub fn Length(self: *const Vec3) f32 {
         return math.sqrt(self.LengthSqrd());
     }
 
-    pub inline fn DistSqrd(self: *const Vec3, rhs: Vec3) f32 {
+    pub fn DistSqrd(self: *const Vec3, rhs: Vec3) f32 {
         return self.Sub(rhs).LengthSqrd();
     }
 
-    pub inline fn Dist(self: *const Vec3, rhs: Vec3) f32 {
+    pub fn Dist(self: *const Vec3, rhs: Vec3) f32 {
         return self.Sub(rhs).Length();
     }
 
     //TODO panics in debug build only maybe?
 
-    pub inline fn ClampToMinSize(self: *Vec3, size: f32) void {
+    pub fn ClampToMinSize(self: *Vec3, size: f32) void {
         const lengthSqrd = self.LengthSqrd();
         const sizeSqrd = size * size;
         if (lengthSqrd < sizeSqrd) {
@@ -101,7 +101,7 @@ pub const Vec3 = packed struct {
         }
     }
 
-    pub inline fn ClampToMaxSize(self: *Vec3, size: f32) void {
+    pub fn ClampToMaxSize(self: *Vec3, size: f32) void {
         const lengthSqrd = self.LengthSqrd();
         const sizeSqrd = size * size;
         if (lengthSqrd > sizeSqrd) {
@@ -113,7 +113,7 @@ pub const Vec3 = packed struct {
         }
     }
 
-    pub inline fn GetClampedToMinSize(self: *const Vec3, size: f32) Vec3 {
+    pub fn GetClampedToMinSize(self: *const Vec3, size: f32) Vec3 {
         const lengthSqrd = self.LengthSqrd();
         const sizeSqrd = size * size;
         if (lengthSqrd < sizeSqrd) {
@@ -127,7 +127,7 @@ pub const Vec3 = packed struct {
         }
     }
 
-    pub inline fn GetClampedToMaxSize(self: *const Vec3, size: f32) Vec3 {
+    pub fn GetClampedToMaxSize(self: *const Vec3, size: f32) Vec3 {
         const lengthSqrd = self.LengthSqrd();
         const sizeSqrd = size * size;
         if (lengthSqrd > sizeSqrd) {
@@ -141,21 +141,21 @@ pub const Vec3 = packed struct {
         }
     }
 
-    pub inline fn ScaleToSize(self: *Vec3, size: f32) void {
+    pub fn ScaleToSize(self: *Vec3, size: f32) void {
         const length = self.Length();
         if (length == 0.0) @panic("Trying to scale up a vector with length 0");
         const scaleAmount = size / length;
         self.Scale(scaleAmount);
     }
 
-    pub inline fn GetScaledToSize(self: *Vec3, size: f32) Vec3 {
+    pub fn GetScaledToSize(self: *Vec3, size: f32) Vec3 {
         const length = self.Length();
         if (length == 0.0) @panic("Trying to scale up a vector with length 0");
         const scaleAmount = size / length;
         return self.GetScaled(scaleAmount);
     }
 
-    pub inline fn Normalized(self: *const Vec3) Vec3 {
+    pub fn Normalized(self: *const Vec3) Vec3 {
         const length = self.Length();
         if (length == 0.0) @panic("Normalizing vector with length 0");
         return Vec3{
@@ -165,7 +165,7 @@ pub const Vec3 = packed struct {
         };
     }
 
-    pub inline fn NormalizeSelf(self: *Vec3) void {
+    pub fn NormalizeSelf(self: *Vec3) void {
         const length = self.Length();
         if (length == 0.0) @panic("Normalizing vector with length 0");
         self.x /= length;
@@ -173,28 +173,28 @@ pub const Vec3 = packed struct {
         self.z /= length;
     }
 
-    pub inline fn RotatedByQuat(self: *const Vec3, q: Quat) Vec3 {
+    pub fn RotatedByQuat(self: *const Vec3, q: Quat) Vec3 {
         const qxyz = Vec3{ .x = q.x, .y = q.y, .z = q.z };
         const t = qxyz.Cross(self.*).GetScaled(2.0);
         return self.Add(t.GetScaled(q.w)).Add(qxyz.Cross(t));
     }
 
-    pub inline fn RotateByQuat(self: *Vec3, q: Quat) void {
+    pub fn RotateByQuat(self: *Vec3, q: Quat) void {
         const qxyz = Vec3{ .x = q.x, .y = q.y, .z = q.z };
         const t = qxyz.Cross(self.*).GetScaled(2.0);
         self = self.Add(t.GetScaled(q.w).Add(qxyz.Cross(t)));
     }
 };
 
-pub inline fn Vec3_xy0(v2: *const Vec2) Vec3 {
+pub fn Vec3_xy0(v2: *const Vec2) Vec3 {
     return Vec3{ v2.x, v2.y, 0.0 };
 }
 
-pub inline fn Vec3_x0y(v2: *const Vec2) Vec3 {
+pub fn Vec3_x0y(v2: *const Vec2) Vec3 {
     return Vec3{ v2.x, 0.0, v2.y };
 }
 
-pub inline fn Vec3_0xy(v2: *const Vec2) Vec3 {
+pub fn Vec3_0xy(v2: *const Vec2) Vec3 {
     return Vec3{ 0.0, v2.x, v2.y };
 }
 

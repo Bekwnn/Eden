@@ -16,7 +16,7 @@ fn ColorEquals(comptime colorType: type, lhs: *const colorType, rhs: *const colo
         "v",
     };
 
-    inline for (fieldNames) |fieldName| {
+     for (fieldNames) |fieldName| {
         if (@hasField(colorType, fieldName)) {
             if (@field(lhs, fieldName) != @field(rhs, fieldName)) return false;
         }
@@ -75,7 +75,7 @@ pub const ColorHSV = packed struct {
 
 // FromHSV
 //TODO HSV8 / RGB8 version
-pub inline fn HSVToRGB(color: *const ColorHSV) ColorRGB {
+pub fn HSVToRGB(color: *const ColorHSV) ColorRGB {
     if (color.s == 0.0) { // grey-scale
         return ColorRGB{ .r = color.v, .g = color.v, .b = color.v };
     }
@@ -99,7 +99,7 @@ pub inline fn HSVToRGB(color: *const ColorHSV) ColorRGB {
 
 // ToHSV
 //TODO HSV8 / RGB8 version
-pub inline fn RGBToHSV(color: *const ColorRGB) ColorHSV {
+pub fn RGBToHSV(color: *const ColorRGB) ColorHSV {
     const min = stdm.min(stdm.min(color.r, color.g), color.b);
     const max = stdm.max(stdm.max(color.r, color.g), color.b);
     const delta = max - min;
@@ -132,7 +132,7 @@ pub inline fn RGBToHSV(color: *const ColorRGB) ColorHSV {
 }
 
 // ToRGB
-pub inline fn RGB8ToRGB(color: *const ColorRGB8) ColorRGB {
+pub fn RGB8ToRGB(color: *const ColorRGB8) ColorRGB {
     return ColorRGB{
         .r = @intToFloat(f32, color.r) / 255.0,
         .g = @intToFloat(f32, color.g) / 255.0,
@@ -140,7 +140,7 @@ pub inline fn RGB8ToRGB(color: *const ColorRGB8) ColorRGB {
     };
 }
 
-pub inline fn RGBAToRGB(color: *const ColorRGBA) ColorRGB {
+pub fn RGBAToRGB(color: *const ColorRGBA) ColorRGB {
     return ColorRGB{
         .r = color.r,
         .g = color.g,
@@ -148,7 +148,7 @@ pub inline fn RGBAToRGB(color: *const ColorRGBA) ColorRGB {
     };
 }
 
-pub inline fn RGBA8ToRGB(color: *const ColorRGBA8) ColorRGB {
+pub fn RGBA8ToRGB(color: *const ColorRGBA8) ColorRGB {
     return ColorRGB{
         .r = color.r,
         .g = color.g,
@@ -157,7 +157,7 @@ pub inline fn RGBA8ToRGB(color: *const ColorRGBA8) ColorRGB {
 }
 
 // ToRGB8
-pub inline fn RGBToRGB8(color: *const ColorRGB) ColorRGB8 {
+pub fn RGBToRGB8(color: *const ColorRGB) ColorRGB8 {
     return ColorRGB8{
         .r = @floatToInt(u8, stdm.round(color.r * 255.0)),
         .g = @floatToInt(u8, stdm.round(color.g * 255.0)),
@@ -165,7 +165,7 @@ pub inline fn RGBToRGB8(color: *const ColorRGB) ColorRGB8 {
     };
 }
 
-pub inline fn RGBAToRGB8(color: *const ColorRGBA) ColorRGB8 {
+pub fn RGBAToRGB8(color: *const ColorRGBA) ColorRGB8 {
     return ColorRGB8{
         .r = @floatToInt(u8, stdm.round(color.r * 255.0)),
         .g = @floatToInt(u8, stdm.round(color.g * 255.0)),
@@ -173,7 +173,7 @@ pub inline fn RGBAToRGB8(color: *const ColorRGBA) ColorRGB8 {
     };
 }
 
-pub inline fn RGBA8ToRGB8(color: *const ColorRGB) ColorRGB8 {
+pub fn RGBA8ToRGB8(color: *const ColorRGB) ColorRGB8 {
     return ColorRGB8{
         .r = color.r,
         .g = color.g,
@@ -182,7 +182,7 @@ pub inline fn RGBA8ToRGB8(color: *const ColorRGB) ColorRGB8 {
 }
 
 // ToRGBA
-pub inline fn RGBToRGBA(color: *const ColorRGB) ColorRGBA {
+pub fn RGBToRGBA(color: *const ColorRGB) ColorRGBA {
     return ColorRGBA{
         .r = color.r,
         .g = color.g,
@@ -191,7 +191,7 @@ pub inline fn RGBToRGBA(color: *const ColorRGB) ColorRGBA {
     };
 }
 
-pub inline fn RGB8ToRGBA(color: *const ColorRGB8) ColorRGBA {
+pub fn RGB8ToRGBA(color: *const ColorRGB8) ColorRGBA {
     return ColorRGBA{
         .r = @intToFloat(f32, color.r) / 255.0,
         .g = @intToFloat(f32, color.g) / 255.0,
@@ -200,7 +200,7 @@ pub inline fn RGB8ToRGBA(color: *const ColorRGB8) ColorRGBA {
     };
 }
 
-pub inline fn RGBA8ToRGBA(color: *const ColorRGBA8) ColorRGBA {
+pub fn RGBA8ToRGBA(color: *const ColorRGBA8) ColorRGBA {
     return ColorRGBA{
         .r = @intToFloat(f32, color.r) / 255.0,
         .g = @intToFloat(f32, color.g) / 255.0,
@@ -210,7 +210,7 @@ pub inline fn RGBA8ToRGBA(color: *const ColorRGBA8) ColorRGBA {
 }
 
 // ToRGBA8
-pub inline fn RGBToRGBA8(color: *const ColorRGB) ColorRGBA8 {
+pub fn RGBToRGBA8(color: *const ColorRGB) ColorRGBA8 {
     return ColorRGBA8{
         .r = @floatToInt(u8, stdm.round(color.r * 255.0)),
         .g = @floatToInt(u8, stdm.round(color.g * 255.0)),
@@ -219,7 +219,7 @@ pub inline fn RGBToRGBA8(color: *const ColorRGB) ColorRGBA8 {
     };
 }
 
-pub inline fn RGBAToRGBA8(color: *const ColorRGBA) ColorRGBA8 {
+pub fn RGBAToRGBA8(color: *const ColorRGBA) ColorRGBA8 {
     return ColorRGBA8{
         .r = @floatToInt(u8, stdm.round(color.r * 255.0)),
         .g = @floatToInt(u8, stdm.round(color.g * 255.0)),
@@ -228,7 +228,7 @@ pub inline fn RGBAToRGBA8(color: *const ColorRGBA) ColorRGBA8 {
     };
 }
 
-pub inline fn RGB8ToRGBA8(color: *const ColorRGB8) ColorRGBA8 {
+pub fn RGB8ToRGBA8(color: *const ColorRGB8) ColorRGBA8 {
     return ColorRGBA8{
         .r = color.r,
         .g = color.g,

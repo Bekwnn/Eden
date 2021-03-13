@@ -14,7 +14,7 @@ const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);
 
 extern fn SDL_PollEvent(event: *c.SDL_Event) c_int;
 
-inline fn SDL_RWclose(ctx: [*]c.SDL_RWops) c_int {
+fn SDL_RWclose(ctx: [*]c.SDL_RWops) c_int {
     return ctx[0].close.?(ctx);
 }
 
@@ -24,9 +24,9 @@ const InitError = error{
     OpenGLInit,
 };
 
-fn ReportSDLError(message: [:0]const u8) void {
+fn ReportSDLError(message: []const u8) void {
     const errStr = c.SDL_GetError();
-    debug.warn(" {}: {}", .{ message, errStr[0..std.mem.len(errStr)] });
+    debug.warn(" {s}: {s}", .{ message, errStr[0..std.mem.len(errStr)] });
 }
 
 fn SetSDLAttribute(attribute: c_int, setVal: c_int) !c_int {
@@ -85,7 +85,7 @@ pub fn main() !void {
     }
     const glVer: [*:0]const u8 = c.glGetString(c.GL_VERSION);
     if (@ptrToInt(glVer) != 0) {
-        debug.warn("OpenGL version supported by this platform: {}\n", .{glVer[0..std.mem.len(glVer)]});
+        debug.warn("OpenGL version supported by this platform: {s}\n", .{glVer[0..std.mem.len(glVer)]});
     }
     // vsync on
     _ = c.SDL_GL_SetSwapInterval(1);

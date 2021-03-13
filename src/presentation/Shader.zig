@@ -25,7 +25,7 @@ fn ShaderTypeStr(comptime shaderType: GLenum) []const u8 {
 fn CompileShader(relativePath: []const u8, comptime shaderType: GLenum) !GLuint {
     var compileResult: GLint = GL_FALSE;
 
-    debug.warn("Compiling {} Shader {}...\n", .{ ShaderTypeStr(shaderType), relativePath });
+    debug.warn("Compiling {s} Shader {s}...\n", .{ ShaderTypeStr(shaderType), relativePath });
 
     const cwd: Dir = std.fs.cwd();
     const shaderFile = try cwd.openFile(relativePath, .{});
@@ -46,10 +46,10 @@ fn CompileShader(relativePath: []const u8, comptime shaderType: GLenum) !GLuint 
         glGetShaderiv(shaderObject, GL_INFO_LOG_LENGTH, &errLogLength);
         var errLog = try allocator.alloc(u8, @intCast(usize, errLogLength));
         glGetShaderInfoLog(shaderObject, errLogLength, &errLogLength, errLog.ptr); //this line segfaults?
-        debug.warn("{}\n", .{errLog[0..@intCast(usize, errLogLength)]});
+        debug.warn("{s}\n", .{errLog[0..@intCast(usize, errLogLength)]});
         return ShaderCompileErr.SeeLog;
     } else {
-        debug.warn("{} shader {} compiled successfully.\n", .{ ShaderTypeStr(shaderType), relativePath });
+        debug.warn("{s} shader {s} compiled successfully.\n", .{ ShaderTypeStr(shaderType), relativePath });
     }
 
     return shaderObject;
@@ -62,20 +62,20 @@ pub const Shader = struct {
 
         // vert shader: build, compile, link
         const vertShaderObject = CompileShader(vertFile, GL_VERTEX_SHADER) catch |err| {
-            debug.warn("Unable to compile {} shader with path {}, error: {}\n", .{ ShaderTypeStr(GL_VERTEX_SHADER), vertFile, err });
+            debug.warn("Unable to compile {s} shader with path {s}, error: {}\n", .{ ShaderTypeStr(GL_VERTEX_SHADER), vertFile, err });
             return null;
         };
         defer glDeleteShader(vertShaderObject);
 
         // fragment shader: build, compile, link
         const fragShaderObject = CompileShader(fragFile, GL_FRAGMENT_SHADER) catch |err| {
-            debug.warn("Unable to compile {} shader with path {}, error: {}\n", .{ ShaderTypeStr(GL_FRAGMENT_SHADER), fragFile, err });
+            debug.warn("Unable to compile {s} shader with path {s}, error: {}\n", .{ ShaderTypeStr(GL_FRAGMENT_SHADER), fragFile, err });
             return null;
         };
         defer glDeleteShader(fragShaderObject);
 
         // link shaders
-        debug.warn("Linking shader programs {} and {}...\n", .{ vertFile, fragFile });
+        debug.warn("Linking shader programs {s} and {s}...\n", .{ vertFile, fragFile });
         const shaderObject: GLuint = glCreateProgram();
         glAttachShader(shaderObject, vertShaderObject);
         glAttachShader(shaderObject, fragShaderObject);
@@ -88,10 +88,10 @@ pub const Shader = struct {
             glGetProgramiv(shaderObject, GL_INFO_LOG_LENGTH, &errLogLength);
             var errLog: []u8 = undefined;
             glGetProgramInfoLog(shaderObject, errLogLength, &errLogLength, &errLog[0]);
-            debug.warn("{}\n", .{errLog[0..@intCast(usize, errLogLength)]});
+            debug.warn("{s}\n", .{errLog[0..@intCast(usize, errLogLength)]});
             return null;
         }
-        debug.warn("Shader program {} and {} linked successfully.\n", .{ vertFile, fragFile });
+        debug.warn("Shader program {s} and {s} linked successfully.\n", .{ vertFile, fragFile });
 
         return Shader{ .gl_id = shaderObject };
     }

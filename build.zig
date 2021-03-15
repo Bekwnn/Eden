@@ -27,8 +27,8 @@ fn openDllDstDir() !fs.Dir {
     return dstPath;
 }
 
+// Copy files to zig-cache/bin
 fn copyDllToBin(comptime dllDir: []const []const u8, comptime dllName: []const u8) !void {
-    // Copy files to zig-cache/bin
     const dllNameExt = dllName ++ ".dll";
 
     deleteOldDll(dllNameExt) catch |e| { // this is allowed to fail
@@ -59,13 +59,9 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("sdl-zig-demo", "src/main.zig");
     exe.setBuildMode(mode);
 
-    // would be nice to run the makefile for cimgui if it hasn't been run. . .
-
     // for build debugging
     //exe.setVerboseLink(true);
     //exe.setVerboseCC(true);
-
-    const wkdir = "F:/Dev-Demos-and-Content/Zig/Eden/";
 
     exe.linkSystemLibrary("c");
     exe.linkSystemLibrary("opengl32");

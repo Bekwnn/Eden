@@ -1,11 +1,14 @@
 const c = @import("c.zig"); //can't use usingnamespace because of main() definition conflict
 const std = @import("std");
 const debug = std.debug;
+const allocator = std.heap.page_allocator;
+
 const Vec2 = @import("math/Vec2.zig").Vec2;
 
 const gameWorld = @import("game/GameWorld.zig");
 const presentation = @import("presentation/Presentation.zig");
 const assimp = @import("presentation/AssImpInterface.zig");
+const filePathUtils = @import("coreutil/FilePathUtils.zig");
 
 //TODO move test and delete
 const TransformComp = @import("game/ComponentData/TransformComp.zig").TransformComp;
@@ -96,6 +99,20 @@ pub fn main() !void {
 
     _ = c.ImGui_ImplSDL2_InitForOpenGL(screen, glContext);
     _ = c.ImGui_ImplOpenGL3_Init(null);
+
+    //stb image wip test
+    var width: c_int = undefined;
+    var height: c_int = undefined;
+    var comp: c_int = undefined;
+    const imagePath = try filePathUtils.CwdToAbsolute(allocator, "test-assets\\test.png");
+    defer allocator.free(imagePath);
+    var image = c.stbi_load(imagePath.ptr, &width, &height, &comp, 0);
+    if (image == null) {
+        debug.warn("Image {s} load failed\n", .{imagePath});
+    } else {
+        debug.warn("Image {s} loaded successfully\n", .{imagePath});
+    }
+    defer c.stbi_image_free(image);
 
     presentation.Initialize(renderer);
     gameWorld.Initialize();

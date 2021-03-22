@@ -1,5 +1,6 @@
 const std = @import("std");
 const debug = std.debug;
+const allocator = std.heap.page_allocator;
 
 const Shader = @import("Shader.zig").Shader;
 const Mesh = @import("Mesh.zig").Mesh;
@@ -10,7 +11,8 @@ const mat4x4 = @import("../math/Mat4x4.zig");
 const game = @import("../game/GameWorld.zig");
 const GameWorld = @import("../game/GameWorld.zig").GameWorld;
 
-const c = @import("../c.zig");
+const filePathUtils = @import("../coreutil/FilePathUtils.zig");
+
 usingnamespace @import("../c.zig");
 
 var curShader: ?Shader = null;
@@ -27,7 +29,11 @@ pub fn Initialize(renderer: *SDL_Renderer) void {
     glClearColor(0.1, 0.1, 0.2, 1.0);
     curShader = Shader.init("src\\shaders\\basic_mesh.vert", "src\\shaders\\basic_mesh.frag");
 
-    if (assimp.ImportMesh("F:/Dev-Demos-and-Content/Zig/Eden/test-assets/test.obj")) |mesh| {
+    const meshPath = filePathUtils.CwdToAbsolute(allocator, "test-assets\\test.obj") catch |err| {
+        @panic("!");
+    };
+    defer allocator.free(meshPath);
+    if (assimp.ImportMesh(meshPath)) |mesh| {
         curMesh = mesh;
     } else |meshErr| {
         debug.warn("Error importing mesh: {}\n", .{meshErr});

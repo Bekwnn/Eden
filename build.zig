@@ -113,6 +113,12 @@ pub fn build(b: *Builder) void {
         @panic("Build failure.");
     };
 
+    exe.addIncludeDir("dependency/stb");
+    const stb_flags = &[_][]const u8{
+        "-std=c17",
+    };
+    exe.addCSourceFile("dependency/stb/stb_image_impl.c", stb_flags);
+
     exe.linkSystemLibrary("user32");
     exe.linkSystemLibrary("gdi32");
 

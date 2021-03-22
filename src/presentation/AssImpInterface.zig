@@ -16,10 +16,10 @@ const ImportError = error{
     BadDataCounts, //issue with data not having matching quantities
 };
 
-pub fn ImportMesh(filePath: [:0]const u8) !Mesh {
+pub fn ImportMesh(filePath: []const u8) !Mesh {
     _ = try std.fs.openFileAbsolute(filePath, .{}); //sanity check accessing the file before trying to import
 
-    const importedScene: *const aiScene = aiImportFile(filePath, aiProcess_Triangulate) orelse {
+    const importedScene: *const aiScene = aiImportFile(filePath.ptr, aiProcess_Triangulate) orelse {
         const errStr = aiGetErrorString();
         debug.warn("{s}\n", .{errStr[0..std.mem.len(errStr)]});
         return ImportError.AIImportError;
@@ -78,7 +78,7 @@ pub fn ImportMesh(filePath: [:0]const u8) !Mesh {
         }
     }
 
-    debug.warn("Imported {s} successfully with {} vertices, {} normals, {} texCoords, and {} indices\n", .{
+    debug.warn("Imported {s} successfully:\n{} vertices, {} normals, {} texCoords, and {} indices\n", .{
         fileName,
         returnMesh.m_vertices.items.len,
         returnMesh.m_normals.items.len,

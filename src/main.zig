@@ -9,9 +9,8 @@ const gameWorld = @import("game/GameWorld.zig");
 const presentation = @import("presentation/Presentation.zig");
 const assimp = @import("presentation/AssImpInterface.zig");
 const filePathUtils = @import("coreutil/FilePathUtils.zig");
-
-//TODO move test and delete
 const TransformComp = @import("game/ComponentData/TransformComp.zig").TransformComp;
+const imageFileUtil = @import("coreutil/ImageFileUtil.zig");
 
 const SDL_WINDOWPOS_UNDEFINED = @bitCast(c_int, c.SDL_WINDOWPOS_UNDEFINED_MASK);
 
@@ -101,18 +100,14 @@ pub fn main() !void {
     _ = c.ImGui_ImplOpenGL3_Init(null);
 
     //stb image wip test
-    var width: c_int = undefined;
-    var height: c_int = undefined;
-    var comp: c_int = undefined;
-    const imagePath = try filePathUtils.CwdToAbsolute(allocator, "test-assets\\test.png");
-    defer allocator.free(imagePath);
-    var image = c.stbi_load(imagePath.ptr, &width, &height, &comp, 0);
-    if (image == null) {
-        debug.warn("Image {s} load failed\n", .{imagePath});
-    } else {
-        debug.warn("Image {s} loaded successfully\n", .{imagePath});
+    const testImagePath = "test-assets\\test.png";
+    if (imageFileUtil.LoadImage(testImagePath)) |*image| {
+        defer image.FreeImage();
+        debug.warn("Successfully loaded test image {s}\n", .{testImagePath});
+        // where you would use the image...
+    } else |err| {
+        debug.warn("Failed to load test image {s}, {}\n", .{ testImagePath, err });
     }
-    defer c.stbi_image_free(image);
 
     presentation.Initialize(renderer);
     gameWorld.Initialize();

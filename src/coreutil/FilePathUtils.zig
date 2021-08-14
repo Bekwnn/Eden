@@ -23,7 +23,6 @@ pub fn CwdToAbsolute(allocator: *mem.Allocator, relativePath: []const u8) ![]u8 
     return absolutePath;
 }
 
-// Caller must free if successful
 pub fn GetExtension(relativePath: []const u8) ![]const u8 {
     var i: usize = 0;
     const pathTestEnd: usize = relativePath.len - 1;
@@ -39,3 +38,5 @@ pub fn GetExtension(relativePath: []const u8) ![]const u8 {
         return relativePath[i..relativePath.len];
     }
 }
+
+pub fn DirToString(allocator: *mem.Allocator, dir: Dir) ![]const u8 {}

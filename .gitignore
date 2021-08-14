@@ -6,6 +6,9 @@ build-*/
 # Ignore test asset folder
 test-assets/
 
+# Ignore compiled shaders in the compiled shader folder
+src/shaders/compiled/*.spv
+
 # Vim ignores
 # Swap
 [._]*.s[a-v][a-z]

@@ -1,17 +1,17 @@
 pub usingnamespace @cImport({
-    //Glew
-    @cInclude("GL/glewmodified.h"); // macro functions aren't supported, see https://github.com/ziglang/zig/issues/1085
-
     //SDL
     @cInclude("SDL.h");
+    @cInclude("SDL_Vulkan.h");
 
     //IMGUI
-    @cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", {});
-    @cInclude("cimgui.h");
-    @cDefine("IMGUI_IMPL_API", {});
-    @cDefine("IMGUI_IMPL_OPENGL_LOADER_GLEW", {});
-    @cInclude("imgui_impl_sdl.h");
-    @cInclude("imgui_impl_opengl3.h");
+    //@cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", {});
+    //@cInclude("cimgui.h");
+    //@cDefine("IMGUI_IMPL_API", {});
+    //@cInclude("imgui_impl_sdl.h");
+    //@cInclude("imgui_impl_vulkan.h");
+
+    //Vulkan
+    @cInclude("vulkan/vulkan.h");
 
     //Assimp
     @cInclude("assimp/cimport.h");

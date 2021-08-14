@@ -7,6 +7,8 @@ usingnamespace @import("../c.zig");
 
 var allocator = std.heap.page_allocator;
 
+//TODO vulkan means we compile shaders as part of build step, need to create new vk shader object representation
+
 const ShaderCompileErr = error{SeeLog};
 
 fn ShaderTypeStr(comptime shaderType: GLenum) []const u8 {
@@ -20,81 +22,3 @@ fn ShaderTypeStr(comptime shaderType: GLenum) []const u8 {
         else => return "Unknown",
     };
 }
-
-// return needs to be cleaned up with glDeleteShader
-fn CompileShader(relativePath: []const u8, comptime shaderType: GLenum) !GLuint {
-    var compileResult: GLint = GL_FALSE;
-
-    debug.warn("Compiling {s} Shader {s}...\n", .{ ShaderTypeStr(shaderType), relativePath });
-
-    const cwd: Dir = std.fs.cwd();
-    const shaderFile = try cwd.openFile(relativePath, .{});
-    defer shaderFile.close();
-
-    var shaderCode = try allocator.alloc(u8, try shaderFile.getEndPos());
-    defer allocator.free(shaderCode);
-
-    const shaderObject: GLuint = glCreateShader(shaderType);
-    _ = try shaderFile.read(shaderCode);
-    const shaderSrcPtr: ?[*]const u8 = shaderCode.ptr;
-    glShaderSource(shaderObject, 1, &shaderSrcPtr, 0);
-    glCompileShader(shaderObject);
-
-    glGetShaderiv(shaderObject, GL_COMPILE_STATUS, &compileResult);
-    if (compileResult == GL_FALSE) {
-        var errLogLength: GLint = 0;
-        glGetShaderiv(shaderObject, GL_INFO_LOG_LENGTH, &errLogLength);
-        var errLog = try allocator.alloc(u8, @intCast(usize, errLogLength));
-        glGetShaderInfoLog(shaderObject, errLogLength, &errLogLength, errLog.ptr); //this line segfaults?
-        debug.warn("{s}\n", .{errLog[0..@intCast(usize, errLogLength)]});
-        return ShaderCompileErr.SeeLog;
-    } else {
-        debug.warn("{s} shader {s} compiled successfully.\n", .{ ShaderTypeStr(shaderType), relativePath });
-    }
-
-    return shaderObject;
-}
-
-pub const Shader = struct {
-    gl_id: GLuint,
-
-    pub fn init(vertFile: []const u8, fragFile: []const u8) ?Shader {
-
-        // vert shader: build, compile, link
-        const vertShaderObject = CompileShader(vertFile, GL_VERTEX_SHADER) catch |err| {
-            debug.warn("Unable to compile {s} shader with path {s}, error: {}\n", .{ ShaderTypeStr(GL_VERTEX_SHADER), vertFile, err });
-            return null;
-        };
-        defer glDeleteShader(vertShaderObject);
-
-        // fragment shader: build, compile, link
-        const fragShaderObject = CompileShader(fragFile, GL_FRAGMENT_SHADER) catch |err| {
-            debug.warn("Unable to compile {s} shader with path {s}, error: {}\n", .{ ShaderTypeStr(GL_FRAGMENT_SHADER), fragFile, err });
-            return null;
-        };
-        defer glDeleteShader(fragShaderObject);
-
-        // link shaders
-        debug.warn("Linking shader programs {s} and {s}...\n", .{ vertFile, fragFile });
-        const shaderObject: GLuint = glCreateProgram();
-        glAttachShader(shaderObject, vertShaderObject);
-        glAttachShader(shaderObject, fragShaderObject);
-        glLinkProgram(shaderObject);
-
-        var compileResult: GLint = GL_FALSE;
-        glGetProgramiv(shaderObject, GL_LINK_STATUS, &compileResult);
-        if (compileResult == GL_FALSE) {
-            var errLogLength: GLint = 0;
-            glGetProgramiv(shaderObject, GL_INFO_LOG_LENGTH, &errLogLength);
-            var errLog: []u8 = undefined;
-            glGetProgramInfoLog(shaderObject, errLogLength, &errLogLength, &errLog[0]);
-            debug.warn("{s}\n", .{errLog[0..@intCast(usize, errLogLength)]});
-            return null;
-        }
-        debug.warn("Shader program {s} and {s} linked successfully.\n", .{ vertFile, fragFile });
-
-        return Shader{ .gl_id = shaderObject };
-    }
-
-    //    pub fn PushUniform(
-};

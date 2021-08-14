@@ -1,8 +1,11 @@
 const std = @import("std");
 const buildns = std.build;
 const fs = std.fs;
+const path = fs.path;
 const Builder = buildns.Builder;
 const Version = buildns.Version;
+
+const filePathUtils = @import("src/coreutil/FilePathUtils.zig");
 
 fn deleteOldDll(dllNameExt: []const u8) !void {
     // delete existing dll if it's there
@@ -53,7 +56,53 @@ fn copyDllToBin(comptime dllDir: []const []const u8, comptime dllName: []const u
     };
 }
 
-pub fn build(b: *Builder) void {
+fn cleanCompiledShaders() !void {
+    const cwdDir = fs.cwd();
+    var shaderDir = try cwdDir.openDir("src", .{});
+    shaderDir = try shaderDir.openDir("shaders", .{});
+
+    // delete entire compiled dir and remake
+    try shaderDir.deleteTree("compiled");
+    try shaderDir.makeDir("compiled");
+}
+
+// ex usage: buildVKShaders(b, exe, "oceanshader", "vert");
+// will compile "shaders/oceanshader.vert" to "shaders/compiled/oceanshader-vert.spv"
+const shaderDirName = "src\\shaders";
+fn buildVKShaders(b: *Builder, exe: anytype, shaderName: []const u8, shaderExt: []const u8) !void {
+
+    //TODO iterate over shaders directory and compile
+    // .vert .frag .geom .tesc .tese .comp
+    // to shaders/compiled .spv automatically (shaders/compiled should be skipped)
+
+    // For now, call this per file
+    var inFileName = std.ArrayList(u8).init(b.allocator);
+    try inFileName.appendSlice(shaderName);
+    try inFileName.appendSlice(".");
+    try inFileName.appendSlice(shaderExt);
+
+    const compiledExt = ".spv";
+    var outFileName = std.ArrayList(u8).init(b.allocator);
+    try outFileName.appendSlice(shaderName);
+    try outFileName.appendSlice("-");
+    try outFileName.appendSlice(shaderExt);
+    try outFileName.appendSlice(compiledExt);
+
+    const shaderOutDirName = try path.join(b.allocator, &[_][]const u8{ shaderDirName, "compiled" });
+    const relativeIn = try path.join(b.allocator, &[_][]const u8{ shaderDirName, inFileName.items });
+    const relativeOut = try path.join(b.allocator, &[_][]const u8{ shaderOutDirName, outFileName.items });
+
+    // example glslc usage: glslc -o oceanshader-vert.spv oceanshader.vert
+    const glslc_cmd = b.addSystemCommand(&[_][]const u8{
+        "glslc",
+        "-o",
+        relativeOut,
+        relativeIn,
+    });
+    exe.step.dependOn(&glslc_cmd.step);
+}
+
+pub fn build(b: *Builder) !void {
     const isDebug = false;
     const mode = if (isDebug) std.builtin.Mode.Debug else b.standardReleaseOptions();
     const exe = b.addExecutable("sdl-zig-demo", "src/main.zig");
@@ -64,13 +113,13 @@ pub fn build(b: *Builder) void {
     //exe.setVerboseCC(true);
 
     exe.linkSystemLibrary("c");
-    exe.linkSystemLibrary("opengl32");
+
+    exe.addLibPath("C:/VulkanSDK/1.2.182.0/Lib");
+    exe.linkSystemLibrary("vulkan-1");
+
+    exe.addIncludeDir("C:/VulkanSDK/1.2.182.0/Include");
 
     exe.addIncludeDir("src");
-
-    exe.addIncludeDir("dependency/glew-2.1.0/include");
-    exe.addLibPath("dependency/glew-2.1.0/lib/Release/x64");
-    exe.linkSystemLibrary("glew32s"); //only include 1 of the 2 glew libs
 
     exe.addIncludeDir("dependency/cimgui");
     exe.addIncludeDir("dependency/cimgui/imgui");
@@ -89,7 +138,7 @@ pub fn build(b: *Builder) void {
     exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
     exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
     exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_opengl3.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
 
     exe.addIncludeDir("dependency/SDL2/include");
     exe.addLibPath("dependency/SDL2/lib/x64");
@@ -129,4 +178,8 @@ pub fn build(b: *Builder) void {
 
     const run_exe_step = b.step("run", "Run the demo");
     run_exe_step.dependOn(&run_exe_cmd.step);
+
+    try cleanCompiledShaders();
+    try buildVKShaders(b, exe, "basic_mesh", "vert");
+    try buildVKShaders(b, exe, "basic_mesh", "frag");
 }

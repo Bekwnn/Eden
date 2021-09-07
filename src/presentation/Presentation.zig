@@ -101,7 +101,7 @@ var vkImage: VkImage = undefined;
 fn AcquireNextImage() void {
     //TODO handle results
     _ = vkAcquireNextImageKHR(
-        vk.globalDevice,
+        vk.logicalDevice,
         vk.swapChain,
         std.math.maxInt(u64),
         vk.imageAvailableSemaphores[vk.curFrameBufferIdx],
@@ -110,8 +110,8 @@ fn AcquireNextImage() void {
     );
 
     //TODO handle results
-    _ = vkWaitForFences(vk.globalDevice, 1, &vk.inFlightFences[vk.curFrameBufferIdx], VK_TRUE, std.math.maxInt(u64));
-    _ = vkResetFences(vk.globalDevice, 1, &vk.inFlightFences[vk.curFrameBufferIdx]);
+    _ = vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[vk.curFrameBufferIdx], VK_TRUE, std.math.maxInt(u64));
+    _ = vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[vk.curFrameBufferIdx]);
 
     vkCommandBuffer = vk.commandBuffers[vk.curFrameBufferIdx];
     vkImage = vk.swapChainImages[vk.curFrameBufferIdx];

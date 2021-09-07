@@ -6,6 +6,7 @@ const gameWorld = @import("game/GameWorld.zig");
 
 const presentation = @import("presentation/Presentation.zig");
 const sdlInit = @import("presentation/SDLInit.zig");
+const vk = @import("presentation/VulkanInit.zig");
 
 const imageFileUtil = @import("coreutil/ImageFileUtil.zig");
 
@@ -18,6 +19,9 @@ pub fn main() !void {
 
     const renderer = try sdlInit.CreateRenderer(window);
     defer c.SDL_DestroyRenderer(renderer);
+
+    try vk.VulkanInit(window);
+    defer vk.VulkanCleanup();
 
     // imgui setup TODO relocate TODO handle returns
     //_ = c.igCreateContext(null);

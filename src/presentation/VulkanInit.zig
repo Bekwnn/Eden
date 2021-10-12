@@ -29,7 +29,7 @@ pub var swapChain: c.VkSwapchainKHR = undefined;
 pub var swapChainImageCount: u32 = undefined;
 pub var swapChainImages: []c.VkImage = undefined;
 pub var swapChainSurfaceFormat: c.VkSurfaceFormatKHR = undefined;
-pub var swapChainFormat: c.VkFormat = undefined;
+pub var swapChainFormat: c.VkSurfaceFormatKHR = undefined;
 pub var swapChainExtent: c.VkExtent2D = undefined;
 //var swapChainImageViews: []c.VkImageView = undefined;
 
@@ -66,8 +66,8 @@ pub const QueueFamilyDetails = struct {
 
 pub const SwapChainSupportDetails = struct {
     capabilities: c.VkSurfaceCapabilitiesKHR,
-    formats: std.ArrayList(c.VkSurfaceFormatKHR),
-    presentModes: std.ArrayList(c.VkPresentModeKHR),
+    formats: []c.VkSurfaceFormatKHR,
+    presentModes: []c.VkPresentModeKHR,
 };
 
 pub fn VulkanInit(window: *c.SDL_Window) !void {
@@ -85,10 +85,10 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
 
 pub fn VulkanCleanup() void {
     // defer so execution happens in unwinding order--easier to match init order above
-    defer c.vkDestroyInstance(&instance, null);
-    defer c.vkDestroyDevice(&logicalDevice, null);
+    defer c.vkDestroyInstance(instance.?, null);
+    defer c.vkDestroyDevice(logicalDevice.?, null);
     //TODO defer DestroySurface(); may involve SDL or may just be vkDestroySurfaceKHR()
-    defer c.vkDestroySwapChainKHR(&logicalDevice, &swapChain, null);
+    defer c.vkDestroySwapchainKHR(logicalDevice.?, swapChain.?, null);
 }
 
 fn CreateVKInstance(allocator: *Allocator, window: *c.SDL_Window) !void {
@@ -104,9 +104,8 @@ fn CreateVKInstance(allocator: *Allocator, window: *c.SDL_Window) !void {
 
     var extensionCount: c_uint = 0;
     _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, null);
-    var extensionNames = try std.ArrayList([*]const u8).initCapacity(allocator, extensionCount);
-    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast([*c][*c]const u8, extensionNames.items.ptr));
-    extensionNames.items.len = extensionCount;
+    var extensionNames = try allocator.alloc([*]const u8, extensionCount);
+    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast([*c][*c]const u8, extensionNames.ptr));
 
     // TODO layers
     const instanceInfo = c.VkInstanceCreateInfo{
@@ -114,8 +113,8 @@ fn CreateVKInstance(allocator: *Allocator, window: *c.SDL_Window) !void {
         .pApplicationInfo = &appInfo,
         .enabledLayerCount = 0,
         .ppEnabledLayerNames = null,
-        .enabledExtensionCount = @intCast(u32, extensionNames.items.len),
-        .ppEnabledExtensionNames = extensionNames.items.ptr,
+        .enabledExtensionCount = @intCast(u32, extensionNames.len),
+        .ppEnabledExtensionNames = extensionNames.ptr,
         .pNext = null,
         .flags = 0,
     };
@@ -129,10 +128,10 @@ fn CreateVKInstance(allocator: *Allocator, window: *c.SDL_Window) !void {
 
 // Currently just checks if geometry shaders are supported and if the device supports VK_QUEUE_GRAPHICS_BIT
 // Mostly a proof-of-concept function; could ensure device support exists for more advanced stuff later
-const requiredExtensions = [_][*c]u8{
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+const requiredExtensions = [_][*]const u8{
+    c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
-fn PhysicalDeviceIsSuitable(allocator: *Allocator, device: c.VkPhysicalDevice, window: *c.SDL_Window) !bool {
+fn PhysicalDeviceIsSuitable(allocator: *Allocator, device: c.VkPhysicalDevice, window: *c.SDL_Window, s: c.VkSurfaceKHR) !bool {
     //TODO should take in surface and check if presentation is supported (vkGetPhysicalDeviceSurfaceSupportKHR())
     var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
     c.vkGetPhysicalDeviceProperties(device, &deviceProperties);
@@ -142,14 +141,14 @@ fn PhysicalDeviceIsSuitable(allocator: *Allocator, device: c.VkPhysicalDevice, w
 
     var queueFamilyCount: u32 = 0;
     c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, null);
-    var queueFamilies = try std.ArrayList(c.VkQueueFamilyProperties).initCapacity(allocator, queueFamilyCount);
-    c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.items.ptr);
-    queueFamilies.items.len = queueFamilyCount;
+
+    var queueFamilies = try allocator.alloc(c.VkQueueFamilyProperties, queueFamilyCount);
+    c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.ptr);
 
     var graphicsSupportExists = false;
     var i: usize = 0;
     while (i < queueFamilyCount) : (i += 1) {
-        if (queueFamilies.items[i].queueFlags & c.VK_QUEUE_GRAPHICS_BIT != 0) {
+        if (queueFamilies[i].queueFlags & c.VK_QUEUE_GRAPHICS_BIT != 0) {
             graphicsSupportExists = true;
         }
     }
@@ -157,38 +156,35 @@ fn PhysicalDeviceIsSuitable(allocator: *Allocator, device: c.VkPhysicalDevice, w
     //TODO ensure we hve all required extensions, compare the extensions we got to check all requiredExtensions exist
     var extensionCount: c_uint = 0;
     _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, null);
-    var extensionNames = try std.ArrayList([*]const u8).initCapacity(allocator, extensionCount);
-    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast([*c][*c]const u8, extensionNames.items.ptr));
-    extensionNames.items.len = extensionCount;
+    var extensionNames = try allocator.alloc([*]const u8, extensionCount);
+    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast([*c][*c]const u8, extensionNames.ptr));
 
-    const swapChainSupport: SwapChainSupportDetails = try QuerySwapChainSupport(allocator, device);
-    const swapChainSupported = swapChainSupport.formats.items.len != 0 and swapChainSupport.presentModes.items.len != 0;
+    const swapChainSupport: SwapChainSupportDetails = try QuerySwapChainSupport(allocator, device, s);
+    const swapChainSupported = swapChainSupport.formats.len != 0 and swapChainSupport.presentModes.len != 0;
 
     // We don't need any special features really...
     // For now, just test it supports geometry shaders as a sort of test/placeholder?
-    return graphicsSupportExists and deviceFeatures.geometryShader;
+    return graphicsSupportExists and deviceFeatures.geometryShader == c.VK_TRUE;
 }
 
-//TODO fix surface
-fn QuerySwapChainSupport(allocator: *Allocator, physDevice: c.VkPhysicalDevice, s: c.VkSurface) !SwapChainSupportDetails {
+//TODO error handle vkresults
+fn QuerySwapChainSupport(allocator: *Allocator, physDevice: c.VkPhysicalDevice, s: c.VkSurfaceKHR) !SwapChainSupportDetails {
     var details: SwapChainSupportDetails = undefined;
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, s, &details.capabilities);
+    _ = c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDevice, s, &details.capabilities);
 
     {
         var formatCount: u32 = 0;
-        c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, null);
-        details.formats = try std.ArrayList(c.VkSurfaceFormatKHR).initCapacity(allocator, formatCount);
-        c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, details.formats.items.ptr);
-        details.formats.items.len = formatCount;
+        _ = c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, null);
+        details.formats = try allocator.alloc(c.VkSurfaceFormatKHR, formatCount);
+        _ = c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, details.formats.ptr);
     }
 
     {
         var presentModeCount: u32 = 0;
-        c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, null);
-        details.presentModes = try std.ArrayList(c.VkPresentModeKHR).initCapacity(allocator, presentModeCount);
-        c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, details.presentModes.items.ptr);
-        details.presentModes.items.len = presentModeCount;
+        _ = c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, null);
+        details.presentModes = try allocator.alloc(c.VkPresentModeKHR, presentModeCount);
+        _ = c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, details.presentModes.ptr);
     }
 
     return details;
@@ -201,13 +197,12 @@ fn PickPhysicalDevice(allocator: *Allocator, window: *c.SDL_Window) !void {
         return VKInitError.NoSupportedDevice; //no vulkan supporting devices
     }
 
-    var deviceList = try std.ArrayList(c.VkPhysicalDevice).initCapacity(allocator, deviceCount);
-    _ = c.vkEnumeratePhysicalDevices(instance, &deviceCount, deviceList.items.ptr);
-    deviceList.items.len = deviceCount;
+    var deviceList = try allocator.alloc(c.VkPhysicalDevice, deviceCount);
+    _ = c.vkEnumeratePhysicalDevices(instance, &deviceCount, deviceList.ptr);
 
     //TODO rather than just picking first suitable device, could rate/score by some scheme and pick the best
-    for (deviceList.items) |device| {
-        if (try PhysicalDeviceIsSuitable(allocator, device, window)) {
+    for (deviceList) |device| {
+        if (try PhysicalDeviceIsSuitable(allocator, device, window, surface)) {
             physicalDevice = device;
             return;
         }
@@ -226,61 +221,69 @@ fn CreateLogicalDevice(allocator: *Allocator) !void {
 
     var queueFamilyCount: u32 = 0;
     c.vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, null);
-    var queueFamilies = try std.ArrayList(c.VkQueueFamilyProperties).initCapacity(allocator, queueFamilyCount);
-    c.vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.items.ptr);
+    var queueFamilies = try allocator.alloc(c.VkQueueFamilyProperties, queueFamilyCount);
+    c.vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.ptr);
 
     var graphicsQueueIndex: ?u32 = null;
-    var presentationQueueIndex: ?u32 = null;
+    var presentQueueIndex: ?u32 = null;
+    var i: u32 = 0;
     while (i < queueFamilyCount) : (i += 1) {
         if (graphicsQueueIndex == null) {
-            if (queueFamilies.items[i].queueFlags & c.VK_QUEUE_GRAPHICS_BIT) {
+            if ((queueFamilies[i].queueFlags & c.VK_QUEUE_GRAPHICS_BIT) != 0) {
                 graphicsQueueIndex = i;
             }
         }
-        if (presentationQueueIndex == null) {
-            var presentationSupport: VkBool32 = false;
-            //TODO need surface
-            vkGetPhysicalDeviceSurfaceSupportKHR(logicalDevice, i, surface, &presentationSupport);
-            if (presentationSupport == true) {
-                presentationQueueIndex = i;
+        if (presentQueueIndex == null) {
+            var presentationSupport: c.VkBool32 = c.VK_FALSE;
+            //TODO errorhandle vkresult
+            _ = c.vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentationSupport);
+            if (presentationSupport == c.VK_TRUE) {
+                presentQueueIndex = i;
             }
         }
     }
 
-    if (!graphicsQueueIndex or !presentationQueueIndex) {
+    if (graphicsQueueIndex == null or presentQueueIndex == null) {
         return VKInitError.LogicDeviceCreationFailed;
     }
+
     queueFamilyDetails = QueueFamilyDetails{
         .graphicsQueueIdx = graphicsQueueIndex,
-        .presentQueueIdx = presentationQueueIndex,
+        .presentQueueIdx = presentQueueIndex,
     };
 
-    var queueCreateInfos = try std.ArrayList(VkDeviceQueueCreateInfo).initCapacity(allocator, 2);
+    var queueCreateInfos = try allocator.alloc(c.VkDeviceQueueCreateInfo, 2);
     // graphics queue
-    queueCreateInfos.append(VkDeviceQueueCreateInfo{
+    queueCreateInfos[0] = c.VkDeviceQueueCreateInfo{
         .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = graphicsQueueIndex,
+        .queueFamilyIndex = graphicsQueueIndex orelse return VKInitError.LogicDeviceCreationFailed,
         .queueCount = 1,
-        .pQueuePriority = &basicQueuePriority,
-    });
+        .pQueuePriorities = &basicQueuePriority,
+        .flags = 0,
+        .pNext = null,
+    };
     // presentation queue
-    queueCreateInfos.append(VkDeviceQueueCreateInfo{
+    queueCreateInfos[1] = c.VkDeviceQueueCreateInfo{
         .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = presentationQueueIndex,
+        .queueFamilyIndex = presentQueueIndex orelse return VKInitError.LogicDeviceCreationFailed,
         .queueCount = 1,
-        .pQueuePriority = &basicQueuePriority,
-    });
+        .pQueuePriorities = &basicQueuePriority,
+        .flags = 0,
+        .pNext = null,
+    };
 
     // we should have verified earlier that requiredExtensions are all supported by this point
-    const deviceCreateInfo = VkDeviceCreateInfo{
+    const deviceCreateInfo = c.VkDeviceCreateInfo{
         .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pQueueCreateInfos = queueCreateInfos.items.ptr,
+        .pQueueCreateInfos = queueCreateInfos.ptr,
         .queueCreateInfoCount = 2,
         .pEnabledFeatures = &deviceFeatures,
         .enabledExtensionCount = requiredExtensions.len,
-        .ppEnabledExtensions = requiredExtensions.ptr,
+        .ppEnabledExtensionNames = &requiredExtensions,
         .enabledLayerCount = 0, //TODO validation layers
-        .ppEnabledLayers = null, //TODO validation layers
+        .ppEnabledLayerNames = null, //TODO validation layers
+        .flags = 0,
+        .pNext = null,
     };
 
     if (c.vkCreateDevice(physicalDevice, &deviceCreateInfo, null, &logicalDevice) != c.enum_VkResult.VK_SUCCESS) {
@@ -288,8 +291,10 @@ fn CreateLogicalDevice(allocator: *Allocator) !void {
     }
 
     //TODO double check this 0 isn't shifty
-    c.vkGetDeviceQueue(&logicalDevice, graphicsQueueIndex, 0, &graphicsQueue);
-    c.vkGetDeviceQueue(&logicalDevice, presentationQueueindex, 0, &presentationQueue);
+    if (logicalDevice) |*ld| {
+        c.vkGetDeviceQueue(ld.*, graphicsQueueIndex orelse return VKInitError.LogicDeviceCreationFailed, 0, &graphicsQueue);
+        c.vkGetDeviceQueue(ld.*, presentQueueIndex orelse return VKInitError.LogicDeviceCreationFailed, 0, &presentQueue);
+    }
 }
 
 fn CreateSurface(window: *c.SDL_Window) !void {
@@ -299,39 +304,39 @@ fn CreateSurface(window: *c.SDL_Window) !void {
     }
 }
 
-fn ChooseSwapExtent(capabilities: c.VkSurfaceCapabilities) c.VkExtent2D {
+fn ChooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
     if (capabilities.currentExtent.width != std.math.maxInt(u32)) {
         return capabilities.currentExtent;
     } else {
         return c.VkExtent2D{
-            .width = std.math.clamp(INITIAL_WIDTH, capabilities.minImageExtet.width, capabilities.maxImageExtent.width),
+            .width = std.math.clamp(INITIAL_WIDTH, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
             .height = std.math.clamp(INITIAL_HEIGHT, capabilities.minImageExtent.height, capabilities.maxImageExtent.height),
         };
     }
 }
 
-fn ChooseSwapSurfaceFormat(availableFormats: *const std.ArrayList(c.VkSurfaceFormatKHR)) !c.VkSurfaceFormatKHR {
+fn ChooseSwapSurfaceFormat(availableFormats: []c.VkSurfaceFormatKHR) !c.VkSurfaceFormatKHR {
     for (availableFormats) |format| {
-        if (format.format == c.VK_FORMAT_B8G8R8A8_SRGB and format.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR) {
+        if (format.format == c.enum_VkFormat.VK_FORMAT_B8G8R8A8_SRGB and format.colorSpace == c.enum_VkColorSpaceKHR.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             return format;
         }
     }
 
-    if (availableFormats.items.len == 0) {
+    if (availableFormats.len == 0) {
         return VKInitError.NoAvailableSwapSurfaceFormat;
     }
 
-    return availableFormats.items[0];
+    return availableFormats[0];
 }
 
-fn ChooseSwapPresentMode(availablePresentModes: *const std.ArrayList(c.VkPresentModeKHR)) !c.VkPresentModeKHR {
+fn ChooseSwapPresentMode(availablePresentModes: []c.VkPresentModeKHR) !c.VkPresentModeKHR {
     for (availablePresentModes) |presentMode| {
-        if (presentMode == c.VK_PRESENT_MODE_MAILBOX_KHR) {
+        if (presentMode == c.enum_VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR) {
             return presentMode;
         }
     }
 
-    if (availablePresentModes.items.len == 0) {
+    if (availablePresentModes.len == 0) {
         return VKInitError.NoAvailablePresentMode;
     }
 
@@ -339,25 +344,28 @@ fn ChooseSwapPresentMode(availablePresentModes: *const std.ArrayList(c.VkPresent
 }
 
 fn CreateSwapChain(allocator: *Allocator) !void {
-    const swapChainSupport = try QuerySwapChainSupport(allocator, physicalDevice);
+    const swapChainSupport = try QuerySwapChainSupport(allocator, physicalDevice, surface);
 
     swapChainExtent = ChooseSwapExtent(swapChainSupport.capabilities);
 
-    swapChainFormat = try ChooseSwapSurfaceFormat(&swapChainSupport.formats);
-    presentMode = try ChooseSwapPresentMode(&swapChainSupport.presentModes);
+    swapChainFormat = try ChooseSwapSurfaceFormat(swapChainSupport.formats);
+    const presentMode: c.VkPresentModeKHR = try ChooseSwapPresentMode(swapChainSupport.presentModes);
 
     // you want 1 more than minimum to avoid waiting
-    swapChainImageCount = swapChainSupport.minImageCount + 1;
+    swapChainImageCount = swapChainSupport.capabilities.minImageCount + 1;
 
     // ensure we're within max image count
-    if (swapChainSupport.maxImageCount > 0 and swapChainImageCount > swapChainSupport.maxImageCount) {
-        swapChainImageCount = swapChainSupport.maxImageCount;
+    if (swapChainSupport.capabilities.maxImageCount > 0 and swapChainImageCount > swapChainSupport.capabilities.maxImageCount) {
+        swapChainImageCount = swapChainSupport.capabilities.maxImageCount;
     }
 
-    const queueFamilyIndices = [_]u32{ queueFamilyDetails.graphicsQueueIdx, queueFamilyDetails.presentQueueIdx };
+    const queueFamilyIndices = [_]u32{
+        queueFamilyDetails.graphicsQueueIdx orelse return VKInitError.SwapChainCreationFailed,
+        queueFamilyDetails.presentQueueIdx orelse return VKInitError.SwapChainCreationFailed,
+    };
     const queuesAreConcurrent = queueFamilyIndices[0] != queueFamilyIndices[1];
-    const createInfo = c.VkSwapChainCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_SWAP_CHAIN_CREATE_INFO_KHR,
+    const createInfo = c.VkSwapchainCreateInfoKHR{
+        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface,
         .minImageCount = swapChainImageCount,
         .imageFormat = swapChainFormat.format,
@@ -366,17 +374,19 @@ fn CreateSwapChain(allocator: *Allocator) !void {
         .imageArrayLayers = 1,
         .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 
-        .imageSharingMode = if (queuesAreConcurrent) c.VK_SHARING_MODE_CONCURRENT else c.VK_SHARING_MODE_EXCLUSIVE,
+        .imageSharingMode = if (queuesAreConcurrent) c.enum_VkSharingMode.VK_SHARING_MODE_CONCURRENT else c.enum_VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = if (queuesAreConcurrent) 2 else 0,
-        .imageSharingMode = if (queuesAreConcurrent) queueFamilyIndices else null,
+        .pQueueFamilyIndices = if (queuesAreConcurrent) &queueFamilyIndices else null,
 
         .preTransform = swapChainSupport.capabilities.currentTransform,
-        .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .compositeAlpha = c.enum_VkCompositeAlphaFlagBitsKHR.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = presentMode,
         .clipped = c.VK_TRUE,
-        .oldSwapChain = c.VK_NULL_HANDLE,
+        .oldSwapchain = null, //TODO check the sanity of this
+        .pNext = null,
+        .flags = 0,
     };
-    if (vkCreateSwapchainKHR(device, &createInfo, null, &swapChain) != c.enum_VkResult.VK_SUCCESS) {
+    if (c.vkCreateSwapchainKHR(logicalDevice, &createInfo, null, &swapChain) != c.enum_VkResult.VK_SUCCESS) {
         return VKInitError.SwapChainCreationFailed;
     }
 }

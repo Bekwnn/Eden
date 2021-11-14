@@ -56,19 +56,23 @@ fn copyDllToBin(comptime dllDir: []const []const u8, comptime dllName: []const u
     };
 }
 
+const ShaderCleanError = error{
+    Delete,
+    Remake,
+};
 fn cleanCompiledShaders() !void {
     const cwdDir = fs.cwd();
-    var shaderDir = try cwdDir.openDir("src", .{});
-    shaderDir = try shaderDir.openDir("shaders", .{});
 
     // delete entire compiled dir and remake
-    try shaderDir.deleteTree("compiled");
-    try shaderDir.makeDir("compiled");
+    cwdDir.deleteTree(compiledShaderDirName) catch return ShaderCleanError.Delete;
+    cwdDir.makeDir(compiledShaderDirName) catch return ShaderCleanError.Remake;
 }
 
 // ex usage: buildVKShaders(b, exe, "oceanshader", "vert");
 // will compile "shaders/oceanshader.vert" to "shaders/compiled/oceanshader-vert.spv"
 const shaderDirName = "src\\shaders";
+const compiledShaderDirName = "src\\shaders\\compiled";
+//const compiledShaderDirName = "zig-cache\\bin\\shaders"; //TODO: output shaders to build location/bin
 fn buildVKShaders(b: *Builder, exe: anytype, shaderName: []const u8, shaderExt: []const u8) !void {
 
     //TODO iterate over shaders directory and compile
@@ -88,9 +92,8 @@ fn buildVKShaders(b: *Builder, exe: anytype, shaderName: []const u8, shaderExt: 
     try outFileName.appendSlice(shaderExt);
     try outFileName.appendSlice(compiledExt);
 
-    const shaderOutDirName = try path.join(b.allocator, &[_][]const u8{ shaderDirName, "compiled" });
     const relativeIn = try path.join(b.allocator, &[_][]const u8{ shaderDirName, inFileName.items });
-    const relativeOut = try path.join(b.allocator, &[_][]const u8{ shaderOutDirName, outFileName.items });
+    const relativeOut = try path.join(b.allocator, &[_][]const u8{ compiledShaderDirName, outFileName.items });
 
     // example glslc usage: glslc -o oceanshader-vert.spv oceanshader.vert
     const glslc_cmd = b.addSystemCommand(&[_][]const u8{
@@ -103,7 +106,7 @@ fn buildVKShaders(b: *Builder, exe: anytype, shaderName: []const u8, shaderExt: 
 }
 
 pub fn build(b: *Builder) !void {
-    const isDebug = false;
+    const isDebug = true;
     const mode = if (isDebug) std.builtin.Mode.Debug else b.standardReleaseOptions();
     const exe = b.addExecutable("sdl-zig-demo", "src/main.zig");
     exe.setBuildMode(mode);

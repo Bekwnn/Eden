@@ -7,8 +7,6 @@ usingnamespace @import("../c.zig");
 
 var allocator = std.heap.page_allocator;
 
-//TODO vulkan means we compile shaders as part of build step, need to create new vk shader object representation
-
 const ShaderCompileErr = error{SeeLog};
 
 fn ShaderTypeStr(comptime shaderType: GLenum) []const u8 {

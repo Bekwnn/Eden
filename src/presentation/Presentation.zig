@@ -102,7 +102,7 @@ fn AcquireNextImage() void {
     //TODO handle results
     _ = vkAcquireNextImageKHR(
         vk.logicalDevice,
-        vk.swapChain,
+        vk.swapchain,
         std.math.maxInt(u64),
         vk.imageAvailableSemaphores[vk.curFrameBufferIdx],
         null,
@@ -114,7 +114,7 @@ fn AcquireNextImage() void {
     _ = vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[vk.curFrameBufferIdx]);
 
     vkCommandBuffer = vk.commandBuffers[vk.curFrameBufferIdx];
-    vkImage = vk.swapChainImages[vk.curFrameBufferIdx];
+    vkImage = vk.swapchainImages[vk.curFrameBufferIdx];
 }
 
 fn ResetCommandBuffer() void {
@@ -140,10 +140,10 @@ fn BeginRenderPass(clear_color: VkClearColorValue, clear_depth_stencil: VkClearD
     const renderPassInfo = VkRenderPassBeginInfo{
         .sType = enum_VkStructureType.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = vk.renderPass,
-        .framebuffer = vk.swapChainFrameBuffers[vk.curFrameBufferIdx],
+        .framebuffer = vk.swapchainFrameBuffers[vk.curFrameBufferIdx],
         .renderArea = VkRect2D{
             .offset = VkOffset2D{ .x = 0, .y = 0 },
-            .extent = vk.swapChainExtent,
+            .extent = vk.swapchainExtent,
         },
         .clearValueCount = @intCast(u32, clearValues.items.len), //color, depthstencil
         .pClearValues = @ptrCast([*c]VkClearValue, &clearValues.items),
@@ -185,7 +185,7 @@ fn QueuePresent() void {
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &vk.renderFinishedSemaphores[vk.curFrameBufferIdx],
         .swapchainCount = 1,
-        .pSwapchains = &vk.swapChain,
+        .pSwapchains = &vk.swapchain,
         .pImageIndices = &vk.curFrameBufferIdx,
         .pNext = null,
         .pResults = null,

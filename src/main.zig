@@ -20,8 +20,13 @@ pub fn main() !void {
     const renderer = try sdlInit.CreateRenderer(window);
     defer c.SDL_DestroyRenderer(renderer);
 
+    presentation.Initialize(renderer); //TODO temp, delete should happen later
     try vk.VulkanInit(window);
-    defer vk.VulkanCleanup();
+    defer {
+        //TODO handle
+        _ = c.vkDeviceWaitIdle(vk.logicalDevice);
+        vk.VulkanCleanup();
+    }
 
     // imgui setup TODO relocate TODO handle returns
     //_ = c.igCreateContext(null);
@@ -40,7 +45,7 @@ pub fn main() !void {
         debug.warn("Failed to load test image {s}, {}\n", .{ testImagePath, err });
     }
 
-    presentation.Initialize(renderer);
+    //presentation.Initialize(renderer);
     gameWorld.Initialize();
 
     try MainGameLoop(window, renderer);

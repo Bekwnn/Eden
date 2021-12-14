@@ -17,14 +17,17 @@ const GameWorld = @import("../game/GameWorld.zig").GameWorld;
 
 const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 
-usingnamespace @import("../c.zig");
+const c = @import("../c.zig");
 
 var curShader: ?u32 = null;
-var curMesh: ?Mesh = null;
 var curCamera = Camera{};
 var curTime: f32 = 0.0;
 const circleTime: f32 = 1.0 / (2.0 * std.math.pi);
 const circleRadius: f32 = 0.5;
+
+const RenderLoopError = error{
+    FailedToSubmitDrawCommandBuffer,
+};
 
 //var imguiIO: ?*ImGuiIO = null;
 
@@ -40,22 +43,18 @@ const circleRadius: f32 = 0.5;
 //    }
 //}
 
-pub fn Initialize(renderer: *SDL_Renderer) void {
+pub fn Initialize(renderer: *c.SDL_Renderer) void {
     const meshPath = filePathUtils.CwdToAbsolute(allocator, "test-assets\\test.obj") catch |err| {
         @panic("!");
     };
     defer allocator.free(meshPath);
     if (assimp.ImportMesh(meshPath)) |mesh| {
-        curMesh = mesh;
+        vk.curMesh = mesh;
     } else |meshErr| {
         debug.warn("Error importing mesh: {}\n", .{meshErr});
     }
 
-    if (curMesh != null) {
-        curMesh.?.PushDataToBuffers();
-    } else {
-        debug.warn("No mesh, no data pushed to buffers!\n", .{});
-    }
+    //TODO repush data to buffers
 
     curCamera.m_pos.z -= 2.0;
 
@@ -96,135 +95,62 @@ pub fn Initialize(renderer: *SDL_Renderer) void {
 //    ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
 //}
 
-var vkCommandBuffer: VkCommandBuffer = undefined;
-var vkImage: VkImage = undefined;
-fn AcquireNextImage() void {
-    //TODO handle results
-    _ = vkAcquireNextImageKHR(
-        vk.logicalDevice,
-        vk.swapchain,
-        std.math.maxInt(u64),
-        vk.imageAvailableSemaphores[vk.curFrameBufferIdx],
-        null,
-        &vk.curFrameBufferIdx,
-    );
-
-    //TODO handle results
-    _ = vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[vk.curFrameBufferIdx], VK_TRUE, std.math.maxInt(u64));
-    _ = vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[vk.curFrameBufferIdx]);
-
-    vkCommandBuffer = vk.commandBuffers[vk.curFrameBufferIdx];
-    vkImage = vk.swapchainImages[vk.curFrameBufferIdx];
-}
-
-fn ResetCommandBuffer() void {
-    //TODO report result
-    _ = vkResetCommandBuffer(vkCommandBuffer, 0);
-}
-
-fn BeginCommandBuffer() void {
-    const beginInfo = VkCommandBufferBeginInfo{
-        .sType = enum_VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
-        .pNext = null,
-        .pInheritanceInfo = null,
-    };
-    _ = vkBeginCommandBuffer(vkCommandBuffer, &beginInfo);
-}
-
-fn BeginRenderPass(clear_color: VkClearColorValue, clear_depth_stencil: VkClearDepthStencilValue) !void {
-    var clearValues = try std.ArrayList(VkClearValue).initCapacity(allocator, 2);
-    clearValues.items[0].color = clear_color;
-    clearValues.items[1].depthStencil = clear_depth_stencil;
-
-    const renderPassInfo = VkRenderPassBeginInfo{
-        .sType = enum_VkStructureType.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = vk.renderPass,
-        .framebuffer = vk.swapchainFrameBuffers[vk.curFrameBufferIdx],
-        .renderArea = VkRect2D{
-            .offset = VkOffset2D{ .x = 0, .y = 0 },
-            .extent = vk.swapchainExtent,
-        },
-        .clearValueCount = @intCast(u32, clearValues.items.len), //color, depthstencil
-        .pClearValues = @ptrCast([*c]VkClearValue, &clearValues.items),
-        .pNext = null,
-    };
-
-    vkCmdBeginRenderPass(vkCommandBuffer, &renderPassInfo, enum_VkSubpassContents.VK_SUBPASS_CONTENTS_INLINE);
-}
-
-fn EndRenderPass() void {
-    vkCmdEndRenderPass(vkCommandBuffer);
-}
-
-fn EndCommandBuffer() void {
-    //TODO handle result
-    _ = vkEndCommandBuffer(vkCommandBuffer);
-}
-
-fn QueueSubmit() void {
-    var waitStages = [_]VkPipelineStageFlags{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    const submitInfo = VkSubmitInfo{
-        .sType = enum_VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &vk.imageAvailableSemaphores[vk.curFrameBufferIdx],
-        .pWaitDstStageMask = &waitStages,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &vkCommandBuffer,
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &vk.renderFinishedSemaphores[vk.curFrameBufferIdx],
-        .pNext = null,
-    };
-    //TODO handle result
-    _ = vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.inFlightFences[vk.curFrameBufferIdx]);
-}
-
-fn QueuePresent() void {
-    const presentInfo = VkPresentInfoKHR{
-        .sType = enum_VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &vk.renderFinishedSemaphores[vk.curFrameBufferIdx],
-        .swapchainCount = 1,
-        .pSwapchains = &vk.swapchain,
-        .pImageIndices = &vk.curFrameBufferIdx,
-        .pNext = null,
-        .pResults = null,
-    };
-    //TODO handle result
-    _ = vkQueuePresentKHR(vk.presentQueue, &presentInfo);
-
-    //TODO handle result
-    _ = vkQueueWaitIdle(vk.presentQueue);
-}
-
-pub fn RenderFrame(renderer: *SDL_Renderer, screen: *SDL_Window, gameWorld: *const GameWorld) !void {
+var currentFrame: usize = 0;
+pub fn RenderFrame(renderer: *c.SDL_Renderer, screen: *c.SDL_Window, gameWorld: *const GameWorld) !void {
     curTime += game.deltaTime;
     curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
     curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
 
+    //TODO handle return values
+    _ = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
+
+    var imageIndex: u32 = 0;
+    _ = c.vkAcquireNextImageKHR(vk.logicalDevice, vk.swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
+
     //Vulkan render loop
-    AcquireNextImage();
-
-    ResetCommandBuffer();
-    BeginCommandBuffer();
-    {
-        const clearColour = VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } };
-        const clearDepthStencil = VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 };
-        try BeginRenderPass(clearColour, clearDepthStencil);
-        {
-            if (curMesh) |m| {
-                if (curShader) |s| {
-                    m.Draw(&curCamera, s);
-                }
-            }
-        }
-        EndRenderPass();
-
-        //TODO get imgui working again
-        //ImguiUpdate();
+    if (vk.imagesInFlight[imageIndex] != null) {
+        _ = c.vkWaitForFences(vk.logicalDevice, 1, &vk.imagesInFlight[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
     }
-    EndCommandBuffer();
+    vk.imagesInFlight[imageIndex] = vk.inFlightFences[currentFrame];
 
-    QueueSubmit();
-    QueuePresent();
+    const waitSemaphores = [_]c.VkSemaphore{vk.imageAvailableSemaphores[currentFrame]};
+    const waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    const signalSemaphores = [_]c.VkSemaphore{vk.renderFinishedSemaphores[currentFrame]};
+    const submitInfo = c.VkSubmitInfo{
+        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &waitSemaphores,
+        .pWaitDstStageMask = &waitStages,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &vk.commandBuffers[imageIndex],
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &signalSemaphores,
+        .pNext = null,
+    };
+
+    _ = c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]);
+
+    const submitResult = c.vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.inFlightFences[currentFrame]);
+    if (submitResult != c.enum_VkResult.VK_SUCCESS) {
+        return RenderLoopError.FailedToSubmitDrawCommandBuffer;
+    }
+
+    const swapchains = [_]c.VkSwapchainKHR{vk.swapchain};
+    const presentInfo = c.VkPresentInfoKHR{
+        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &signalSemaphores,
+        .swapchainCount = 1,
+        .pSwapchains = &vk.swapchain,
+        .pImageIndices = &imageIndex,
+        .pResults = null,
+        .pNext = null,
+    };
+
+    _ = c.vkQueuePresentKHR(vk.presentQueue, &presentInfo);
+
+    currentFrame = (currentFrame + 1) % vk.BUFFER_FRAMES;
+
+    //TODO get imgui working again
+    //ImguiUpdate();
 }

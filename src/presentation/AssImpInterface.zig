@@ -5,6 +5,7 @@ const ArrayList = std.ArrayList;
 const debug = @import("std").debug;
 
 const Mesh = @import("Mesh.zig").Mesh;
+const VertexData = @import("Mesh.zig").VertexData;
 
 const allocator = std.heap.page_allocator;
 
@@ -37,40 +38,36 @@ pub fn ImportMesh(filePath: []const u8) !Mesh {
 
     var returnMesh = Mesh{
         .m_name = fileName,
-        .m_vertices = try ArrayList(Vec3).initCapacity(allocator, importMesh.mNumVertices),
-        .m_normals = try ArrayList(Vec3).initCapacity(allocator, importMesh.mNumVertices),
-        .m_texCoords = try ArrayList(Vec2).initCapacity(allocator, importMesh.mNumVertices), //TODO channels
+        .m_vertexData = try ArrayList(VertexData).initCapacity(allocator, importMesh.mNumVertices),
         .m_indices = ArrayList(u32).init(allocator), //TODO can we make the capacity/resize handling better?
-        .m_vertexBO = 0,
-        .m_normalBO = 0,
-        .m_texCoordBO = 0,
-        .m_indexBO = 0,
     };
 
     // Copy data from the imported mesh structure to ours
-    for (importMesh.mVertices[0..importMesh.mNumVertices]) |vert| {
-        returnMesh.m_vertices.appendAssumeCapacity(.{
-            .x = vert.x,
-            .y = vert.y,
-            .z = vert.z,
+    var i: usize = 0;
+    while (i < importMesh.mNumVertices) : (i += 1) {
+        const vert = importMesh.mVertices[i];
+        const normal = importMesh.mNormals[i];
+        const uvCoord = importMesh.mTextureCoords[0][i];
+        returnMesh.m_vertexData.appendAssumeCapacity(.{
+            .m_pos = Vec3{
+                .x = vert.x,
+                .y = vert.y,
+                .z = vert.z,
+            },
+            .m_normal = Vec3{
+                .x = normal.x,
+                .y = normal.y,
+                .z = normal.z,
+            },
+            .m_uvCoord = Vec2{
+                .x = uvCoord.x,
+                .y = uvCoord.y,
+            },
         });
     }
-    for (importMesh.mNormals[0..importMesh.mNumVertices]) |normal| {
-        returnMesh.m_normals.appendAssumeCapacity(.{
-            .x = normal.x,
-            .y = normal.y,
-            .z = normal.z,
-        });
-    }
-    for (importMesh.mTextureCoords[0][0..importMesh.mNumVertices]) |uvCoord| {
-        returnMesh.m_texCoords.appendAssumeCapacity(.{
-            .x = uvCoord.x,
-            .y = uvCoord.y,
-        });
-    }
-    for (importMesh.mFaces[0..importMesh.mNumFaces]) |face, i| {
+    for (importMesh.mFaces[0..importMesh.mNumFaces]) |face, j| {
         if (face.mNumIndices != 3) {
-            debug.warn("Bad face count at face {} with count {}\n", .{ i, face.mNumIndices });
+            debug.warn("Bad face count at face {} with count {}\n", .{ j, face.mNumIndices });
             return ImportError.BadDataCounts;
         }
         for (face.mIndices[0..face.mNumIndices]) |index| {
@@ -78,11 +75,9 @@ pub fn ImportMesh(filePath: []const u8) !Mesh {
         }
     }
 
-    debug.warn("Imported {s} successfully:\n{} vertices, {} normals, {} texCoords, and {} indices\n", .{
+    debug.warn("Imported {s} successfully:\n{} vertexData instances and {} indices\n", .{
         fileName,
-        returnMesh.m_vertices.items.len,
-        returnMesh.m_normals.items.len,
-        returnMesh.m_texCoords.items.len,
+        returnMesh.m_vertexData.items.len,
         returnMesh.m_indices.items.len,
     });
     return returnMesh;

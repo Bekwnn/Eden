@@ -1,7 +1,5 @@
-usingnamespace @import("MathUtil.zig");
-usingnamespace @import("Vec3.zig");
-
-const math = @import("std").math;
+const em = @import("Math.zig");
+const stdm = @import("std").math;
 
 pub const identity = Quat{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 1.0 };
 
@@ -12,26 +10,26 @@ pub const Quat = packed struct {
     w: f32 = 0.0,
 
     pub fn Equals(lhs: *const Quat, rhs: *const Quat) bool {
-        return EqualWithinTolerance(f32, lhs.x, rhs.x, f32_epsilon);
+        return em.EqualWithinTolerance(f32, lhs.x, rhs.x, em.f32_epsilon);
     }
 
     // Roll
     pub fn GetXEuler(self: *const Quat) f32 {
-        return math.atan(2.0 * (self.y * self.z + self.x * self.w), 1 - (2 * (self.x * self.x + self.y * self.y)));
+        return stdm.atan(2.0 * (self.y * self.z + self.x * self.w), 1 - (2 * (self.x * self.x + self.y * self.y)));
     }
 
     // Pitch
     pub fn GetYEuler(self: *const Quat) f32 {
-        return math.asin(2.0 * (self.x * self.z - self.y * self.w));
+        return stdm.asin(2.0 * (self.x * self.z - self.y * self.w));
     }
 
     // Yaw
     pub fn GetZEuler(self: *const Quat) f32 {
-        return math.atan(2.0 * (self.w * self.z + self.x * self.y), 1 - (2 * (self.y * self.y + self.z * self.z)));
+        return stdm.atan(2.0 * (self.w * self.z + self.x * self.y), 1 - (2 * (self.y * self.y + self.z * self.z)));
     }
 
-    pub fn GetEulerAngles(self: *const Quat) Vec3 {
-        return Vec3{ .x = self.GetXEuler(), .y = self.GetYEuler(), .z = self.GetZEuler() };
+    pub fn GetEulerAngles(self: *const Quat) em.Vec3 {
+        return em.Vec3{ .x = self.GetXEuler(), .y = self.GetYEuler(), .z = self.GetZEuler() };
     }
 
     pub fn GetInverse(self: *const Quat) Quat {
@@ -45,7 +43,7 @@ pub const Quat = packed struct {
     }
 
     pub fn Length(self: *const Quat) f32 {
-        return math.sqrt(self.LengthSqrd());
+        return stdm.sqrt(self.LengthSqrd());
     }
 
     pub fn LengthSqrd(self: *const Quat) f32 {

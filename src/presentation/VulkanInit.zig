@@ -119,58 +119,58 @@ pub const SwapchainSupportDetails = struct {
 pub fn VulkanInit(window: *c.SDL_Window) !void {
     const allocator = std.heap.page_allocator;
 
-    std.debug.warn("CreateVKInstance()...\n", .{});
+    std.debug.print("CreateVKInstance()...\n", .{});
     try CreateVKInstance(allocator, window);
 
-    std.debug.warn("CreateSurface()...\n", .{});
+    std.debug.print("CreateSurface()...\n", .{});
     try CreateSurface(window);
 
-    std.debug.warn("PickPhysicalDevice()...\n", .{});
+    std.debug.print("PickPhysicalDevice()...\n", .{});
     try PickPhysicalDevice(allocator, window);
 
-    std.debug.warn("CreateLogicalDevice()...\n", .{});
+    std.debug.print("CreateLogicalDevice()...\n", .{});
     try CreateLogicalDevice(allocator);
 
-    std.debug.warn("CreateSwapchain()...\n", .{});
+    std.debug.print("CreateSwapchain()...\n", .{});
     try CreateSwapchain(allocator);
 
-    std.debug.warn("CreateImageViews()...\n", .{});
+    std.debug.print("CreateImageViews()...\n", .{});
     try CreateImageViews(allocator);
 
-    std.debug.warn("CreateRenderPass()...\n", .{});
+    std.debug.print("CreateRenderPass()...\n", .{});
     try CreateRenderPass();
 
-    std.debug.warn("CreateDescriptorSetLayout()...\n", .{});
+    std.debug.print("CreateDescriptorSetLayout()...\n", .{});
     try CreateDescriptorSetLayout();
 
-    std.debug.warn("CreateGraphicsPipeline()...\n", .{});
+    std.debug.print("CreateGraphicsPipeline()...\n", .{});
     try CreateGraphicsPipeline(allocator, "src/shaders/compiled/basic_mesh-vert.spv", "src/shaders/compiled/basic_mesh-frag.spv");
 
-    std.debug.warn("CreateFrameBuffers()...\n", .{});
+    std.debug.print("CreateFrameBuffers()...\n", .{});
     try CreateFrameBuffers(allocator);
 
-    std.debug.warn("CreateCommandPool()...\n", .{});
+    std.debug.print("CreateCommandPool()...\n", .{});
     try CreateCommandPool();
 
-    std.debug.warn("CreateVertexBuffer()...\n", .{});
+    std.debug.print("CreateVertexBuffer()...\n", .{});
     try CreateVertexBuffer();
 
-    std.debug.warn("CreateIndexBuffer()...\n", .{});
+    std.debug.print("CreateIndexBuffer()...\n", .{});
     try CreateIndexBuffer();
 
-    std.debug.warn("CreateUniformBuffers()...\n", .{});
+    std.debug.print("CreateUniformBuffers()...\n", .{});
     try CreateUniformBuffers(allocator);
 
-    std.debug.warn("CreateDescriptorPool()...\n", .{});
+    std.debug.print("CreateDescriptorPool()...\n", .{});
     try CreateDescriptorPool();
 
-    std.debug.warn("CreateDescriptorSets()...\n", .{});
-    try CreateDescriptorSets(allocator);
+    std.debug.print("CreateDescriptorSets()...\n", .{});
+    try CreateDescriptorSets();
 
-    std.debug.warn("CreateCommandBuffers()...\n", .{});
+    std.debug.print("CreateCommandBuffers()...\n", .{});
     try CreateCommandBuffers(allocator);
 
-    std.debug.warn("CreateFencesAndSemaphores()...\n", .{});
+    std.debug.print("CreateFencesAndSemaphores()...\n", .{});
     try CreateFencesAndSemaphores();
 }
 
@@ -210,7 +210,7 @@ pub fn VulkanCleanup() void {
         for (uniformBuffersMemory) |memory| {
             c.vkFreeMemory(logicalDevice, memory, null);
         }
-        c.VkDestroyDescriptorPool(logicalDevice, descriptorPool, null);
+        c.vkDestroyDescriptorPool(logicalDevice, descriptorPool, null);
     }
     defer {
         var i: usize = 0;
@@ -221,7 +221,7 @@ pub fn VulkanCleanup() void {
     }
 }
 
-fn CheckValidationLayerSupport(allocator: *Allocator) !void {
+fn CheckValidationLayerSupport(allocator: Allocator) !void {
     //TODO handle return values
     var layerCount: u32 = 0;
     _ = c.vkEnumerateInstanceLayerProperties(&layerCount, null);
@@ -233,27 +233,27 @@ fn CheckValidationLayerSupport(allocator: *Allocator) !void {
         var layerFound = false;
 
         for (detectedLayerProperties) |detectedLayer| {
-            if (std.mem.startsWith(u8, std.mem.spanZ(&detectedLayer.layerName), std.mem.span(validationLayer))) {
+            if (std.mem.startsWith(u8, std.mem.span(&detectedLayer.layerName), std.mem.span(validationLayer))) {
                 layerFound = true;
                 break;
             }
         }
 
         if (!layerFound) {
-            std.debug.warn("Unable to find validation layer \"{s}\"\n", .{validationLayer});
-            std.debug.warn("Layers found:\n", .{});
+            std.debug.print("Unable to find validation layer \"{s}\"\n", .{validationLayer});
+            std.debug.print("Layers found:\n", .{});
             for (detectedLayerProperties) |detectedLayer| {
-                var trailingWhitespaceStripped = std.mem.tokenize(std.mem.spanZ(&detectedLayer.layerName), " ");
-                std.debug.warn("\"{s}\"\n", .{trailingWhitespaceStripped.next().?});
+                var trailingWhitespaceStripped = std.mem.tokenize(u8, std.mem.span(&detectedLayer.layerName), " ");
+                std.debug.print("\"{s}\"\n", .{trailingWhitespaceStripped.next().?});
             }
             return VKInitError.MissingValidationLayer;
         }
     }
 }
 
-fn CreateVKInstance(allocator: *Allocator, window: *c.SDL_Window) !void {
+fn CreateVKInstance(allocator: Allocator, window: *c.SDL_Window) !void {
     const appInfo = c.VkApplicationInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pApplicationName = "Eden",
         .applicationVersion = c.VK_MAKE_VERSION(1, 0, 0),
         .pEngineName = "Eden",
@@ -270,7 +270,7 @@ fn CreateVKInstance(allocator: *Allocator, window: *c.SDL_Window) !void {
 
     try CheckValidationLayerSupport(allocator);
     const instanceInfo = c.VkInstanceCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &appInfo,
         .enabledLayerCount = @intCast(u32, validationLayers.len),
         .ppEnabledLayerNames = &validationLayers,
@@ -281,8 +281,8 @@ fn CreateVKInstance(allocator: *Allocator, window: *c.SDL_Window) !void {
     };
 
     const result = c.vkCreateInstance(&instanceInfo, null, &instance);
-    if (result != c.enum_VkResult.VK_SUCCESS) {
-        std.debug.warn("Create VK Instance Failed", .{});
+    if (result != c.VK_SUCCESS) {
+        std.debug.print("Create VK Instance Failed", .{});
         return VKInitError.VKError;
     }
 }
@@ -292,7 +292,7 @@ fn CreateVKInstance(allocator: *Allocator, window: *c.SDL_Window) !void {
 const requiredExtensions = [_][*]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
-fn PhysicalDeviceIsSuitable(allocator: *Allocator, device: c.VkPhysicalDevice, window: *c.SDL_Window, s: c.VkSurfaceKHR) !bool {
+fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, window: *c.SDL_Window, s: c.VkSurfaceKHR) !bool {
     //TODO should take in surface and check if presentation is supported (vkGetPhysicalDeviceSurfaceSupportKHR())
     var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
     c.vkGetPhysicalDeviceProperties(device, &deviceProperties);
@@ -326,10 +326,10 @@ fn PhysicalDeviceIsSuitable(allocator: *Allocator, device: c.VkPhysicalDevice, w
 
     // We don't need any special features really...
     // For now, just test it supports geometry shaders as a sort of test/placeholder?
-    return graphicsSupportExists and deviceFeatures.geometryShader == c.VK_TRUE;
+    return swapchainSupported and graphicsSupportExists and deviceFeatures.geometryShader == c.VK_TRUE;
 }
 
-fn QuerySwapchainSupport(allocator: *Allocator, physDevice: c.VkPhysicalDevice, s: c.VkSurfaceKHR) !SwapchainSupportDetails {
+fn QuerySwapchainSupport(allocator: Allocator, physDevice: c.VkPhysicalDevice, s: c.VkSurfaceKHR) !SwapchainSupportDetails {
     var details: SwapchainSupportDetails = undefined;
 
     //TODO handle return values
@@ -352,7 +352,7 @@ fn QuerySwapchainSupport(allocator: *Allocator, physDevice: c.VkPhysicalDevice, 
     return details;
 }
 
-fn PickPhysicalDevice(allocator: *Allocator, window: *c.SDL_Window) !void {
+fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
     //TODO handle return values
     var deviceCount: u32 = 0;
     _ = c.vkEnumeratePhysicalDevices(instance, &deviceCount, null);
@@ -376,7 +376,7 @@ fn PickPhysicalDevice(allocator: *Allocator, window: *c.SDL_Window) !void {
 
 const basicQueuePriority: f32 = 1.0; //TODO real queue priorities
 
-fn CreateLogicalDevice(allocator: *Allocator) !void {
+fn CreateLogicalDevice(allocator: Allocator) !void {
     //TODO just copying device features that we found on the selected physical device,
     //in the future it should just have features we're actually using
     var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
@@ -420,7 +420,7 @@ fn CreateLogicalDevice(allocator: *Allocator) !void {
     var queueCreateInfos = try allocator.alloc(c.VkDeviceQueueCreateInfo, numUniqueQueues);
     // graphics queue
     queueCreateInfos[0] = c.VkDeviceQueueCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueFamilyIndex = graphicsQueueIndex orelse return VKInitError.LogicDeviceCreationFailed,
         .queueCount = 1,
         .pQueuePriorities = &basicQueuePriority,
@@ -430,7 +430,7 @@ fn CreateLogicalDevice(allocator: *Allocator) !void {
     if (numUniqueQueues == 2) {
         // presentation queue
         queueCreateInfos[1] = c.VkDeviceQueueCreateInfo{
-            .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .queueFamilyIndex = presentQueueIndex orelse return VKInitError.LogicDeviceCreationFailed,
             .queueCount = 1,
             .pQueuePriorities = &basicQueuePriority,
@@ -441,7 +441,7 @@ fn CreateLogicalDevice(allocator: *Allocator) !void {
 
     // we should have verified earlier that requiredExtensions are all supported by this point
     const deviceCreateInfo = c.VkDeviceCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = numUniqueQueues,
         .pQueueCreateInfos = queueCreateInfos.ptr,
         .pEnabledFeatures = &deviceFeatures,
@@ -453,7 +453,7 @@ fn CreateLogicalDevice(allocator: *Allocator) !void {
         .pNext = null,
     };
 
-    if (c.vkCreateDevice(physicalDevice, &deviceCreateInfo, null, &logicalDevice) != c.enum_VkResult.VK_SUCCESS) {
+    if (c.vkCreateDevice(physicalDevice, &deviceCreateInfo, null, &logicalDevice) != c.VK_SUCCESS) {
         return VKInitError.LogicDeviceCreationFailed;
     }
 
@@ -465,7 +465,7 @@ fn CreateLogicalDevice(allocator: *Allocator) !void {
 
 fn CreateSurface(window: *c.SDL_Window) !void {
     const result = c.SDL_Vulkan_CreateSurface(window, instance, &surface);
-    if (@enumToInt(result) != c.SDL_TRUE) {
+    if (result != c.SDL_TRUE) {
         return VKInitError.SurfaceCreationFailed;
     }
 }
@@ -483,7 +483,7 @@ fn ChooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
 
 fn ChooseSwapSurfaceFormat(availableFormats: []c.VkSurfaceFormatKHR) !c.VkSurfaceFormatKHR {
     for (availableFormats) |format| {
-        if (format.format == c.enum_VkFormat.VK_FORMAT_B8G8R8A8_SRGB and format.colorSpace == c.enum_VkColorSpaceKHR.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+        if (format.format == c.VK_FORMAT_B8G8R8A8_SRGB and format.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             return format;
         }
     }
@@ -497,7 +497,7 @@ fn ChooseSwapSurfaceFormat(availableFormats: []c.VkSurfaceFormatKHR) !c.VkSurfac
 
 fn ChooseSwapPresentMode(availablePresentModes: []c.VkPresentModeKHR) !c.VkPresentModeKHR {
     for (availablePresentModes) |presentMode| {
-        if (presentMode == c.enum_VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR) {
+        if (presentMode == c.VK_PRESENT_MODE_MAILBOX_KHR) {
             return presentMode;
         }
     }
@@ -509,7 +509,7 @@ fn ChooseSwapPresentMode(availablePresentModes: []c.VkPresentModeKHR) !c.VkPrese
     return availablePresentModes[0];
 }
 
-fn CreateSwapchain(allocator: *Allocator) !void {
+fn CreateSwapchain(allocator: Allocator) !void {
     const swapchainSupport = try QuerySwapchainSupport(allocator, physicalDevice, surface);
 
     swapchainExtent = ChooseSwapExtent(swapchainSupport.capabilities);
@@ -532,7 +532,7 @@ fn CreateSwapchain(allocator: *Allocator) !void {
     };
     const queuesAreConcurrent = queueFamilyIndices[0] != queueFamilyIndices[1];
     const createInfo = c.VkSwapchainCreateInfoKHR{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface,
         .minImageCount = swapchainImageCount,
         .imageFormat = swapchainFormat.format,
@@ -541,19 +541,19 @@ fn CreateSwapchain(allocator: *Allocator) !void {
         .imageArrayLayers = 1,
         .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 
-        .imageSharingMode = if (queuesAreConcurrent) c.enum_VkSharingMode.VK_SHARING_MODE_CONCURRENT else c.enum_VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+        .imageSharingMode = if (queuesAreConcurrent) c.VK_SHARING_MODE_CONCURRENT else c.VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = if (queuesAreConcurrent) 2 else 0,
         .pQueueFamilyIndices = if (queuesAreConcurrent) &queueFamilyIndices else null,
 
         .preTransform = swapchainSupport.capabilities.currentTransform,
-        .compositeAlpha = c.enum_VkCompositeAlphaFlagBitsKHR.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = presentMode,
         .clipped = c.VK_TRUE,
         .oldSwapchain = null, //TODO check the sanity of this
         .pNext = null,
         .flags = 0,
     };
-    if (c.vkCreateSwapchainKHR(logicalDevice, &createInfo, null, &swapchain) != c.enum_VkResult.VK_SUCCESS) {
+    if (c.vkCreateSwapchainKHR(logicalDevice, &createInfo, null, &swapchain) != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateSwapchain;
     }
 
@@ -563,22 +563,22 @@ fn CreateSwapchain(allocator: *Allocator) !void {
     _ = c.vkGetSwapchainImagesKHR(logicalDevice, swapchain, &swapchainImageCount, &swapchainImages[0]);
 }
 
-fn CreateImageViews(allocator: *Allocator) !void {
+fn CreateImageViews(allocator: Allocator) !void {
     swapchainImageViews = try allocator.alloc(c.VkImageView, swapchainImages.len);
     var i: u32 = 0;
     while (i < swapchainImages.len) : (i += 1) {
         const imageViewInfo = c.VkImageViewCreateInfo{
-            .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             .pNext = null,
             .flags = 0,
             .image = swapchainImages[i],
-            .viewType = c.enum_VkImageViewType.VK_IMAGE_VIEW_TYPE_2D,
+            .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
             .format = swapchainImageFormat,
             .components = c.VkComponentMapping{
-                .r = c.enum_VkComponentSwizzle.VK_COMPONENT_SWIZZLE_IDENTITY,
-                .g = c.enum_VkComponentSwizzle.VK_COMPONENT_SWIZZLE_IDENTITY,
-                .b = c.enum_VkComponentSwizzle.VK_COMPONENT_SWIZZLE_IDENTITY,
-                .a = c.enum_VkComponentSwizzle.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
             },
             .subresourceRange = c.VkImageSubresourceRange{
                 .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
@@ -591,7 +591,7 @@ fn CreateImageViews(allocator: *Allocator) !void {
 
         //TODO errdefer cleanup?
         const result = c.vkCreateImageView(logicalDevice, &imageViewInfo, null, &swapchainImageViews[i]);
-        if (result != c.enum_VkResult.VK_SUCCESS) {
+        if (result != c.VK_SUCCESS) {
             return VKInitError.FailedToCreateImageViews;
         }
     }
@@ -600,22 +600,22 @@ fn CreateImageViews(allocator: *Allocator) !void {
 fn CreateRenderPass() !void {
     const colorAttachment = c.VkAttachmentDescription{
         .format = swapchainImageFormat,
-        .samples = c.enum_VkSampleCountFlagBits.VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = c.enum_VkAttachmentLoadOp.VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = c.enum_VkAttachmentStoreOp.VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = c.enum_VkAttachmentLoadOp.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = c.enum_VkAttachmentStoreOp.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = c.enum_VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = c.enum_VkImageLayout.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         .flags = 0,
     };
     const colorAttachmentRef = c.VkAttachmentReference{
         .attachment = 0,
-        .layout = c.enum_VkImageLayout.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     };
     const subpass = c.VkSubpassDescription{
         .flags = 0,
-        .pipelineBindPoint = c.enum_VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
         .inputAttachmentCount = 0,
         .pInputAttachments = null,
         .colorAttachmentCount = 1,
@@ -626,7 +626,7 @@ fn CreateRenderPass() !void {
         .pPreserveAttachments = null,
     };
     const renderPassInfo = c.VkRenderPassCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .pNext = null,
         .flags = 0,
         .attachmentCount = 1,
@@ -638,17 +638,17 @@ fn CreateRenderPass() !void {
     };
 
     const result = c.vkCreateRenderPass(logicalDevice, &renderPassInfo, null, &renderPass);
-    if (result != c.enum_VkResult.VK_SUCCESS) {
+    if (result != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateRenderPass;
     }
 }
 
 // returns owned slice; caller needs to free
-fn ReadShaderFile(comptime alignment: comptime_int, allocator: *Allocator, relativeShaderPath: []const u8) ![]align(alignment) const u8 {
-    std.debug.warn("Reading shader {s}...\n", .{relativeShaderPath});
+fn ReadShaderFile(comptime alignment: comptime_int, allocator: Allocator, relativeShaderPath: []const u8) ![]align(alignment) const u8 {
+    std.debug.print("Reading shader {s}...\n", .{relativeShaderPath});
 
     var shaderDir = std.fs.cwd();
-    var splitShaderPath = std.mem.tokenize(relativeShaderPath, "\\/");
+    var splitShaderPath = std.mem.tokenize(u8, relativeShaderPath, "\\/");
 
     while (splitShaderPath.next()) |path| {
         shaderDir = shaderDir.openDir(path, .{}) catch |err| {
@@ -670,12 +670,12 @@ fn ReadShaderFile(comptime alignment: comptime_int, allocator: *Allocator, relat
 }
 
 //TODO make sure return value here is valid
-fn CreateShaderModule(allocator: *Allocator, relativeShaderPath: []const u8) !c.VkShaderModule {
+fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.VkShaderModule {
     const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFile(@alignOf(u32), allocator, relativeShaderPath);
     defer allocator.free(shaderCode);
 
     const createInfo = c.VkShaderModuleCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = shaderCode.len,
         .pCode = std.mem.bytesAsSlice(u32, shaderCode).ptr,
         .pNext = null,
@@ -684,7 +684,7 @@ fn CreateShaderModule(allocator: *Allocator, relativeShaderPath: []const u8) !c.
 
     var shaderModule: c.VkShaderModule = undefined;
     const result = c.vkCreateShaderModule(logicalDevice, &createInfo, null, &shaderModule);
-    if (result != c.enum_VkResult.VK_SUCCESS) {
+    if (result != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateShader;
     } else {
         return shaderModule;
@@ -694,36 +694,36 @@ fn CreateShaderModule(allocator: *Allocator, relativeShaderPath: []const u8) !c.
 pub fn CreateDescriptorSetLayout() !void {
     const mvpUniformDescriptor = c.VkDescriptorSetLayoutBinding{
         .binding = 0,
-        .descriptorType = c.enum_VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = 1,
         .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
         .pImmutableSamplers = null,
     };
 
     const layoutInfo = c.VkDescriptorSetLayoutCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount = 1,
         .pBindings = &mvpUniformDescriptor,
         .pNext = null,
         .flags = 0,
     };
 
-    if (c.vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, null, &descriptorLayout) != c.enum_VkResult.VK_SUCCESS) {
+    if (c.vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, null, &descriptorLayout) != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateShader;
     }
 }
 
 //TODO some of these structs should be non-temporary so they can be read/referenced by other code
 // Caller needs to call vkDestroyPipelineLayout
-pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []const u8, fragShaderRelativePath: []const u8) !void {
+pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []const u8, fragShaderRelativePath: []const u8) !void {
     const vertShaderModule = try CreateShaderModule(allocator, vertShaderRelativePath);
     defer c.vkDestroyShaderModule(logicalDevice, vertShaderModule, null);
     const fragShaderModule = try CreateShaderModule(allocator, fragShaderRelativePath);
     defer c.vkDestroyShaderModule(logicalDevice, fragShaderModule, null);
 
     const vertPipelineCreateInfo = c.VkPipelineShaderStageCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .stage = c.enum_VkShaderStageFlagBits.VK_SHADER_STAGE_VERTEX_BIT,
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
         .module = vertShaderModule,
         .pName = "main",
         .pSpecializationInfo = null,
@@ -731,8 +731,8 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
         .flags = 0,
     };
     const fragPipelineCreateInfo = c.VkPipelineShaderStageCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .stage = c.enum_VkShaderStageFlagBits.VK_SHADER_STAGE_FRAGMENT_BIT,
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
         .module = fragShaderModule,
         .pName = "main",
         .pSpecializationInfo = null,
@@ -749,7 +749,7 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
     const attribDescriptions = Mesh.GetAttributeDescriptions();
 
     const vertexInputState = c.VkPipelineVertexInputStateCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount = 1,
         .pVertexBindingDescriptions = &bindingDescription,
         .vertexAttributeDescriptionCount = @intCast(u32, attribDescriptions.len),
@@ -760,8 +760,8 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
 
     //TODO change to indexed triangle list
     const inputAssemblyState = c.VkPipelineInputAssemblyStateCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = c.enum_VkPrimitiveTopology.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .primitiveRestartEnable = c.VK_FALSE,
         .pNext = null,
         .flags = 0,
@@ -780,7 +780,7 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
         .extent = swapchainExtent,
     };
     const viewportState = c.VkPipelineViewportStateCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .viewportCount = 1,
         .pViewports = &viewport,
         .scissorCount = 1,
@@ -789,13 +789,13 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
         .flags = 0,
     };
     const rasterizationState = c.VkPipelineRasterizationStateCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .depthClampEnable = c.VK_FALSE,
         .rasterizerDiscardEnable = c.VK_FALSE,
-        .polygonMode = c.enum_VkPolygonMode.VK_POLYGON_MODE_FILL,
+        .polygonMode = c.VK_POLYGON_MODE_FILL,
         .lineWidth = 1.0,
         .cullMode = c.VK_CULL_MODE_BACK_BIT,
-        .frontFace = c.enum_VkFrontFace.VK_FRONT_FACE_CLOCKWISE,
+        .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
         .depthBiasEnable = c.VK_FALSE,
         .depthBiasConstantFactor = 0.0,
         .depthBiasClamp = 0.0,
@@ -804,9 +804,9 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
         .flags = 0,
     };
     const multisamplingState = c.VkPipelineMultisampleStateCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .sampleShadingEnable = c.VK_FALSE,
-        .rasterizationSamples = c.enum_VkSampleCountFlagBits.VK_SAMPLE_COUNT_1_BIT,
+        .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
         .minSampleShading = 1.0,
         .pSampleMask = null,
         .alphaToCoverageEnable = c.VK_FALSE,
@@ -819,17 +819,17 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
     const colorBlending = c.VkPipelineColorBlendAttachmentState{
         .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
         .blendEnable = c.VK_FALSE,
-        .srcColorBlendFactor = c.enum_VkBlendFactor.VK_BLEND_FACTOR_ONE,
-        .dstColorBlendFactor = c.enum_VkBlendFactor.VK_BLEND_FACTOR_ZERO,
-        .colorBlendOp = c.enum_VkBlendOp.VK_BLEND_OP_ADD,
-        .srcAlphaBlendFactor = c.enum_VkBlendFactor.VK_BLEND_FACTOR_ONE,
-        .dstAlphaBlendFactor = c.enum_VkBlendFactor.VK_BLEND_FACTOR_ZERO,
-        .alphaBlendOp = c.enum_VkBlendOp.VK_BLEND_OP_ADD,
+        .srcColorBlendFactor = c.VK_BLEND_FACTOR_ONE,
+        .dstColorBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+        .colorBlendOp = c.VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = c.VK_BLEND_FACTOR_ONE,
+        .dstAlphaBlendFactor = c.VK_BLEND_FACTOR_ZERO,
+        .alphaBlendOp = c.VK_BLEND_OP_ADD,
     };
     const colorBlendingState = c.VkPipelineColorBlendStateCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .logicOpEnable = c.VK_FALSE,
-        .logicOp = c.enum_VkLogicOp.VK_LOGIC_OP_COPY,
+        .logicOp = c.VK_LOGIC_OP_COPY,
         .attachmentCount = 1,
         .pAttachments = &colorBlending,
         .blendConstants = [_]f32{ 0.0, 0.0, 0.0, 0.0 },
@@ -837,20 +837,8 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
         .flags = 0,
     };
 
-    const dynamicStates = [_]c.VkDynamicState{
-        c.enum_VkDynamicState.VK_DYNAMIC_STATE_VIEWPORT,
-        c.enum_VkDynamicState.VK_DYNAMIC_STATE_LINE_WIDTH,
-    };
-    const dynamicStateCreateInfo = c.VkPipelineDynamicStateCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = 2,
-        .pDynamicStates = &dynamicStates,
-        .pNext = null,
-        .flags = 0,
-    };
-
     const pipelineLayoutState = c.VkPipelineLayoutCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
         .pSetLayouts = &descriptorLayout,
         .pushConstantRangeCount = 0,
@@ -860,12 +848,12 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
     };
 
     const createLayoutResult = c.vkCreatePipelineLayout(logicalDevice, &pipelineLayoutState, null, &pipelineLayout);
-    if (createLayoutResult != c.enum_VkResult.VK_SUCCESS) {
+    if (createLayoutResult != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateLayout;
     }
 
     const pipelineInfo = c.VkGraphicsPipelineCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .stageCount = 2,
         .pStages = &shaderStages,
         .pVertexInputState = &vertexInputState,
@@ -887,19 +875,19 @@ pub fn CreateGraphicsPipeline(allocator: *Allocator, vertShaderRelativePath: []c
     };
 
     const createPipelineResult = c.vkCreateGraphicsPipelines(logicalDevice, null, 1, &pipelineInfo, null, &graphicsPipeline);
-    if (createPipelineResult != c.enum_VkResult.VK_SUCCESS) {
+    if (createPipelineResult != c.VK_SUCCESS) {
         return VKInitError.FailedToCreatePipeline;
     }
 }
 
-fn CreateFrameBuffers(allocator: *Allocator) !void {
+fn CreateFrameBuffers(allocator: Allocator) !void {
     swapchainFrameBuffers = try allocator.alloc(c.VkFramebuffer, swapchainImageViews.len);
     var i: usize = 0;
     while (i < swapchainImageViews.len) : (i += 1) {
         var attachments = [_]c.VkImageView{swapchainImageViews[i]};
 
         const framebufferInfo = c.VkFramebufferCreateInfo{
-            .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
             .renderPass = renderPass,
             .attachmentCount = 1,
             .pAttachments = &attachments,
@@ -910,7 +898,7 @@ fn CreateFrameBuffers(allocator: *Allocator) !void {
             .pNext = null,
         };
 
-        if (c.vkCreateFramebuffer(logicalDevice, &framebufferInfo, null, &swapchainFrameBuffers[i]) != c.enum_VkResult.VK_SUCCESS) {
+        if (c.vkCreateFramebuffer(logicalDevice, &framebufferInfo, null, &swapchainFrameBuffers[i]) != c.VK_SUCCESS) {
             return VKInitError.FailedToCreateFramebuffers;
         }
     }
@@ -918,14 +906,14 @@ fn CreateFrameBuffers(allocator: *Allocator) !void {
 
 fn CreateCommandPool() !void {
     const poolInfo = c.VkCommandPoolCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .queueFamilyIndex = queueFamilyDetails.graphicsQueueIdx.?,
         .flags = 0,
         .pNext = null,
     };
 
     const result = c.vkCreateCommandPool(logicalDevice, &poolInfo, null, &commandPool);
-    if (result != c.enum_VkResult.VK_SUCCESS) {
+    if (result != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateCommandPool;
     }
 }
@@ -954,10 +942,10 @@ fn CreateBuffer(
     bufferMemory: *c.VkDeviceMemory,
 ) !void {
     const bufferInfo = c.VkBufferCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
         .usage = usage,
-        .sharingMode = c.enum_VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+        .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = null,
         .flags = 0,
@@ -965,7 +953,7 @@ fn CreateBuffer(
     };
 
     const result = c.vkCreateBuffer(logicalDevice, &bufferInfo, null, buffer);
-    if (result != c.enum_VkResult.VK_SUCCESS) {
+    if (result != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateVertexBuffer;
     }
     var memRequirements: c.VkMemoryRequirements = undefined;
@@ -973,14 +961,14 @@ fn CreateBuffer(
     _ = c.vkGetBufferMemoryRequirements(logicalDevice, buffer.*, &memRequirements);
 
     const allocInfo = c.VkMemoryAllocateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memRequirements.size,
         .memoryTypeIndex = try FindMemoryType(memRequirements.memoryTypeBits, properties),
         .pNext = null,
     };
 
     const allocResult = c.vkAllocateMemory(logicalDevice, &allocInfo, null, bufferMemory);
-    if (allocResult != c.enum_VkResult.VK_SUCCESS) {
+    if (allocResult != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateVertexBuffer;
     }
 
@@ -989,8 +977,8 @@ fn CreateBuffer(
 
 fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize) void {
     const allocInfo = c.VkCommandBufferAllocateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .level = c.enum_VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandPool = commandPool,
         .commandBufferCount = 1,
         .pNext = null,
@@ -1001,7 +989,7 @@ fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize
     _ = c.vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBuffer);
 
     const beginInfo = c.VkCommandBufferBeginInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         .pInheritanceInfo = null,
         .pNext = null,
@@ -1020,7 +1008,7 @@ fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize
     _ = c.vkEndCommandBuffer(commandBuffer);
 
     const submitInfo = c.VkSubmitInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
         .pCommandBuffers = &commandBuffer,
         .pNext = null,
@@ -1052,7 +1040,7 @@ fn CreateVertexBuffer() !void {
 
         var data: [*]u8 = undefined;
         //TODO handle return result
-        _ = c.vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, @ptrCast([*c]?*c_void, &data));
+        _ = c.vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data));
         @memcpy(data, @ptrCast([*]u8, meshPtr.m_vertexData.items.ptr), bufferSize);
         _ = c.vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
@@ -1090,7 +1078,7 @@ fn CreateIndexBuffer() !void {
 
         var data: [*]u8 = undefined;
         //TODO handle return result
-        _ = c.vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, @ptrCast([*c]?*c_void, &data));
+        _ = c.vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data));
         @memcpy(data, @ptrCast([*]u8, meshPtr.m_indices.items.ptr), bufferSize);
         _ = c.vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
@@ -1118,7 +1106,7 @@ const MeshUBO = packed struct {
 };
 var curCameraMVP: MeshUBO = undefined;
 
-fn CreateUniformBuffers(allocator: *Allocator) !void {
+fn CreateUniformBuffers(allocator: Allocator) !void {
     //TODO remove/rework
     curCamera.m_pos.z = -2.0;
     curCameraMVP = MeshUBO{
@@ -1145,7 +1133,7 @@ fn CreateUniformBuffers(allocator: *Allocator) !void {
 
         var data: [*]u8 = undefined;
         //TODO handle return result
-        _ = c.vkMapMemory(logicalDevice, uniformBuffersMemory[i], 0, bufferSize, 0, @ptrCast([*c]?*c_void, &data));
+        _ = c.vkMapMemory(logicalDevice, uniformBuffersMemory[i], 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data));
         @memcpy(data, @ptrCast([*]u8, &curCameraMVP), bufferSize);
         _ = c.vkUnmapMemory(logicalDevice, uniformBuffersMemory[i]);
     }
@@ -1153,12 +1141,12 @@ fn CreateUniformBuffers(allocator: *Allocator) !void {
 
 fn CreateDescriptorPool() !void {
     const poolSize = c.VkDescriptorPoolSize{
-        .type = c.enum_VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = @intCast(u32, swapchainImages.len),
     };
 
     const poolInfo = c.VkDescriptorPoolCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .poolSizeCount = 1,
         .pPoolSizes = &poolSize,
         .maxSets = @intCast(u32, swapchainImages.len),
@@ -1167,7 +1155,7 @@ fn CreateDescriptorPool() !void {
     };
 
     const result = c.vkCreateDescriptorPool(logicalDevice, &poolInfo, null, &descriptorPool);
-    if (result != c.enum_VkResult.VK_SUCCESS) {
+    if (result != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateDescriptorPool;
     }
 }
@@ -1176,39 +1164,39 @@ fn CreateDescriptorSets() !void {
     //TODO
 }
 
-fn CreateCommandBuffers(allocator: *Allocator) !void {
+fn CreateCommandBuffers(allocator: Allocator) !void {
     commandBuffers = try allocator.alloc(c.VkCommandBuffer, swapchainFrameBuffers.len);
     const allocInfo = c.VkCommandBufferAllocateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = commandPool,
-        .level = c.enum_VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = @intCast(u32, commandBuffers.len),
         .pNext = null,
     };
 
     const result = c.vkAllocateCommandBuffers(logicalDevice, &allocInfo, commandBuffers.ptr);
-    if (result != c.enum_VkResult.VK_SUCCESS) {
+    if (result != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateCommandBuffers;
     }
 
     var i: usize = 0;
     while (i < commandBuffers.len) : (i += 1) {
         var beginInfo = c.VkCommandBufferBeginInfo{
-            .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .pInheritanceInfo = null,
             .flags = 0,
             .pNext = null,
         };
 
         const beginResult = c.vkBeginCommandBuffer(commandBuffers[i], &beginInfo);
-        if (beginResult != c.enum_VkResult.VK_SUCCESS) {
+        if (beginResult != c.VK_SUCCESS) {
             return VKInitError.FailedToCreateCommandBuffers;
         }
         const clearColor = c.VkClearValue{
             .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
         };
         const renderPassInfo = c.VkRenderPassBeginInfo{
-            .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = renderPass,
             .framebuffer = swapchainFrameBuffers[i],
             .renderArea = c.VkRect2D{
@@ -1223,15 +1211,15 @@ fn CreateCommandBuffers(allocator: *Allocator) !void {
             .pNext = null,
         };
 
-        c.vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, c.enum_VkSubpassContents.VK_SUBPASS_CONTENTS_INLINE);
+        c.vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
         {
-            c.vkCmdBindPipeline(commandBuffers[i], c.enum_VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+            c.vkCmdBindPipeline(commandBuffers[i], c.VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
             const vertexBuffers = [_]c.VkBuffer{vertexBuffer};
             const offsets = [_]c.VkDeviceSize{0};
             c.vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, &vertexBuffers, &offsets);
 
-            c.vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, c.enum_VkIndexType.VK_INDEX_TYPE_UINT32);
+            c.vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, c.VK_INDEX_TYPE_UINT32);
 
             if (curMesh) |*meshPtr| {
                 c.vkCmdDrawIndexed(commandBuffers[i], @intCast(u32, meshPtr.m_indices.items.len), 1, 0, 0, 0); //TODO testing mesh
@@ -1242,7 +1230,7 @@ fn CreateCommandBuffers(allocator: *Allocator) !void {
         c.vkCmdEndRenderPass(commandBuffers[i]);
 
         const endCommandBufferResult = c.vkEndCommandBuffer(commandBuffers[i]);
-        if (endCommandBufferResult != c.enum_VkResult.VK_SUCCESS) {
+        if (endCommandBufferResult != c.VK_SUCCESS) {
             return VKInitError.FailedToRecordCommandBuffers;
         }
     }
@@ -1250,13 +1238,13 @@ fn CreateCommandBuffers(allocator: *Allocator) !void {
 
 fn CreateFencesAndSemaphores() !void {
     const semaphoreInfo = c.VkSemaphoreCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .flags = 0,
         .pNext = null,
     };
 
     const fenceInfo = c.VkFenceCreateInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = 0,
         .pNext = null,
     };
@@ -1266,12 +1254,12 @@ fn CreateFencesAndSemaphores() !void {
         const renderSemaphoreResult = c.vkCreateSemaphore(logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]);
         const imageSemaphoreResult = c.vkCreateSemaphore(logicalDevice, &semaphoreInfo, null, &imageAvailableSemaphores[i]);
         const fenceResult = c.vkCreateFence(logicalDevice, &fenceInfo, null, &inFlightFences[i]);
-        if (renderSemaphoreResult != c.enum_VkResult.VK_SUCCESS or
-            imageSemaphoreResult != c.enum_VkResult.VK_SUCCESS)
+        if (renderSemaphoreResult != c.VK_SUCCESS or
+            imageSemaphoreResult != c.VK_SUCCESS)
         {
             return VKInitError.FailedToCreateSemaphores;
         }
-        if (fenceResult != c.enum_VkResult.VK_SUCCESS) {
+        if (fenceResult != c.VK_SUCCESS) {
             return VKInitError.FailedToCreateFences;
         }
     }

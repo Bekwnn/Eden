@@ -1,5 +1,5 @@
 const math = @import("std").math;
-usingnamespace @import("MathUtil.zig");
+const em = @import("MathUtil.zig");
 
 const Quat = @import("Quat.zig").Quat;
 
@@ -66,9 +66,9 @@ pub const Vec3 = packed struct {
     }
 
     pub fn EqualsT(self: *const Vec3, rhs: Vec3, tolerance: f32) bool {
-        return EqualWithinTolerance(f32, self.x, rhs.x, tolerance) and
-            EqualWithinTolerance(f32, self.y, rhs.y, tolerance) and
-            EqualWithinTolerance(f32, self.z, rhs.z, tolerance);
+        return em.EqualWithinTolerance(f32, self.x, rhs.x, tolerance) and
+            em.EqualWithinTolerance(f32, self.y, rhs.y, tolerance) and
+            em.EqualWithinTolerance(f32, self.z, rhs.z, tolerance);
     }
 
     pub fn LengthSqrd(self: *const Vec3) f32 {
@@ -186,15 +186,15 @@ pub const Vec3 = packed struct {
     }
 };
 
-pub fn Vec3_xy0(v2: *const Vec2) Vec3 {
+pub fn Vec3_xy0(v2: *const em.Vec2) Vec3 {
     return Vec3{ v2.x, v2.y, 0.0 };
 }
 
-pub fn Vec3_x0y(v2: *const Vec2) Vec3 {
+pub fn Vec3_x0y(v2: *const em.Vec2) Vec3 {
     return Vec3{ v2.x, 0.0, v2.y };
 }
 
-pub fn Vec3_0xy(v2: *const Vec2) Vec3 {
+pub fn Vec3_0xy(v2: *const em.Vec2) Vec3 {
     return Vec3{ 0.0, v2.x, v2.y };
 }
 

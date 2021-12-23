@@ -1,10 +1,10 @@
-pub usingnamespace @import("std").math;
+const stdm = @import("std").math;
 
 pub fn EqualWithinTolerance(comptime T: type, a: T, b: T, tolerance: T) bool {
     return @fabs(a - b) <= tolerance;
 }
 
-pub const twoPi = tau;
+pub const twoPi = stdm.tau;
 
-pub const degToRad: comptime f32 = pi / 180.0;
-pub const radToDeg: comptime f32 = 1.0 / degToRadians;
+pub const degToRad: f32 = stdm.pi / 180.0;
+pub const radToDeg: f32 = 1.0 / degToRad;

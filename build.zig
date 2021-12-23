@@ -10,7 +10,7 @@ const filePathUtils = @import("src/coreutil/FilePathUtils.zig");
 fn deleteOldDll(dllNameExt: []const u8) !void {
     // delete existing dll if it's there
     const workingDir = fs.cwd();
-    var binDir = try workingDir.openDir("zig-cache", .{});
+    var binDir = try workingDir.openDir("zig-out", .{});
     binDir = try binDir.openDir("bin", .{});
     try binDir.deleteFile(dllNameExt);
 }
@@ -25,33 +25,33 @@ fn openDllSrcDir(comptime dllDir: []const []const u8) !fs.Dir {
 
 fn openDllDstDir() !fs.Dir {
     const workingDir = fs.cwd();
-    var dstPath = try workingDir.openDir("zig-cache", .{});
+    var dstPath = try workingDir.openDir("zig-out", .{});
     dstPath = try dstPath.openDir("bin", .{});
     return dstPath;
 }
 
-// Copy files to zig-cache/bin
+// Copy files to zig-out/bin
 fn copyDllToBin(comptime dllDir: []const []const u8, comptime dllName: []const u8) !void {
     const dllNameExt = dllName ++ ".dll";
 
-    deleteOldDll(dllNameExt) catch |e| { // this is allowed to fail
+    deleteOldDll(dllNameExt) catch { // this is allowed to fail
         // make dir if it doesn't exist
         const workingDir = fs.cwd();
-        workingDir.makeDir("zig-cache") catch |e2| {}; // may already exist
-        var cacheDir = try workingDir.openDir("zig-cache", .{});
-        cacheDir.makeDir("bin") catch |e2| {}; // may already exist
+        workingDir.makeDir("zig-out") catch {}; // may already exist
+        var cacheDir = try workingDir.openDir("zig-out", .{});
+        cacheDir.makeDir("bin") catch {}; // may already exist
     };
 
     const srcPath = openDllSrcDir(dllDir) catch |e| {
-        std.debug.warn("Unable to resolve src path\n", .{});
+        std.debug.print("Unable to resolve src path\n", .{});
         return e;
     };
     const dstPath = openDllDstDir() catch |e| {
-        std.debug.warn("Unable to resolve dst path\n", .{});
+        std.debug.print("Unable to resolve dst path\n", .{});
         return e;
     };
     srcPath.copyFile(dllNameExt, dstPath, dllNameExt, .{}) catch |e| {
-        std.debug.warn("Unable to copy file from {} to {}\n", .{ srcPath, dstPath });
+        std.debug.print("Unable to copy file from {} to {}\n", .{ srcPath, dstPath });
         return e;
     };
 }
@@ -72,7 +72,7 @@ fn cleanCompiledShaders() !void {
 // will compile "shaders/oceanshader.vert" to "shaders/compiled/oceanshader-vert.spv"
 const shaderDirName = "src\\shaders";
 const compiledShaderDirName = "src\\shaders\\compiled";
-//const compiledShaderDirName = "zig-cache\\bin\\shaders"; //TODO: output shaders to build location/bin
+//const compiledShaderDirName = "zig-out\\bin\\shaders"; //TODO: output shaders to build location/bin
 fn buildVKShaders(b: *Builder, exe: anytype, shaderName: []const u8, shaderExt: []const u8) !void {
 
     //TODO iterate over shaders directory and compile
@@ -124,31 +124,32 @@ pub fn build(b: *Builder) !void {
 
     exe.addIncludeDir("src");
 
-    exe.addIncludeDir("dependency/cimgui");
-    exe.addIncludeDir("dependency/cimgui/imgui");
-    exe.addIncludeDir("dependency/cimgui/imgui/examples");
-    const imgui_flags = &[_][]const u8{
-        "-std=c++17",
-        "-Wno-return-type-c-linkage",
-        "-DIMGUI_IMPL_OPENGL_LOADER_GLEW=1",
-        "-fno-exceptions",
-        "-fno-rtti",
-        "-Wno-pragma-pack",
-    };
-    exe.addCSourceFile("dependency/cimgui/cimgui.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui_demo.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
+    //TODO imgui
+    //exe.addIncludeDir("dependency/cimgui");
+    //exe.addIncludeDir("dependency/cimgui/imgui");
+    //exe.addIncludeDir("dependency/cimgui/imgui/examples");
+    //const imgui_flags = &[_][]const u8{
+    //    "-std=c++17",
+    //    "-Wno-return-type-c-linkage",
+    //    "-DIMGUI_IMPL_OPENGL_LOADER_GLEW=1",
+    //    "-fno-exceptions",
+    //    "-fno-rtti",
+    //    "-Wno-pragma-pack",
+    //};
+    //exe.addCSourceFile("dependency/cimgui/cimgui.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/imgui.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_demo.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
 
     exe.addIncludeDir("dependency/SDL2/include");
     exe.addLibPath("dependency/SDL2/lib/x64");
     exe.linkSystemLibrary("SDL2");
     const sdl2DllPath = &[_][]const u8{ "dependency", "SDL2", "lib", "x64" };
     copyDllToBin(sdl2DllPath, "SDL2") catch |e| {
-        std.debug.warn("Could not copy SDL2.dll, {}\n", .{e});
+        std.debug.print("Could not copy SDL2.dll, {}\n", .{e});
         @panic("Build failure.");
     };
 
@@ -161,7 +162,7 @@ pub fn build(b: *Builder) !void {
     }
     const assimpDllPath = if (isDebug) &[_][]const u8{ "dependency", "assimp", "bin", "RelWithDebInfo" } else &[_][]const u8{ "dependency", "assimp", "bin", "Release" };
     copyDllToBin(assimpDllPath, "assimp-vc142-mt") catch |e| {
-        std.debug.warn("Could not copy assimp-vc142-mt.dll, {}\n", .{e});
+        std.debug.print("Could not copy assimp-vc142-mt.dll, {}\n", .{e});
         @panic("Build failure.");
     };
 

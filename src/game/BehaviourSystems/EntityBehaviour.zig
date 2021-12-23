@@ -5,7 +5,7 @@ const Entity = @import("../Entity.zig").Entity;
 const std = @import("std");
 
 fn EntityUpdate(self: *Entity) void {
-    std.debug.warn("Entity Update! ", .{});
+    std.debug.print("Entity {} Update! ", .{self.m_eid});
 }
 
 pub fn EntityUpdateBehaviour() void {
@@ -19,7 +19,7 @@ pub fn EntityUpdateBehaviour() void {
 }
 
 fn EntityFixedUpdate(self: *Entity) void {
-    std.debug.warn("Entity Fixed Update! ", .{});
+    std.debug.print("Entity {} Fixed Update! ", .{self.m_eid});
 }
 
 pub fn EntityFixedUpdateBehaviour() void {
@@ -33,9 +33,9 @@ pub fn EntityFixedUpdateBehaviour() void {
 }
 
 pub fn EntityOnSpawnBehaviour(eid: u32) void {
-    std.debug.warn("Entity {} spawned. ", .{eid});
+    std.debug.print("Entity {} spawned. ", .{eid});
 }
 
 pub fn EntityOnDestroyBehaviour(eid: u32) void {
-    std.debug.warn("Entity {} destroyed. ", .{eid});
+    std.debug.print("Entity {} destroyed. ", .{eid});
 }

@@ -1,5 +1,6 @@
 # Zig ignores
 zig-cache/
+zig-out/
 build/
 build-*/
 

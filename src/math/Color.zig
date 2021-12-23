@@ -16,7 +16,7 @@ fn ColorEquals(comptime colorType: type, lhs: *const colorType, rhs: *const colo
         "v",
     };
 
-     for (fieldNames) |fieldName| {
+    for (fieldNames) |fieldName| {
         if (@hasField(colorType, fieldName)) {
             if (@field(lhs, fieldName) != @field(rhs, fieldName)) return false;
         }

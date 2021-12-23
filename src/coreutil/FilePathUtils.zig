@@ -2,6 +2,7 @@ const std = @import("std");
 const process = std.process;
 const fmt = std.fmt;
 const mem = std.mem;
+const Dir = std.fs.Dir;
 
 pub const FilePathError = error{
     InvalidExtension,
@@ -9,7 +10,7 @@ pub const FilePathError = error{
 
 // Caller must free if successful
 // TODO: Only supports back slashes; process.GetCwdAlloc() returns a backslash'd path
-pub fn CwdToAbsolute(allocator: *mem.Allocator, relativePath: []const u8) ![]u8 {
+pub fn CwdToAbsolute(allocator: mem.Allocator, relativePath: []const u8) ![]u8 {
     const cwdPath = try process.getCwdAlloc(allocator);
     defer allocator.free(cwdPath);
     var absolutePath = try allocator.alloc(u8, cwdPath.len + relativePath.len + 1);
@@ -39,4 +40,4 @@ pub fn GetExtension(relativePath: []const u8) ![]const u8 {
     }
 }
 
-pub fn DirToString(allocator: *mem.Allocator, dir: Dir) ![]const u8 {}
+//pub fn DirToString(allocator: mem.Allocator, dir: Dir) ![]const u8 {}

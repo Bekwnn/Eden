@@ -1,5 +1,5 @@
 // Holds state about how an entity should be acting on inputs
-pub const KeyboardInputTableLen: comptime u8 = @typeInfo(KeyboardInputTable).Enum.fields.len;
+pub const KeyboardInputTableLen: u8 = @typeInfo(KeyboardInputTable).Enum.fields.len;
 pub const KeyboardInputTable = enum {
     SPACE_DOWN,
 };

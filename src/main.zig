@@ -20,7 +20,7 @@ pub fn main() !void {
     const renderer = try sdlInit.CreateRenderer(window);
     defer c.SDL_DestroyRenderer(renderer);
 
-    presentation.Initialize(renderer); //TODO temp, delete should happen later
+    presentation.Initialize(); //TODO temp, delete should happen later
     try vk.VulkanInit(window);
     defer {
         //TODO handle
@@ -39,19 +39,19 @@ pub fn main() !void {
     const testImagePath = "test-assets\\test.png";
     if (imageFileUtil.LoadImage(testImagePath)) |*image| {
         defer image.FreeImage();
-        debug.warn("Successfully loaded test image {s}\n", .{testImagePath});
+        debug.print("Successfully loaded test image {s}\n", .{testImagePath});
         // where you would use the image...
     } else |err| {
-        debug.warn("Failed to load test image {s}, {}\n", .{ testImagePath, err });
+        debug.print("Failed to load test image {s}, {}\n", .{ testImagePath, err });
     }
 
     //presentation.Initialize(renderer);
     gameWorld.Initialize();
 
-    try MainGameLoop(window, renderer);
+    try MainGameLoop();
 }
 
-pub fn MainGameLoop(window: *c.SDL_Window, renderer: *c.SDL_Renderer) !void {
+pub fn MainGameLoop() !void {
     //TODO input handling
     var quit = false;
     while (!quit) {
@@ -69,7 +69,7 @@ pub fn MainGameLoop(window: *c.SDL_Window, renderer: *c.SDL_Renderer) !void {
         gameWorld.WritableInstance().Update(1.0 / 60.0);
         gameWorld.WritableInstance().FixedUpdate();
 
-        try presentation.RenderFrame(renderer, window, gameWorld.Instance());
+        try presentation.RenderFrame();
 
         c.SDL_Delay(17);
     }

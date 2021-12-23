@@ -4,7 +4,7 @@ const Vec3 = vec3.Vec3;
 const Quat = quat.Quat;
 
 pub const Transform = struct {
-    m_scale = vec3.one,
-    m_rotation = quat.identity,
-    m_position = vec3.zero,
+    m_scale: Vec3 = vec3.one,
+    m_rotation: Quat = quat.identity,
+    m_position: Vec3 = vec3.zero,
 };

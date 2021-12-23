@@ -42,7 +42,7 @@ pub const Vec2 = packed struct {
         return self.x == rhs.x and self.y == rhs.y;
     }
 
-    pub fn EqualsT(self: *const Vec2, rhs: *const Vec2, tolerance: comptime f32) bool {
+    pub fn EqualsT(self: *const Vec2, rhs: *const Vec2, tolerance: f32) bool {
         return self.Sub(rhs).LengthSqrd() <= tolerance * tolerance;
     }
 

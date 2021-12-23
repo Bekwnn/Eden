@@ -11,7 +11,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
 
-pub const compTypeEnumCount: comptime u32 = @typeInfo(EComponentType).Enum.fields.len;
+pub const compTypeEnumCount: u32 = @typeInfo(EComponentType).Enum.fields.len;
 pub const EComponentType = enum {
     Health,
     Input,
@@ -53,7 +53,7 @@ fn ComponentDataArray(comptime compType: type) type {
         }
 
         pub fn AddComp(self: *ComponentDataArray(compType), owner: u32) u16 {
-            self.m_compData.append(ComponentDataPair(compType){ .m_ownerEid = owner }) catch |err| {
+            self.m_compData.append(ComponentDataPair(compType){ .m_ownerEid = owner }) catch {
                 @panic("Could not add new component to array.");
             };
             const addedCompId = @intCast(u16, self.m_compData.len - 1);

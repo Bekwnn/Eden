@@ -1,5 +1,5 @@
-usingnamespace @import("../c.zig");
-usingnamespace @import("../math/Math.zig");
+const c = @import("../c.zig");
+const em = @import("../math/Math.zig");
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const debug = @import("std").debug;
@@ -20,12 +20,12 @@ const ImportError = error{
 pub fn ImportMesh(filePath: []const u8) !Mesh {
     _ = try std.fs.openFileAbsolute(filePath, .{}); //sanity check accessing the file before trying to import
 
-    const importedScene: *const aiScene = aiImportFile(filePath.ptr, aiProcess_Triangulate) orelse {
-        const errStr = aiGetErrorString();
-        debug.warn("{s}\n", .{errStr[0..std.mem.len(errStr)]});
+    const importedScene: *const c.aiScene = c.aiImportFile(filePath.ptr, c.aiProcess_Triangulate) orelse {
+        const errStr = c.aiGetErrorString();
+        debug.print("{s}\n", .{errStr[0..std.mem.len(errStr)]});
         return ImportError.AIImportError;
     };
-    defer aiReleaseImport(importedScene);
+    defer c.aiReleaseImport(importedScene);
 
     if (importedScene.mNumMeshes > 1) {
         return ImportError.MultipleMeshes;
@@ -33,7 +33,7 @@ pub fn ImportMesh(filePath: []const u8) !Mesh {
         return ImportError.ZeroMeshes;
     }
 
-    const importMesh: *const aiMesh = importedScene.mMeshes[0];
+    const importMesh: *const c.aiMesh = importedScene.mMeshes[0];
     const fileName = std.fs.path.basename(filePath);
 
     var returnMesh = Mesh{
@@ -49,17 +49,17 @@ pub fn ImportMesh(filePath: []const u8) !Mesh {
         const normal = importMesh.mNormals[i];
         const uvCoord = importMesh.mTextureCoords[0][i];
         returnMesh.m_vertexData.appendAssumeCapacity(.{
-            .m_pos = Vec3{
+            .m_pos = em.Vec3{
                 .x = vert.x,
                 .y = vert.y,
                 .z = vert.z,
             },
-            .m_normal = Vec3{
+            .m_normal = em.Vec3{
                 .x = normal.x,
                 .y = normal.y,
                 .z = normal.z,
             },
-            .m_uvCoord = Vec2{
+            .m_uvCoord = em.Vec2{
                 .x = uvCoord.x,
                 .y = uvCoord.y,
             },
@@ -67,7 +67,7 @@ pub fn ImportMesh(filePath: []const u8) !Mesh {
     }
     for (importMesh.mFaces[0..importMesh.mNumFaces]) |face, j| {
         if (face.mNumIndices != 3) {
-            debug.warn("Bad face count at face {} with count {}\n", .{ j, face.mNumIndices });
+            debug.print("Bad face count at face {} with count {}\n", .{ j, face.mNumIndices });
             return ImportError.BadDataCounts;
         }
         for (face.mIndices[0..face.mNumIndices]) |index| {
@@ -75,7 +75,7 @@ pub fn ImportMesh(filePath: []const u8) !Mesh {
         }
     }
 
-    debug.warn("Imported {s} successfully:\n{} vertexData instances and {} indices\n", .{
+    debug.print("Imported {s} successfully:\n{} vertexData instances and {} indices\n", .{
         fileName,
         returnMesh.m_vertexData.items.len,
         returnMesh.m_indices.items.len,

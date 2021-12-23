@@ -54,12 +54,12 @@ pub const Mat4x4 = packed struct {
     }
 
     pub fn TransposeSelf(self: *Mat4x4) void {
-        swap(&m[0][1], &m[1][0]);
-        swap(&m[0][2], &m[2][0]);
-        swap(&m[0][3], &m[3][0]);
-        swap(&m[1][2], &m[2][1]);
-        swap(&m[1][3], &m[3][1]);
-        swap(&m[2][3], &m[3][2]);
+        swap(&self.m[0][1], &self.m[1][0]);
+        swap(&self.m[0][2], &self.m[2][0]);
+        swap(&self.m[0][3], &self.m[3][0]);
+        swap(&self.m[1][2], &self.m[2][1]);
+        swap(&self.m[1][3], &self.m[3][1]);
+        swap(&self.m[2][3], &self.m[3][2]);
     }
 };
 
@@ -94,12 +94,13 @@ pub fn TranslationMat4x4(translation: Vec3) Mat4x4 {
     return returnMat;
 }
 
+//TODO proper fmt usage
 pub fn DebugLogMat4x4(mat: *const Mat4x4) void {
     for (mat.m) |row| {
-        debug.warn("{{", .{});
+        debug.print("{{", .{});
         for (row) |val| {
-            debug.warn("{}, ", .{val});
+            debug.print("{}, ", .{val});
         }
-        debug.warn("}},\n", .{});
+        debug.print("}},\n", .{});
     }
 }

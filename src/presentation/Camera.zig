@@ -10,8 +10,8 @@ const Vec3 = vec3.Vec3;
 const Mat4x4 = mat4x4.Mat4x4;
 const Quat = quat.Quat;
 
-const defaultAspect: comptime f32 = 16.0 / 9.0; //16:9 //TODO initialize perspective
-const defaultYFoV: comptime f32 = 1.353540; // 110 degrees hfov -> 77.55 vfov at 16:9 -> then convert to rad
+const defaultAspect: f32 = 16.0 / 9.0; //16:9 //TODO initialize perspective
+const defaultYFoV: f32 = 1.353540; // 110 degrees hfov -> 77.55 vfov at 16:9 -> then convert to rad
 
 // 1.0 aspect ratio
 //const defaultAspect: comptime f32 = 1.0; //1:1

@@ -43,15 +43,15 @@ const RenderLoopError = error{
 //    }
 //}
 
-pub fn Initialize(renderer: *c.SDL_Renderer) void {
-    const meshPath = filePathUtils.CwdToAbsolute(allocator, "test-assets\\test.obj") catch |err| {
+pub fn Initialize() void {
+    const meshPath = filePathUtils.CwdToAbsolute(allocator, "test-assets\\test.obj") catch {
         @panic("!");
     };
     defer allocator.free(meshPath);
     if (assimp.ImportMesh(meshPath)) |mesh| {
         vk.curMesh = mesh;
     } else |meshErr| {
-        debug.warn("Error importing mesh: {}\n", .{meshErr});
+        debug.print("Error importing mesh: {}\n", .{meshErr});
     }
 
     //TODO repush data to buffers
@@ -61,11 +61,11 @@ pub fn Initialize(renderer: *c.SDL_Renderer) void {
     const modelMat = mat4x4.identity;
     const viewMat = curCamera.GetViewMatrix();
     const projectionMat = curCamera.GetProjectionMatrix();
-    debug.warn("Model matrix:\n", .{});
+    debug.print("Model matrix:\n", .{});
     mat4x4.DebugLogMat4x4(&modelMat);
-    debug.warn("View matrix:\n", .{});
+    debug.print("View matrix:\n", .{});
     mat4x4.DebugLogMat4x4(&viewMat);
-    debug.warn("Projection matrix:\n", .{});
+    debug.print("Projection matrix:\n", .{});
     mat4x4.DebugLogMat4x4(&projectionMat);
 
     //TODO get imgui working again
@@ -96,7 +96,7 @@ pub fn Initialize(renderer: *c.SDL_Renderer) void {
 //}
 
 var currentFrame: usize = 0;
-pub fn RenderFrame(renderer: *c.SDL_Renderer, screen: *c.SDL_Window, gameWorld: *const GameWorld) !void {
+pub fn RenderFrame() !void {
     curTime += game.deltaTime;
     curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
     curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
@@ -117,7 +117,7 @@ pub fn RenderFrame(renderer: *c.SDL_Renderer, screen: *c.SDL_Window, gameWorld: 
     const waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     const signalSemaphores = [_]c.VkSemaphore{vk.renderFinishedSemaphores[currentFrame]};
     const submitInfo = c.VkSubmitInfo{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &waitSemaphores,
         .pWaitDstStageMask = &waitStages,
@@ -131,13 +131,12 @@ pub fn RenderFrame(renderer: *c.SDL_Renderer, screen: *c.SDL_Window, gameWorld: 
     _ = c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]);
 
     const submitResult = c.vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.inFlightFences[currentFrame]);
-    if (submitResult != c.enum_VkResult.VK_SUCCESS) {
+    if (submitResult != c.VK_SUCCESS) {
         return RenderLoopError.FailedToSubmitDrawCommandBuffer;
     }
 
-    const swapchains = [_]c.VkSwapchainKHR{vk.swapchain};
     const presentInfo = c.VkPresentInfoKHR{
-        .sType = c.enum_VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &signalSemaphores,
         .swapchainCount = 1,

@@ -12,8 +12,8 @@ const allocator = std.heap.direct_allocator;
 
 var instance: GameWorld = undefined;
 
-pub const fixedDeltaTime: comptime f32 = 1.0 / 60.0;
-pub var deltaTime: comptime f32 = 1.0 / 60.0;
+pub const fixedDeltaTime: f32 = 1.0 / 60.0;
+pub var deltaTime: f32 = 1.0 / 60.0;
 
 pub const GameWorld = struct {
     m_entityManager: EntityManager,

@@ -11,26 +11,26 @@ const Camera = @import("Camera.zig").Camera;
 const ArrayList = std.ArrayList;
 
 //TODO still useful post gl->vulkan changes? should maybe be defined in some util file w/ better name
-const noPointerOffset: ?*const c_void = @intToPtr(?*c_void, 0);
+const noPointerOffset: ?*const anyopaque = @intToPtr(?*anyopaque, 0);
 
 const vertexDataDesc = [_]c.VkVertexInputAttributeDescription{
     c.VkVertexInputAttributeDescription{
         .binding = 0,
         .location = 0,
-        .format = c.enum_VkFormat.VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = @byteOffsetOf(VertexData, "m_pos"),
+        .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = @offsetOf(VertexData, "m_pos"),
     },
     c.VkVertexInputAttributeDescription{
         .binding = 0,
         .location = 1,
-        .format = c.enum_VkFormat.VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = @byteOffsetOf(VertexData, "m_normal"),
+        .format = c.VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = @offsetOf(VertexData, "m_normal"),
     },
     c.VkVertexInputAttributeDescription{
         .binding = 0,
         .location = 2,
-        .format = c.enum_VkFormat.VK_FORMAT_R32G32_SFLOAT,
-        .offset = @byteOffsetOf(VertexData, "m_uvCoord"),
+        .format = c.VK_FORMAT_R32G32_SFLOAT,
+        .offset = @offsetOf(VertexData, "m_uvCoord"),
     },
 };
 
@@ -46,13 +46,13 @@ pub const Mesh = struct {
     m_vertexData: ArrayList(VertexData),
     m_indices: ArrayList(u32),
 
-    pub fn Draw(self: *const Mesh, camera: *Camera, shader: u32) void {}
+    //pub fn Draw(self: *const Mesh, camera: *Camera) void {}
 
     pub fn GetBindingDescription() c.VkVertexInputBindingDescription {
         return c.VkVertexInputBindingDescription{
             .binding = 0,
             .stride = @sizeOf(VertexData),
-            .inputRate = c.enum_VkVertexInputRate.VK_VERTEX_INPUT_RATE_VERTEX,
+            .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
         };
     }
 

@@ -2,9 +2,6 @@ const Vec3 = @import("../math/Vec3.zig");
 const debug = @import("std").debug;
 const componentData = @import("ComponentData.zig");
 
-const assert = debug.assert;
-const warn = debug.warn;
-
 // [start, end), 1m entities for now (more...?)
 const k_eidCount: u32 = 1000000;
 const k_eidStart: u32 = 1000;

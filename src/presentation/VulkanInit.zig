@@ -1,8 +1,6 @@
 //TODO WIP initial vulkan implementation referencing andrewrk/zig-vulkan-triangle and github gist YukiSnowy/dc31f47448ac61dd6aedee18b5d53858
 // and shout out to Alexander Overvoorde for his vulkan tutorial book
 
-//TODO check all VK_FALSE/VK_TRUE and check if we can just use false/true instead for simplicity
-
 const c = @import("../c.zig"); // keeping c import explicit for clarity
 
 const std = @import("std");
@@ -47,7 +45,7 @@ pub var swapchainExtent: c.VkExtent2D = undefined;
 pub var swapchainImageViews: []c.VkImageView = undefined;
 
 pub var renderPass: c.VkRenderPass = undefined;
-pub var descriptorLayout: c.VkDescriptorSetLayout = undefined;
+pub var descriptorSetLayout: c.VkDescriptorSetLayout = undefined;
 pub var pipelineLayout: c.VkPipelineLayout = undefined;
 pub var graphicsPipeline: c.VkPipeline = undefined;
 pub var swapchainFrameBuffers: []c.VkFramebuffer = undefined;
@@ -61,6 +59,7 @@ pub var indexBufferMemory: c.VkDeviceMemory = undefined;
 pub var uniformBuffers: []c.VkBuffer = undefined;
 pub var uniformBuffersMemory: []c.VkDeviceMemory = undefined;
 pub var descriptorPool: c.VkDescriptorPool = undefined;
+pub var descriptorSets: []c.VkDescriptorSet = undefined;
 
 pub var imageAvailableSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
 pub var renderFinishedSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
@@ -93,6 +92,7 @@ const VKInitError = error{
     FailedToCreateCommandPool,
     FailedToCreateVertexBuffer,
     FailedToCreateDescriptorPool,
+    FailedToCreateDescriptorSets,
     FailedToCreateCommandBuffers,
     FailedToRecordCommandBuffers,
     FailedToCreateSemaphores,
@@ -165,7 +165,7 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     try CreateDescriptorPool();
 
     std.debug.print("CreateDescriptorSets()...\n", .{});
-    try CreateDescriptorSets();
+    try CreateDescriptorSets(allocator);
 
     std.debug.print("CreateCommandBuffers()...\n", .{});
     try CreateCommandBuffers(allocator);
@@ -186,7 +186,7 @@ pub fn VulkanCleanup() void {
         }
     }
     defer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
-    defer c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorLayout, null);
+    defer c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
     defer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
     defer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
     defer {
@@ -217,6 +217,46 @@ pub fn VulkanCleanup() void {
         while (i < BUFFER_FRAMES) : (i += 1) {
             c.vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], null);
             c.vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], null);
+        }
+    }
+}
+
+pub fn RecreateSwapchain(allocator: Allocator) !void {
+    c.vkWaitDeviceIdle(logicalDevice);
+
+    std.debug.print("CleanupSwapchain()...\n", .{});
+    CleanupSwapchain();
+
+    std.debug.print("Recreating Swapchain...\n", .{});
+    try CreateSwapchain();
+    try CreateImageViews();
+    try CreateRenderPass();
+    try CreateGraphicsPipeline();
+    try CreateFrameBuffers();
+    try CreateUniformBuffers();
+    try CreateDescriptorPool();
+    try CreateDescriptorSets(allocator);
+    try CreateCommandBuffers();
+}
+
+fn CleanupSwapchain() !void {
+    defer c.vkDestroySwapchainKHR(logicalDevice, swapchain, null);
+
+    defer {
+        for (swapchainImageViews) |imageView| {
+            c.vkDestroyImageView(logicalDevice, imageView, null);
+        }
+    }
+
+    defer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
+    defer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
+    defer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
+
+    defer c.vkFreeCommandBuffers(logicalDevice, commandPool, @intCast(u32, commandBuffers.len), commandBuffers.ptr);
+
+    defer {
+        for (swapchainFrameBuffers) |frameBuffer| {
+            c.vkDestroyFramebuffer(logicalDevice, frameBuffer, null);
         }
     }
 }
@@ -708,7 +748,7 @@ pub fn CreateDescriptorSetLayout() !void {
         .flags = 0,
     };
 
-    if (c.vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, null, &descriptorLayout) != c.VK_SUCCESS) {
+    if (c.vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, null, &descriptorSetLayout) != c.VK_SUCCESS) {
         return VKInitError.FailedToCreateShader;
     }
 }
@@ -840,7 +880,7 @@ pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []co
     const pipelineLayoutState = c.VkPipelineLayoutCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
-        .pSetLayouts = &descriptorLayout,
+        .pSetLayouts = &descriptorSetLayout,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = null,
         .pNext = null,
@@ -1160,8 +1200,47 @@ fn CreateDescriptorPool() !void {
     }
 }
 
-fn CreateDescriptorSets() !void {
-    //TODO
+fn CreateDescriptorSets(allocator: Allocator) !void {
+    var layouts = try allocator.alloc(c.VkDescriptorSetLayout, swapchainImages.len);
+    for (layouts) |*layout| {
+        layout.* = descriptorSetLayout;
+    }
+
+    const allocInfo = c.VkDescriptorSetAllocateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptorPool,
+        .descriptorSetCount = @intCast(u32, swapchainImages.len),
+        .pSetLayouts = layouts.ptr,
+        .pNext = null,
+    };
+
+    descriptorSets = try allocator.alloc(c.VkDescriptorSet, swapchainImages.len);
+    const result = c.vkAllocateDescriptorSets(logicalDevice, &allocInfo, descriptorSets.ptr);
+    if (result != c.VK_SUCCESS) {
+        return VKInitError.FailedToCreateDescriptorSets;
+    }
+
+    var i: u32 = 0;
+    while (i < swapchainImages.len) : (i += 1) {
+        const bufferInfo = c.VkDescriptorBufferInfo{
+            .buffer = uniformBuffers[i],
+            .offset = 0,
+            .range = @sizeOf(MeshUBO),
+        };
+        const descriptorWrite = c.VkWriteDescriptorSet{
+            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = descriptorSets[i],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .pBufferInfo = &bufferInfo,
+            .pImageInfo = null,
+            .pTexelBufferView = null,
+            .pNext = null,
+        };
+        c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+    }
 }
 
 fn CreateCommandBuffers(allocator: Allocator) !void {
@@ -1221,8 +1300,11 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
 
             c.vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, c.VK_INDEX_TYPE_UINT32);
 
+            c.vkCmdBindDescriptorSets(commandBuffers[i], c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, null);
+
+            //TODO testing mesh
             if (curMesh) |*meshPtr| {
-                c.vkCmdDrawIndexed(commandBuffers[i], @intCast(u32, meshPtr.m_indices.items.len), 1, 0, 0, 0); //TODO testing mesh
+                c.vkCmdDrawIndexed(commandBuffers[i], @intCast(u32, meshPtr.m_indices.items.len), 1, 0, 0, 0);
             } else {
                 return VKInitError.MissingCurMesh;
             }
@@ -1250,7 +1332,7 @@ fn CreateFencesAndSemaphores() !void {
     };
 
     var i: usize = 0;
-    while (i < BUFFER_FRAMES) {
+    while (i < BUFFER_FRAMES) : (i += 1) {
         const renderSemaphoreResult = c.vkCreateSemaphore(logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]);
         const imageSemaphoreResult = c.vkCreateSemaphore(logicalDevice, &semaphoreInfo, null, &imageAvailableSemaphores[i]);
         const fenceResult = c.vkCreateFence(logicalDevice, &fenceInfo, null, &inFlightFences[i]);

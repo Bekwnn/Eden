@@ -103,6 +103,7 @@ pub fn RenderFrame() !void {
 
     //TODO handle return values
     _ = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
+    _ = c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]);
 
     var imageIndex: u32 = 0;
     _ = c.vkAcquireNextImageKHR(vk.logicalDevice, vk.swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
@@ -128,28 +129,29 @@ pub fn RenderFrame() !void {
         .pNext = null,
     };
 
-    _ = c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]);
-
     const submitResult = c.vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.inFlightFences[currentFrame]);
     if (submitResult != c.VK_SUCCESS) {
         return RenderLoopError.FailedToSubmitDrawCommandBuffer;
     }
 
+    const swapchains = [_]c.VkSwapchainKHR{vk.swapchain};
     const presentInfo = c.VkPresentInfoKHR{
         .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &signalSemaphores,
         .swapchainCount = 1,
-        .pSwapchains = &vk.swapchain,
+        .pSwapchains = &swapchains,
         .pImageIndices = &imageIndex,
         .pResults = null,
         .pNext = null,
     };
 
+    //TODO get imgui working again
+    //ImguiUpdate()
+
     _ = c.vkQueuePresentKHR(vk.presentQueue, &presentInfo);
 
-    currentFrame = (currentFrame + 1) % vk.BUFFER_FRAMES;
+    _ = c.vkQueueWaitIdle(vk.presentQueue);
 
-    //TODO get imgui working again
-    //ImguiUpdate();
+    currentFrame = (currentFrame + 1) % vk.BUFFER_FRAMES;
 }

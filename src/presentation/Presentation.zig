@@ -115,26 +115,31 @@ pub fn RenderFrame() !void {
     curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
     curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
 
-    try vk.CheckVkResult(
-        c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64)),
-        RenderLoopError.FailedToWaitForInFlightFence,
-    );
+    //try vk.CheckVkResult(
+    //    c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64)),
+    //    RenderLoopError.FailedToWaitForInFlightFence,
+    //);
+    const fencesResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
+    if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {
+        return RenderLoopError.FailedToWaitForInFlightFence;
+    }
+
     var imageIndex: u32 = 0;
     const acquireImageResult = c.vkAcquireNextImageKHR(vk.logicalDevice, vk.swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
     if (acquireImageResult == c.VK_ERROR_OUT_OF_DATE_KHR) {
         try vk.RecreateSwapchain(swapchainAllocator);
         return;
-    } else {
+    } else if (acquireImageResult != c.VK_SUCCESS and acquireImageResult != c.VK_SUBOPTIMAL_KHR) {
         return RenderLoopError.FailedToAcquireNextImage;
     }
 
     //TODO UpdateUniformBuffer()
 
     if (vk.imagesInFlight[imageIndex] != null) {
-        try vk.CheckVkResult(
-            c.vkWaitForFences(vk.logicalDevice, 1, &vk.imagesInFlight[currentFrame], c.VK_TRUE, std.math.maxInt(u64)),
-            RenderLoopError.FailedToWaitForImageFence,
-        );
+        const imageFenceResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.imagesInFlight[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
+        if (imageFenceResult != c.VK_SUCCESS and imageFenceResult != c.VK_TIMEOUT) {
+            return RenderLoopError.FailedToWaitForImageFence;
+        }
     }
     vk.imagesInFlight[imageIndex] = vk.inFlightFences[currentFrame];
 

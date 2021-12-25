@@ -69,6 +69,7 @@ pub fn MainGameLoop() !void {
         gameWorld.WritableInstance().Update(1.0 / 60.0);
         gameWorld.WritableInstance().FixedUpdate();
 
+        debug.print("Rendering Frame...\n", .{});
         try presentation.RenderFrame();
 
         c.SDL_Delay(17);

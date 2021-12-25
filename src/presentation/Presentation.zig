@@ -27,6 +27,12 @@ const circleRadius: f32 = 0.5;
 
 const RenderLoopError = error{
     FailedToSubmitDrawCommandBuffer,
+    FailedToQueuePresent,
+    FailedToQueueWaitIdle,
+    FailedToWaitForInFlightFence,
+    FailedToWaitForImageFence,
+    FailedToResetFences,
+    FailedToAcquireNextImage,
 };
 
 //var imguiIO: ?*ImGuiIO = null;
@@ -95,22 +101,40 @@ pub fn Initialize() void {
 //    ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
 //}
 
+//TODO make a generalized function
+var framebufferResized = false;
+//TODO
+//pub fun FramebufferResizeCallback(GLFWwindow* window, u32 width, u32 height) void {
+//    framebufferResized = true;
+//}
 var currentFrame: usize = 0;
 pub fn RenderFrame() !void {
+    const swapchainAllocator = std.heap.page_allocator;
+
     curTime += game.deltaTime;
     curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
     curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
 
-    //TODO handle return values
-    _ = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
-    _ = c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]);
-
+    try vk.CheckVkResult(
+        c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64)),
+        RenderLoopError.FailedToWaitForInFlightFence,
+    );
     var imageIndex: u32 = 0;
-    _ = c.vkAcquireNextImageKHR(vk.logicalDevice, vk.swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
+    const acquireImageResult = c.vkAcquireNextImageKHR(vk.logicalDevice, vk.swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
+    if (acquireImageResult == c.VK_ERROR_OUT_OF_DATE_KHR) {
+        try vk.RecreateSwapchain(swapchainAllocator);
+        return;
+    } else {
+        return RenderLoopError.FailedToAcquireNextImage;
+    }
 
-    //Vulkan render loop
+    //TODO UpdateUniformBuffer()
+
     if (vk.imagesInFlight[imageIndex] != null) {
-        _ = c.vkWaitForFences(vk.logicalDevice, 1, &vk.imagesInFlight[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
+        try vk.CheckVkResult(
+            c.vkWaitForFences(vk.logicalDevice, 1, &vk.imagesInFlight[currentFrame], c.VK_TRUE, std.math.maxInt(u64)),
+            RenderLoopError.FailedToWaitForImageFence,
+        );
     }
     vk.imagesInFlight[imageIndex] = vk.inFlightFences[currentFrame];
 
@@ -129,10 +153,15 @@ pub fn RenderFrame() !void {
         .pNext = null,
     };
 
-    const submitResult = c.vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.inFlightFences[currentFrame]);
-    if (submitResult != c.VK_SUCCESS) {
-        return RenderLoopError.FailedToSubmitDrawCommandBuffer;
-    }
+    try vk.CheckVkResult(
+        c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]),
+        RenderLoopError.FailedToResetFences,
+    );
+
+    try vk.CheckVkResult(
+        c.vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.inFlightFences[currentFrame]),
+        RenderLoopError.FailedToSubmitDrawCommandBuffer,
+    );
 
     const swapchains = [_]c.VkSwapchainKHR{vk.swapchain};
     const presentInfo = c.VkPresentInfoKHR{
@@ -149,9 +178,14 @@ pub fn RenderFrame() !void {
     //TODO get imgui working again
     //ImguiUpdate()
 
-    _ = c.vkQueuePresentKHR(vk.presentQueue, &presentInfo);
+    const queuePresentResult = c.vkQueuePresentKHR(vk.presentQueue, &presentInfo);
 
-    _ = c.vkQueueWaitIdle(vk.presentQueue);
+    if (queuePresentResult == c.VK_ERROR_OUT_OF_DATE_KHR or queuePresentResult == c.VK_SUBOPTIMAL_KHR or framebufferResized) {
+        framebufferResized = false;
+        try vk.RecreateSwapchain(swapchainAllocator);
+    } else if (queuePresentResult != c.VK_SUCCESS) {
+        return RenderLoopError.FailedToQueuePresent;
+    }
 
     currentFrame = (currentFrame + 1) % vk.BUFFER_FRAMES;
 }

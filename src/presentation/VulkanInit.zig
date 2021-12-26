@@ -185,24 +185,24 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
 pub fn VulkanCleanup() void {
     // defer so execution happens in unwinding order--easier to match init order above
     defer c.vkDestroyInstance(instance, null);
+
+    defer c.vkDestroySurfaceKHR(instance, surface, null);
+
+    // if (enableValidationLayers) destroy debug utils messanger
+
     defer c.vkDestroyDevice(logicalDevice, null);
-    //TODO defer DestroySurface(); may involve SDL or may just be vkDestroySurfaceKHR()
-    defer c.vkDestroySwapchainKHR(logicalDevice, swapchain, null);
-    defer {
-        for (swapchainImageViews) |imageView| {
-            c.vkDestroyImageView(logicalDevice, imageView, null);
-        }
-    }
-    defer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
-    defer c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
-    defer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
-    defer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
-    defer {
-        for (swapchainFrameBuffers) |*frameBuffer| {
-            c.vkDestroyFramebuffer(logicalDevice, frameBuffer.*, null);
-        }
-    }
+
     defer c.vkDestroyCommandPool(logicalDevice, commandPool, null);
+
+    defer {
+        var i: usize = 0;
+        while (i < BUFFER_FRAMES) : (i += 1) {
+            c.vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], null);
+            c.vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], null);
+            c.vkDestroyFence(logicalDevice, inFlightFences[i], null);
+        }
+    }
+
     defer {
         c.vkDestroyBuffer(logicalDevice, vertexBuffer, null);
         c.vkFreeMemory(logicalDevice, vertexBufferMemory, null);
@@ -211,22 +211,10 @@ pub fn VulkanCleanup() void {
         c.vkDestroyBuffer(logicalDevice, indexBuffer, null);
         c.vkFreeMemory(logicalDevice, indexBufferMemory, null);
     }
-    defer {
-        for (uniformBuffers) |uniformBuffer| {
-            c.vkDestroyBuffer(logicalDevice, uniformBuffer, null);
-        }
-        for (uniformBuffersMemory) |memory| {
-            c.vkFreeMemory(logicalDevice, memory, null);
-        }
-        c.vkDestroyDescriptorPool(logicalDevice, descriptorPool, null);
-    }
-    defer {
-        var i: usize = 0;
-        while (i < BUFFER_FRAMES) : (i += 1) {
-            c.vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], null);
-            c.vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], null);
-        }
-    }
+
+    defer c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
+
+    defer CleanupSwapchain();
 }
 
 pub fn RecreateSwapchain(allocator: Allocator) !void {
@@ -235,10 +223,9 @@ pub fn RecreateSwapchain(allocator: Allocator) !void {
         VKInitError.VKError,
     );
 
-    std.debug.print("CleanupSwapchain()...\n", .{});
+    std.debug.print("Recreating Swapchain...\n", .{});
     CleanupSwapchain();
 
-    std.debug.print("Recreating Swapchain...\n", .{});
     try CreateSwapchain(allocator);
     try CreateImageViews(allocator);
     try CreateRenderPass();
@@ -251,6 +238,16 @@ pub fn RecreateSwapchain(allocator: Allocator) !void {
 }
 
 fn CleanupSwapchain() void {
+    defer {
+        for (uniformBuffers) |uniformBuffer| {
+            c.vkDestroyBuffer(logicalDevice, uniformBuffer, null);
+        }
+        for (uniformBuffersMemory) |memory| {
+            c.vkFreeMemory(logicalDevice, memory, null);
+        }
+        c.vkDestroyDescriptorPool(logicalDevice, descriptorPool, null);
+    }
+
     defer c.vkDestroySwapchainKHR(logicalDevice, swapchain, null);
 
     defer {
@@ -844,7 +841,6 @@ pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []co
         .flags = 0,
     };
 
-    //TODO change to indexed triangle list
     const inputAssemblyState = c.VkPipelineInputAssemblyStateCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .topology = c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,

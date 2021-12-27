@@ -12,6 +12,8 @@ const Camera = @import("Camera.zig").Camera;
 const mat4x4 = @import("../math/Mat4x4.zig");
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 
+const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
+
 //TODO: these should be optional or something, but it seems like a PITA to unwrap them every time after intialization.
 //maybe they should all be contained in one giant struct which is optional based on whether vulkan has initialized yet?
 //A getter function which checks and returns the unwrapped optional and reports an error function if it doesn't exist
@@ -61,6 +63,11 @@ pub var uniformBuffersMemory: []c.VkDeviceMemory = undefined;
 pub var descriptorPool: c.VkDescriptorPool = undefined;
 pub var descriptorSets: []c.VkDescriptorSet = undefined;
 
+pub var textureImage: c.VkImage = undefined;
+pub var textureImageMemory: c.VkDeviceMemory = undefined;
+pub var textureImageView: c.VkImageView = undefined;
+pub var textureSampler: c.VkSampler = undefined;
+
 pub var imageAvailableSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
 pub var renderFinishedSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
 pub var inFlightFences: [BUFFER_FRAMES]c.VkFence = undefined;
@@ -74,7 +81,7 @@ const INITIAL_WIDTH = 1280;
 const INITIAL_HEIGHT = 720;
 
 const VKInitError = error{
-    VKError, // anything with this error should be replaced with a more specific error
+    VKError, //TODO anything with this error should be replaced with a more specific error
     SurfaceCreationFailed,
     NoSupportedDevice, // no device supporting vulkan detected
     NoSuitableDevice, // device with vulkan support detected; does not satisfy properties
@@ -82,7 +89,7 @@ const VKInitError = error{
     NoAvailablePresentMode,
     NoAvailableSwapSurfaceFormat,
     FailedToCreateSwapchain,
-    FailedToCreateImageViews,
+    FailedToCreateImageView,
     FailedToCreateRenderPass,
     FailedToCreateShader,
     FailedToCreateLayout,
@@ -104,7 +111,7 @@ const VKInitError = error{
 };
 
 //TODO could have a better home
-pub fn CheckVkResult(result: c.VkResult, errorToReturn: anyerror) !void {
+pub fn CheckVkSuccess(result: c.VkResult, errorToReturn: anyerror) !void {
     if (result != c.VK_SUCCESS) {
         return errorToReturn;
     }
@@ -121,9 +128,6 @@ pub const SwapchainSupportDetails = struct {
     presentModes: []c.VkPresentModeKHR,
 };
 
-//TODO cleanup steps need to be consistent/correct in the event one of these throws an error
-//TODO:
-// Move out CreateFrameBuffers, CreateUniformBuffers, and CreateCommandBuffers to separate function which will be updated each frame
 pub fn VulkanInit(window: *c.SDL_Window) !void {
     const allocator = std.heap.page_allocator;
 
@@ -142,8 +146,8 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     std.debug.print("CreateSwapchain()...\n", .{});
     try CreateSwapchain(allocator);
 
-    std.debug.print("CreateImageViews()...\n", .{});
-    try CreateImageViews(allocator);
+    std.debug.print("CreateSwapchainImageViews()...\n", .{});
+    try CreateSwapchainImageViews(allocator);
 
     std.debug.print("CreateRenderPass()...\n", .{});
     try CreateRenderPass();
@@ -159,6 +163,16 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
 
     std.debug.print("CreateCommandPool()...\n", .{});
     try CreateCommandPool();
+
+    const testImagePath = "test-assets\\test.png";
+    std.debug.print("CreateTextureImage()...\n", .{});
+    try CreateTextureImage(testImagePath);
+
+    std.debug.print("CreateTextureImageView()...\n", .{});
+    try CreateTextureImageView();
+
+    std.debug.print("CreateTextureSampler()...\n", .{});
+    try CreateTextureSampler();
 
     std.debug.print("CreateVertexBuffer()...\n", .{});
     try CreateVertexBuffer();
@@ -214,11 +228,19 @@ pub fn VulkanCleanup() void {
 
     defer c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
 
+    defer {
+        c.vkDestroyImage(logicalDevice, textureImage, null);
+        c.vkFreeMemory(logicalDevice, textureImageMemory, null);
+    }
+
+    defer c.vkDestroyImageView(logicalDevice, textureImageView, null);
+    defer c.vkDestroySampler(logicalDevice, textureSampler, null);
+
     defer CleanupSwapchain();
 }
 
 pub fn RecreateSwapchain(allocator: Allocator) !void {
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkDeviceWaitIdle(logicalDevice),
         VKInitError.VKError,
     );
@@ -227,7 +249,7 @@ pub fn RecreateSwapchain(allocator: Allocator) !void {
     CleanupSwapchain();
 
     try CreateSwapchain(allocator);
-    try CreateImageViews(allocator);
+    try CreateSwapchainImageViews(allocator);
     try CreateRenderPass();
     try CreateGraphicsPipeline(allocator, "src/shaders/compiled/basic_mesh-vert.spv", "src/shaders/compiled/basic_mesh-frag.spv");
     try CreateFrameBuffers(allocator);
@@ -271,13 +293,13 @@ fn CleanupSwapchain() void {
 
 fn CheckValidationLayerSupport(allocator: Allocator) !void {
     var layerCount: u32 = 0;
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkEnumerateInstanceLayerProperties(&layerCount, null),
         VKInitError.FailedToCheckInstanceLayerProperties,
     );
 
     var detectedLayerProperties = try allocator.alloc(c.VkLayerProperties, layerCount);
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkEnumerateInstanceLayerProperties(&layerCount, detectedLayerProperties.ptr),
         VKInitError.FailedToCheckInstanceLayerProperties,
     );
@@ -333,7 +355,7 @@ fn CreateVKInstance(allocator: Allocator, window: *c.SDL_Window) !void {
         .flags = 0,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateInstance(&instanceInfo, null, &instance),
         VKInitError.VKError,
     );
@@ -378,25 +400,25 @@ fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, wi
 
     // We don't need any special features really...
     // For now, just test it supports geometry shaders as a sort of test/placeholder?
-    return swapchainSupported and graphicsSupportExists and deviceFeatures.geometryShader == c.VK_TRUE;
+    return swapchainSupported and graphicsSupportExists and deviceFeatures.geometryShader == c.VK_TRUE and deviceFeatures.samplerAnisotropy == c.VK_TRUE;
 }
 
 fn QuerySwapchainSupport(allocator: Allocator, physDevice: c.VkPhysicalDevice, s: c.VkSurfaceKHR) !SwapchainSupportDetails {
     var details: SwapchainSupportDetails = undefined;
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDevice, s, &details.capabilities),
         VKInitError.VKError,
     );
 
     {
         var formatCount: u32 = 0;
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, null),
             VKInitError.VKError,
         );
         details.formats = try allocator.alloc(c.VkSurfaceFormatKHR, formatCount);
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, details.formats.ptr),
             VKInitError.VKError,
         );
@@ -404,12 +426,12 @@ fn QuerySwapchainSupport(allocator: Allocator, physDevice: c.VkPhysicalDevice, s
 
     {
         var presentModeCount: u32 = 0;
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, null),
             VKInitError.VKError,
         );
         details.presentModes = try allocator.alloc(c.VkPresentModeKHR, presentModeCount);
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, details.presentModes.ptr),
             VKInitError.VKError,
         );
@@ -419,9 +441,8 @@ fn QuerySwapchainSupport(allocator: Allocator, physDevice: c.VkPhysicalDevice, s
 }
 
 fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
-    //TODO handle return values
     var deviceCount: u32 = 0;
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkEnumeratePhysicalDevices(instance, &deviceCount, null),
         VKInitError.VKError,
     );
@@ -430,7 +451,7 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
     }
 
     var deviceList = try allocator.alloc(c.VkPhysicalDevice, deviceCount);
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkEnumeratePhysicalDevices(instance, &deviceCount, deviceList.ptr),
         VKInitError.VKError,
     );
@@ -470,8 +491,7 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         }
         if (presentQueueIndex == null) {
             var presentationSupport: c.VkBool32 = c.VK_FALSE;
-            //TODO handle return values
-            try CheckVkResult(
+            try CheckVkSuccess(
                 c.vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentationSupport),
                 VKInitError.VKError,
             );
@@ -528,7 +548,7 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         .pNext = null,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateDevice(physicalDevice, &deviceCreateInfo, null, &logicalDevice),
         VKInitError.LogicDeviceCreationFailed,
     );
@@ -629,53 +649,27 @@ fn CreateSwapchain(allocator: Allocator) !void {
         .pNext = null,
         .flags = 0,
     };
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateSwapchainKHR(logicalDevice, &createInfo, null, &swapchain),
         VKInitError.FailedToCreateSwapchain,
     );
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkGetSwapchainImagesKHR(logicalDevice, swapchain, &swapchainImageCount, null),
         VKInitError.VKError,
     );
     swapchainImages = try allocator.alloc(c.VkImage, swapchainImageCount);
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkGetSwapchainImagesKHR(logicalDevice, swapchain, &swapchainImageCount, &swapchainImages[0]),
         VKInitError.VKError,
     );
 }
 
-fn CreateImageViews(allocator: Allocator) !void {
+fn CreateSwapchainImageViews(allocator: Allocator) !void {
     swapchainImageViews = try allocator.alloc(c.VkImageView, swapchainImages.len);
     var i: u32 = 0;
     while (i < swapchainImages.len) : (i += 1) {
-        const imageViewInfo = c.VkImageViewCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .pNext = null,
-            .flags = 0,
-            .image = swapchainImages[i],
-            .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
-            .format = swapchainImageFormat,
-            .components = c.VkComponentMapping{
-                .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-                .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
-            },
-            .subresourceRange = c.VkImageSubresourceRange{
-                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-        };
-
-        //TODO errdefer cleanup?
-        try CheckVkResult(
-            c.vkCreateImageView(logicalDevice, &imageViewInfo, null, &swapchainImageViews[i]),
-            VKInitError.FailedToCreateImageViews,
-        );
+        swapchainImageViews[i] = try CreateImageView(swapchainImages[i], swapchainImageFormat);
     }
 }
 
@@ -719,7 +713,7 @@ fn CreateRenderPass() !void {
         .pDependencies = null,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateRenderPass(logicalDevice, &renderPassInfo, null, &renderPass),
         VKInitError.FailedToCreateRenderPass,
     );
@@ -742,7 +736,6 @@ fn ReadShaderFile(comptime alignment: comptime_int, allocator: Allocator, relati
 
                 var shaderCode: []align(alignment) u8 = try allocator.allocAdvanced(u8, alignment, try shaderFile.getEndPos(), .exact);
 
-                //TODO handle return values
                 _ = try shaderFile.read(shaderCode);
                 return shaderCode;
             }
@@ -751,7 +744,6 @@ fn ReadShaderFile(comptime alignment: comptime_int, allocator: Allocator, relati
     return VKInitError.FailedToReadShaderFile;
 }
 
-//TODO make sure return value here is valid
 fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.VkShaderModule {
     const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFile(@alignOf(u32), allocator, relativeShaderPath);
     defer allocator.free(shaderCode);
@@ -765,7 +757,7 @@ fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.V
     };
 
     var shaderModule: c.VkShaderModule = undefined;
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateShaderModule(logicalDevice, &createInfo, null, &shaderModule),
         VKInitError.FailedToCreateShader,
     );
@@ -781,23 +773,29 @@ pub fn CreateDescriptorSetLayout() !void {
         .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
         .pImmutableSamplers = null,
     };
+    const samplerLayoutBinding = c.VkDescriptorSetLayoutBinding{
+        .binding = 1,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1,
+        .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        .pImmutableSamplers = null,
+    };
 
+    const bindings = [_]c.VkDescriptorSetLayoutBinding{ mvpUniformDescriptor, samplerLayoutBinding };
     const layoutInfo = c.VkDescriptorSetLayoutCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &mvpUniformDescriptor,
+        .bindingCount = bindings.len,
+        .pBindings = &bindings,
         .pNext = null,
         .flags = 0,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, null, &descriptorSetLayout),
         VKInitError.FailedToCreateShader,
     );
 }
 
-//TODO some of these structs should be non-temporary so they can be read/referenced by other code
-// Caller needs to call vkDestroyPipelineLayout
 pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []const u8, fragShaderRelativePath: []const u8) !void {
     const vertShaderModule = try CreateShaderModule(allocator, vertShaderRelativePath);
     defer c.vkDestroyShaderModule(logicalDevice, vertShaderModule, null);
@@ -877,7 +875,7 @@ pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []co
         .polygonMode = c.VK_POLYGON_MODE_FILL,
         .lineWidth = 1.0,
         .cullMode = c.VK_CULL_MODE_BACK_BIT,
-        .frontFace = c.VK_FRONT_FACE_CLOCKWISE,
+        .frontFace = c.VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .depthBiasEnable = c.VK_FALSE,
         .depthBiasConstantFactor = 0.0,
         .depthBiasClamp = 0.0,
@@ -929,14 +927,14 @@ pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []co
         .flags = 0,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreatePipelineLayout(logicalDevice, &pipelineLayoutState, null, &pipelineLayout),
         VKInitError.FailedToCreateLayout,
     );
 
     const pipelineInfo = c.VkGraphicsPipelineCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .stageCount = 2,
+        .stageCount = shaderStages.len,
         .pStages = &shaderStages,
         .pVertexInputState = &vertexInputState,
         .pInputAssemblyState = &inputAssemblyState,
@@ -955,7 +953,7 @@ pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []co
         .pNext = null,
         .flags = 0,
     };
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateGraphicsPipelines(logicalDevice, null, 1, &pipelineInfo, null, &graphicsPipeline),
         VKInitError.FailedToCreatePipeline,
     );
@@ -979,7 +977,7 @@ fn CreateFrameBuffers(allocator: Allocator) !void {
             .pNext = null,
         };
 
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkCreateFramebuffer(logicalDevice, &framebufferInfo, null, &swapchainFrameBuffers[i]),
             VKInitError.FailedToCreateFramebuffers,
         );
@@ -994,9 +992,172 @@ fn CreateCommandPool() !void {
         .pNext = null,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateCommandPool(logicalDevice, &poolInfo, null, &commandPool),
         VKInitError.FailedToCreateCommandPool,
+    );
+}
+
+fn CreateImage(
+    width: u32,
+    height: u32,
+    format: c.VkFormat,
+    tiling: c.VkImageTiling,
+    usage: c.VkImageUsageFlags,
+    properties: c.VkMemoryPropertyFlags,
+    image: *c.VkImage,
+    imageMemory: *c.VkDeviceMemory,
+) !void {
+    const imageInfo = c.VkImageCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = c.VK_IMAGE_TYPE_2D,
+        .extent = c.VkExtent3D{
+            .width = width,
+            .height = height,
+            .depth = 1,
+        },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .format = format,
+        .tiling = tiling,
+        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .usage = usage,
+        .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
+        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = null,
+        .pNext = null,
+        .flags = 0,
+    };
+    try CheckVkSuccess(
+        c.vkCreateImage(logicalDevice, &imageInfo, null, image),
+        VKInitError.VKError,
+    );
+
+    var memRequirements: c.VkMemoryRequirements = undefined;
+    c.vkGetImageMemoryRequirements(logicalDevice, image.*, &memRequirements);
+    const allocInfo = c.VkMemoryAllocateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex = try FindMemoryType(memRequirements.memoryTypeBits, properties),
+        .pNext = null,
+    };
+    try CheckVkSuccess(
+        c.vkAllocateMemory(logicalDevice, &allocInfo, null, imageMemory),
+        VKInitError.VKError,
+    );
+
+    try CheckVkSuccess(
+        c.vkBindImageMemory(logicalDevice, textureImage, textureImageMemory, 0),
+        VKInitError.VKError,
+    );
+}
+
+fn CreateTextureImage(imagePath: []const u8) !void {
+    std.debug.print("Loading Image {s} ...\n", .{imagePath});
+    var image = try imageFileUtil.LoadImage(imagePath);
+    defer image.FreeImage();
+
+    const imageSize: c.VkDeviceSize = image.m_width * image.m_height * 4;
+    var stagingBuffer: c.VkBuffer = undefined;
+    var stagingBufferMemory: c.VkDeviceMemory = undefined;
+    try CreateBuffer(
+        imageSize,
+        c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &stagingBuffer,
+        &stagingBufferMemory,
+    );
+    defer c.vkDestroyBuffer(logicalDevice, stagingBuffer, null);
+    defer c.vkFreeMemory(logicalDevice, stagingBufferMemory, null);
+
+    var data: [*]u8 = undefined;
+    try CheckVkSuccess(
+        c.vkMapMemory(logicalDevice, stagingBufferMemory, 0, imageSize, 0, @ptrCast([*c]?*anyopaque, &data)),
+        VKInitError.VKError,
+    );
+
+    @memcpy(data, image.m_imageData, imageSize);
+    c.vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+    try CreateImage(
+        image.m_width,
+        image.m_height,
+        c.VK_FORMAT_R8G8B8A8_SRGB,
+        c.VK_IMAGE_TILING_OPTIMAL,
+        c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &textureImage,
+        &textureImageMemory,
+    );
+
+    //TODO pass c.VK_FORMAT_R8G8B8A8_SRGB to TransitionImageLayout?
+    try TransitionImageLayout(textureImage, c.VK_IMAGE_LAYOUT_UNDEFINED, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    try CopyBufferToImage(stagingBuffer, textureImage, image.m_width, image.m_height);
+    try TransitionImageLayout(textureImage, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
+
+fn CreateImageView(image: c.VkImage, format: c.VkFormat) !c.VkImageView {
+    const imageViewInfo = c.VkImageViewCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image,
+        .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+        .components = c.VkComponentMapping{
+            .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+        },
+        .subresourceRange = c.VkImageSubresourceRange{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .flags = 0,
+        .pNext = null,
+    };
+
+    var imageView: c.VkImageView = undefined;
+    try CheckVkSuccess(
+        c.vkCreateImageView(logicalDevice, &imageViewInfo, null, &imageView),
+        VKInitError.FailedToCreateImageView,
+    );
+
+    return imageView;
+}
+
+fn CreateTextureImageView() !void {
+    textureImageView = try CreateImageView(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB);
+}
+
+fn CreateTextureSampler() !void {
+    const samplerInfo = c.VkSamplerCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = c.VK_FILTER_LINEAR,
+        .minFilter = c.VK_FILTER_LINEAR,
+        .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .anisotropyEnable = c.VK_TRUE,
+        .maxAnisotropy = 16,
+        .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = c.VK_FALSE,
+        .compareEnable = c.VK_FALSE,
+        .compareOp = c.VK_COMPARE_OP_ALWAYS,
+        .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .mipLodBias = 0.0,
+        .minLod = 0.0,
+        .maxLod = 0.0,
+        .flags = 0,
+        .pNext = null,
+    };
+
+    try CheckVkSuccess(
+        c.vkCreateSampler(logicalDevice, &samplerInfo, null, &textureSampler),
+        VKInitError.VKError,
     );
 }
 
@@ -1033,7 +1194,7 @@ fn CreateBuffer(
         .pNext = null,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateBuffer(logicalDevice, &bufferInfo, null, buffer),
         VKInitError.FailedToCreateVertexBuffer,
     );
@@ -1047,17 +1208,17 @@ fn CreateBuffer(
         .pNext = null,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkAllocateMemory(logicalDevice, &allocInfo, null, bufferMemory),
         VKInitError.FailedToCreateVertexBuffer,
     );
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkBindBufferMemory(logicalDevice, buffer.*, bufferMemory.*, 0),
         VKInitError.VKError,
     );
 }
 
-fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize) !void {
+fn BeginSingleTimeCommands() !c.VkCommandBuffer {
     const allocInfo = c.VkCommandBufferAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
@@ -1067,8 +1228,7 @@ fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize
     };
 
     var commandBuffer: c.VkCommandBuffer = undefined;
-    //TODO handle return result
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBuffer),
         VKInitError.VKError,
     );
@@ -1080,20 +1240,16 @@ fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize
         .pNext = null,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkBeginCommandBuffer(commandBuffer, &beginInfo),
         VKInitError.VKError,
     );
 
-    const copyRegion = c.VkBufferCopy{
-        .srcOffset = 0,
-        .dstOffset = 0,
-        .size = size,
-    };
+    return commandBuffer;
+}
 
-    c.vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-    try CheckVkResult(
+fn EndSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void {
+    try CheckVkSuccess(
         c.vkEndCommandBuffer(commandBuffer),
         VKInitError.VKError,
     );
@@ -1110,14 +1266,120 @@ fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize
         .pSignalSemaphores = null,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkQueueSubmit(graphicsQueue, 1, &submitInfo, null),
         VKInitError.VKError,
     );
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkQueueWaitIdle(graphicsQueue),
         VKInitError.VKError,
     );
+}
+
+fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize) !void {
+    var commandBuffer = try BeginSingleTimeCommands();
+
+    const copyRegion = c.VkBufferCopy{
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size = size,
+    };
+    c.vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+    try EndSingleTimeCommands(commandBuffer);
+}
+
+fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u32) !void {
+    var commandBuffer = try BeginSingleTimeCommands();
+
+    const region = c.VkBufferImageCopy{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = c.VkImageSubresourceLayers{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = c.VkOffset3D{
+            .x = 0,
+            .y = 0,
+            .z = 0,
+        },
+        .imageExtent = c.VkExtent3D{
+            .width = width,
+            .height = height,
+            .depth = 1,
+        },
+    };
+    c.vkCmdCopyBufferToImage(
+        commandBuffer,
+        buffer,
+        image,
+        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &region,
+    );
+
+    try EndSingleTimeCommands(commandBuffer);
+}
+
+//TODO pass VkFormat?
+fn TransitionImageLayout(image: c.VkImage, oldLayout: c.VkImageLayout, newLayout: c.VkImageLayout) !void {
+    var commandBuffer = try BeginSingleTimeCommands();
+
+    var barrier = c.VkImageMemoryBarrier{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = c.VkImageSubresourceRange{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .srcAccessMask = 0, //assigned later
+        .dstAccessMask = 0, //assigned later
+        .pNext = null,
+    };
+
+    var srcStage: c.VkPipelineStageFlags = undefined;
+    var dstStage: c.VkPipelineStageFlags = undefined;
+    if (oldLayout == c.VK_IMAGE_LAYOUT_UNDEFINED and newLayout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        srcStage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dstStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (oldLayout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL and newLayout == c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+        srcStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dstStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else {
+        return VKInitError.VKError;
+    }
+
+    c.vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStage,
+        dstStage,
+        0,
+        0,
+        null,
+        0,
+        null,
+        1,
+        &barrier,
+    );
+
+    try EndSingleTimeCommands(commandBuffer);
 }
 
 fn CreateVertexBuffer() !void {
@@ -1134,10 +1396,11 @@ fn CreateVertexBuffer() !void {
             &stagingBuffer,
             &stagingBufferMemory,
         );
+        defer c.vkDestroyBuffer(logicalDevice, stagingBuffer, null);
+        defer c.vkFreeMemory(logicalDevice, stagingBufferMemory, null);
 
         var data: [*]u8 = undefined;
-        //TODO handle return result
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data)),
             VKInitError.VKError,
         );
@@ -1153,9 +1416,6 @@ fn CreateVertexBuffer() !void {
         );
 
         try CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-        c.vkDestroyBuffer(logicalDevice, stagingBuffer, null);
-        c.vkFreeMemory(logicalDevice, stagingBufferMemory, null);
     } else {
         return VKInitError.MissingCurMesh;
     }
@@ -1175,10 +1435,11 @@ fn CreateIndexBuffer() !void {
             &stagingBuffer,
             &stagingBufferMemory,
         );
+        defer c.vkDestroyBuffer(logicalDevice, stagingBuffer, null);
+        defer c.vkFreeMemory(logicalDevice, stagingBufferMemory, null);
 
         var data: [*]u8 = undefined;
-        //TODO handle return result
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkMapMemory(logicalDevice, stagingBufferMemory, 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data)),
             VKInitError.VKError,
         );
@@ -1194,9 +1455,6 @@ fn CreateIndexBuffer() !void {
         );
 
         try CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
-
-        c.vkDestroyBuffer(logicalDevice, stagingBuffer, null);
-        c.vkFreeMemory(logicalDevice, stagingBufferMemory, null);
     } else {
         return VKInitError.MissingCurMesh;
     }
@@ -1207,17 +1465,8 @@ const MeshUBO = packed struct {
     view: Mat4x4,
     projection: Mat4x4,
 };
-var curCameraMVP: MeshUBO = undefined;
 
 fn CreateUniformBuffers(allocator: Allocator) !void {
-    //TODO remove/rework
-    curCamera.m_pos.z = -2.0;
-    curCameraMVP = MeshUBO{
-        .model = mat4x4.identity,
-        .view = curCamera.GetViewMatrix(),
-        .projection = curCamera.GetProjectionMatrix(),
-    };
-
     var bufferSize: c.VkDeviceSize = @sizeOf(MeshUBO);
 
     uniformBuffers = try allocator.alloc(c.VkBuffer, swapchainImages.len);
@@ -1233,34 +1482,48 @@ fn CreateUniformBuffers(allocator: Allocator) !void {
             &uniformBuffers[i],
             &uniformBuffersMemory[i],
         );
-
-        var data: [*]u8 = undefined;
-        //TODO handle return result
-        try CheckVkResult(
-            c.vkMapMemory(logicalDevice, uniformBuffersMemory[i], 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data)),
-            VKInitError.VKError,
-        );
-        @memcpy(data, @ptrCast([*]u8, &curCameraMVP), bufferSize);
-        c.vkUnmapMemory(logicalDevice, uniformBuffersMemory[i]);
     }
 }
 
+pub fn UpdateUniformBuffer(camera: *Camera, currentFrame: usize) !void {
+    var bufferSize: c.VkDeviceSize = @sizeOf(MeshUBO);
+
+    var cameraMVP = MeshUBO{
+        .model = mat4x4.identity,
+        .view = camera.GetViewMatrix(),
+        .projection = camera.GetProjectionMatrix(),
+    };
+
+    var data: [*]u8 = undefined;
+    try CheckVkSuccess(
+        c.vkMapMemory(logicalDevice, uniformBuffersMemory[currentFrame], 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data)),
+        VKInitError.VKError,
+    );
+    @memcpy(data, @ptrCast([*]u8, &cameraMVP), bufferSize);
+    c.vkUnmapMemory(logicalDevice, uniformBuffersMemory[currentFrame]);
+}
+
 fn CreateDescriptorPool() !void {
-    const poolSize = c.VkDescriptorPoolSize{
+    const uboSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = @intCast(u32, swapchainImages.len),
     };
+    const imageSamplerSize = c.VkDescriptorPoolSize{
+        .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = @intCast(u32, swapchainImages.len),
+    };
 
+    const poolSizes = [_]c.VkDescriptorPoolSize{ uboSize, imageSamplerSize };
     const poolInfo = c.VkDescriptorPoolCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .poolSizeCount = 1,
-        .pPoolSizes = &poolSize,
+        .poolSizeCount = poolSizes.len,
+        .pPoolSizes = &poolSizes,
         .maxSets = @intCast(u32, swapchainImages.len),
         .flags = 0,
         .pNext = null,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkCreateDescriptorPool(logicalDevice, &poolInfo, null, &descriptorPool),
         VKInitError.FailedToCreateDescriptorPool,
     );
@@ -1281,7 +1544,7 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
     };
 
     descriptorSets = try allocator.alloc(c.VkDescriptorSet, swapchainImages.len);
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkAllocateDescriptorSets(logicalDevice, &allocInfo, descriptorSets.ptr),
         VKInitError.FailedToCreateDescriptorSets,
     );
@@ -1293,7 +1556,12 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
             .offset = 0,
             .range = @sizeOf(MeshUBO),
         };
-        const descriptorWrite = c.VkWriteDescriptorSet{
+        const imageInfo = c.VkDescriptorImageInfo{
+            .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .imageView = textureImageView,
+            .sampler = textureSampler,
+        };
+        const uboDescriptorWrite = c.VkWriteDescriptorSet{
             .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet = descriptorSets[i],
             .dstBinding = 0,
@@ -1305,7 +1573,20 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
             .pTexelBufferView = null,
             .pNext = null,
         };
-        c.vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, null);
+        const textureSamplerDescriptorWrite = c.VkWriteDescriptorSet{
+            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = descriptorSets[i],
+            .dstBinding = 1,
+            .dstArrayElement = 0,
+            .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .pBufferInfo = null,
+            .pImageInfo = &imageInfo,
+            .pTexelBufferView = null,
+            .pNext = null,
+        };
+        const descriptorWrites = [_]c.VkWriteDescriptorSet{ uboDescriptorWrite, textureSamplerDescriptorWrite };
+        c.vkUpdateDescriptorSets(logicalDevice, descriptorWrites.len, &descriptorWrites, 0, null);
     }
 }
 
@@ -1319,7 +1600,7 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         .pNext = null,
     };
 
-    try CheckVkResult(
+    try CheckVkSuccess(
         c.vkAllocateCommandBuffers(logicalDevice, &allocInfo, commandBuffers.ptr),
         VKInitError.FailedToCreateCommandBuffers,
     );
@@ -1333,7 +1614,7 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
             .pNext = null,
         };
 
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkBeginCommandBuffer(commandBuffers[i], &beginInfo),
             VKInitError.FailedToCreateCommandBuffers,
         );
@@ -1377,7 +1658,7 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         }
         c.vkCmdEndRenderPass(commandBuffers[i]);
 
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkEndCommandBuffer(commandBuffers[i]),
             VKInitError.FailedToRecordCommandBuffers,
         );
@@ -1399,15 +1680,15 @@ fn CreateFencesAndSemaphores() !void {
 
     var i: usize = 0;
     while (i < BUFFER_FRAMES) : (i += 1) {
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkCreateSemaphore(logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]),
             VKInitError.FailedToCreateSemaphores,
         );
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkCreateSemaphore(logicalDevice, &semaphoreInfo, null, &imageAvailableSemaphores[i]),
             VKInitError.FailedToCreateSemaphores,
         );
-        try CheckVkResult(
+        try CheckVkSuccess(
             c.vkCreateFence(logicalDevice, &fenceInfo, null, &inFlightFences[i]),
             VKInitError.FailedToCreateFences,
         );

@@ -20,7 +20,6 @@ const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 const c = @import("../c.zig");
 
 var curShader: ?u32 = null;
-var curCamera = Camera{};
 var curTime: f32 = 0.0;
 const circleTime: f32 = 1.0 / (2.0 * std.math.pi);
 const circleRadius: f32 = 0.5;
@@ -60,20 +59,6 @@ pub fn Initialize() void {
         debug.print("Error importing mesh: {}\n", .{meshErr});
     }
 
-    //TODO repush data to buffers
-
-    curCamera.m_pos.z -= 2.0;
-
-    const modelMat = mat4x4.identity;
-    const viewMat = curCamera.GetViewMatrix();
-    const projectionMat = curCamera.GetProjectionMatrix();
-    debug.print("Model matrix:\n", .{});
-    mat4x4.DebugLogMat4x4(&modelMat);
-    debug.print("View matrix:\n", .{});
-    mat4x4.DebugLogMat4x4(&viewMat);
-    debug.print("Projection matrix:\n", .{});
-    mat4x4.DebugLogMat4x4(&projectionMat);
-
     //TODO get imgui working again
     //ImguiInit();
 }
@@ -111,14 +96,11 @@ var currentFrame: usize = 0;
 pub fn RenderFrame() !void {
     const swapchainAllocator = std.heap.page_allocator;
 
+    vk.curCamera.m_pos.z = -2.0;
     curTime += game.deltaTime;
-    curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
-    curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
+    vk.curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
+    vk.curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
 
-    //try vk.CheckVkResult(
-    //    c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64)),
-    //    RenderLoopError.FailedToWaitForInFlightFence,
-    //);
     const fencesResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
     if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {
         return RenderLoopError.FailedToWaitForInFlightFence;
@@ -133,7 +115,7 @@ pub fn RenderFrame() !void {
         return RenderLoopError.FailedToAcquireNextImage;
     }
 
-    //TODO UpdateUniformBuffer()
+    try vk.UpdateUniformBuffer(&vk.curCamera, currentFrame);
 
     if (vk.imagesInFlight[imageIndex] != null) {
         const imageFenceResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.imagesInFlight[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
@@ -158,12 +140,12 @@ pub fn RenderFrame() !void {
         .pNext = null,
     };
 
-    try vk.CheckVkResult(
+    try vk.CheckVkSuccess(
         c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]),
         RenderLoopError.FailedToResetFences,
     );
 
-    try vk.CheckVkResult(
+    try vk.CheckVkSuccess(
         c.vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.inFlightFences[currentFrame]),
         RenderLoopError.FailedToSubmitDrawCommandBuffer,
     );

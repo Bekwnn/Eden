@@ -13,8 +13,8 @@ pub const ImageFileError = error{
 
 pub const ImageFile = struct {
     m_imageData: [*]u8,
-    m_width: u16,
-    m_height: u16,
+    m_width: u32,
+    m_height: u32,
     m_channels: u16,
     m_freed: bool,
 
@@ -31,7 +31,7 @@ pub fn LoadImage(cwdRelativePath: []const u8) !ImageFile {
     var channels: c_int = undefined;
     const imagePath = try filePathUtils.CwdToAbsolute(allocator, cwdRelativePath);
     defer allocator.free(imagePath);
-    var image = c.stbi_load(imagePath.ptr, &width, &height, &channels, 0);
+    var image = c.stbi_load(imagePath.ptr, &width, &height, &channels, c.STBI_rgb_alpha); //TODO adjustable format
     if (image == null) {
         // could log stbi_failure_reason...
         return ImageFileError.STBI_LoadFailed;

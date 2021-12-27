@@ -1,5 +1,5 @@
 Eden is a minimal game framework built on SDL2 and written in Zig.
-Currently compiling with windows zig-0.8.0-dev.1463+f950489ed.
+Currently compiling with windows zig-0.9.0.
 
 The framework is currently pre-v0.1, but feel free to use it as a reference.
 

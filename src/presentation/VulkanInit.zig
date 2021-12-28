@@ -67,6 +67,7 @@ pub var depthImage: c.VkImage = undefined;
 pub var depthImageMemory: c.VkDeviceMemory = undefined;
 pub var depthImageView: c.VkImageView = undefined;
 
+pub var textureMipLevels: u32 = undefined;
 pub var textureImage: c.VkImage = undefined;
 pub var textureImageMemory: c.VkDeviceMemory = undefined;
 pub var textureImageView: c.VkImageView = undefined;
@@ -239,9 +240,14 @@ pub fn VulkanCleanup() void {
         c.vkDestroyImage(logicalDevice, textureImage, null);
         c.vkFreeMemory(logicalDevice, textureImageMemory, null);
     }
-
     defer c.vkDestroyImageView(logicalDevice, textureImageView, null);
     defer c.vkDestroySampler(logicalDevice, textureSampler, null);
+
+    defer {
+        c.vkDestroyImage(logicalDevice, depthImage, null);
+        c.vkFreeMemory(logicalDevice, depthImageMemory, null);
+    }
+    defer c.vkDestroyImageView(logicalDevice, depthImageView, null);
 
     defer CleanupSwapchain();
 }
@@ -676,7 +682,7 @@ fn CreateSwapchainImageViews(allocator: Allocator) !void {
     swapchainImageViews = try allocator.alloc(c.VkImageView, swapchainImages.len);
     var i: u32 = 0;
     while (i < swapchainImages.len) : (i += 1) {
-        swapchainImageViews[i] = try CreateImageView(swapchainImages[i], swapchainImageFormat, c.VK_IMAGE_ASPECT_COLOR_BIT);
+        swapchainImageViews[i] = try CreateImageView(swapchainImages[i], swapchainImageFormat, c.VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 }
 
@@ -828,7 +834,11 @@ pub fn CreateDescriptorSetLayout() !void {
     );
 }
 
-pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []const u8, fragShaderRelativePath: []const u8) !void {
+pub fn CreateGraphicsPipeline(
+    allocator: Allocator,
+    vertShaderRelativePath: []const u8,
+    fragShaderRelativePath: []const u8,
+) !void {
     const vertShaderModule = try CreateShaderModule(allocator, vertShaderRelativePath);
     defer c.vkDestroyShaderModule(logicalDevice, vertShaderModule, null);
     const fragShaderModule = try CreateShaderModule(allocator, fragShaderRelativePath);
@@ -958,7 +968,10 @@ pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []co
     };
 
     const colorBlending = c.VkPipelineColorBlendAttachmentState{
-        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
+        .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT |
+            c.VK_COLOR_COMPONENT_G_BIT |
+            c.VK_COLOR_COMPONENT_B_BIT |
+            c.VK_COLOR_COMPONENT_A_BIT,
         .blendEnable = c.VK_FALSE,
         .srcColorBlendFactor = c.VK_BLEND_FACTOR_ONE,
         .dstColorBlendFactor = c.VK_BLEND_FACTOR_ZERO,
@@ -1062,13 +1075,21 @@ fn CreateCommandPool() !void {
     );
 }
 
-fn FindSupportedFormat(candidates: []const c.VkFormat, tiling: c.VkImageTiling, features: c.VkFormatFeatureFlags) !c.VkFormat {
+fn FindSupportedFormat(
+    candidates: []const c.VkFormat,
+    tiling: c.VkImageTiling,
+    features: c.VkFormatFeatureFlags,
+) !c.VkFormat {
     for (candidates) |format| {
         var properties: c.VkFormatProperties = undefined;
         c.vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &properties);
-        if (tiling == c.VK_IMAGE_TILING_LINEAR and (properties.linearTilingFeatures & features) == features) {
+        if (tiling == c.VK_IMAGE_TILING_LINEAR and
+            (properties.linearTilingFeatures & features) == features)
+        {
             return format;
-        } else if (tiling == c.VK_IMAGE_TILING_OPTIMAL and (properties.optimalTilingFeatures & features) == features) {
+        } else if (tiling == c.VK_IMAGE_TILING_OPTIMAL and
+            (properties.optimalTilingFeatures & features) == features)
+        {
             return format;
         }
     }
@@ -1092,6 +1113,7 @@ fn CreateDepthResources() !void {
     try CreateImage(
         swapchainExtent.width,
         swapchainExtent.height,
+        1,
         depthFormat,
         c.VK_IMAGE_TILING_OPTIMAL,
         c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -1099,13 +1121,20 @@ fn CreateDepthResources() !void {
         &depthImage,
         &depthImageMemory,
     );
-    depthImageView = try CreateImageView(depthImage, depthFormat, c.VK_IMAGE_ASPECT_DEPTH_BIT);
-    try TransitionImageLayout(depthImage, depthFormat, c.VK_IMAGE_LAYOUT_UNDEFINED, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    depthImageView = try CreateImageView(depthImage, depthFormat, c.VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+    try TransitionImageLayout(
+        depthImage,
+        depthFormat,
+        c.VK_IMAGE_LAYOUT_UNDEFINED,
+        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+    );
 }
 
 fn CreateImage(
     width: u32,
     height: u32,
+    mipLevels: u32,
     format: c.VkFormat,
     tiling: c.VkImageTiling,
     usage: c.VkImageUsageFlags,
@@ -1121,7 +1150,7 @@ fn CreateImage(
             .height = height,
             .depth = 1,
         },
-        .mipLevels = 1,
+        .mipLevels = mipLevels,
         .arrayLayers = 1,
         .format = format,
         .tiling = tiling,
@@ -1158,10 +1187,160 @@ fn CreateImage(
     );
 }
 
+//TODO generating mip maps should be done offline; possibly as a build step/function?
+// shader compilation and other rendering-baking could join it
+fn GenerateMipmaps(image: c.VkImage, imageFormat: c.VkFormat, imageWidth: u32, imageHeight: u32, mipLevels: u32) !void {
+    var formatProperties: c.VkFormatProperties = undefined;
+    c.vkGetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, &formatProperties);
+    if (formatProperties.optimalTilingFeatures & c.VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT == 0) {
+        return VKInitError.VKError;
+    }
+
+    var commandBuffer = try BeginSingleTimeCommands();
+
+    var barrier = c.VkImageMemoryBarrier{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .image = image,
+        .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .subresourceRange = c.VkImageSubresourceRange{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .srcAccessMask = 0,
+        .dstAccessMask = 0,
+        .pNext = null,
+    };
+
+    var mipWidth = imageWidth;
+    var mipHeight = imageHeight;
+    var i: u32 = 1;
+    while (i < mipLevels) : (i += 1) {
+        barrier.subresourceRange.baseMipLevel = i - 1;
+        barrier.oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT;
+
+        c.vkCmdPipelineBarrier(
+            commandBuffer,
+            c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+            c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,
+            0,
+            null,
+            0,
+            null,
+            1,
+            &barrier,
+        );
+
+        const blit = c.VkImageBlit{
+            .srcOffsets = [2]c.VkOffset3D{
+                c.VkOffset3D{
+                    .x = 0,
+                    .y = 0,
+                    .z = 0,
+                },
+                c.VkOffset3D{
+                    .x = @intCast(i32, mipWidth),
+                    .y = @intCast(i32, mipHeight),
+                    .z = 1,
+                },
+            },
+            .dstOffsets = [2]c.VkOffset3D{
+                c.VkOffset3D{
+                    .x = 0,
+                    .y = 0,
+                    .z = 0,
+                },
+                c.VkOffset3D{
+                    .x = @intCast(i32, if (mipWidth > 1) mipWidth / 2 else 1),
+                    .y = @intCast(i32, if (mipHeight > 1) mipHeight / 2 else 1),
+                    .z = 1,
+                },
+            },
+            .srcSubresource = c.VkImageSubresourceLayers{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = i - 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .dstSubresource = c.VkImageSubresourceLayers{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = i,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        };
+
+        c.vkCmdBlitImage(
+            commandBuffer,
+            image,
+            c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            image,
+            c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &blit,
+            c.VK_FILTER_LINEAR,
+        );
+
+        barrier.oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+        c.vkCmdPipelineBarrier(
+            commandBuffer,
+            c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+            c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0,
+            0,
+            null,
+            0,
+            null,
+            1,
+            &barrier,
+        );
+
+        if (mipWidth > 1) mipWidth /= 2;
+        if (mipHeight > 1) mipHeight /= 2;
+    }
+
+    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+    barrier.oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
+
+    c.vkCmdPipelineBarrier(
+        commandBuffer,
+        c.VK_PIPELINE_STAGE_TRANSFER_BIT,
+        c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0,
+        0,
+        null,
+        0,
+        null,
+        1,
+        &barrier,
+    );
+
+    try EndSingleTimeCommands(commandBuffer);
+}
+
 fn CreateTextureImage(imagePath: []const u8) !void {
     std.debug.print("Loading Image {s} ...\n", .{imagePath});
     var image = try imageFileUtil.LoadImage(imagePath);
     defer image.FreeImage();
+
+    //TODO decouple from this variable in particular
+    textureMipLevels = @floatToInt(u32, std.math.floor(std.math.log2(@intToFloat(f32, std.math.max(image.m_width, image.m_height))))) + 1;
 
     const imageSize: c.VkDeviceSize = image.m_width * image.m_height * 4;
     var stagingBuffer: c.VkBuffer = undefined;
@@ -1188,21 +1367,33 @@ fn CreateTextureImage(imagePath: []const u8) !void {
     try CreateImage(
         image.m_width,
         image.m_height,
+        textureMipLevels,
         c.VK_FORMAT_R8G8B8A8_SRGB,
         c.VK_IMAGE_TILING_OPTIMAL,
-        c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_SAMPLED_BIT,
         c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         &textureImage,
         &textureImageMemory,
     );
 
-    //TODO pass c.VK_FORMAT_R8G8B8A8_SRGB to TransitionImageLayout?
-    try TransitionImageLayout(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB, c.VK_IMAGE_LAYOUT_UNDEFINED, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    try TransitionImageLayout(
+        textureImage,
+        c.VK_FORMAT_R8G8B8A8_SRGB,
+        c.VK_IMAGE_LAYOUT_UNDEFINED,
+        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        textureMipLevels,
+    );
     try CopyBufferToImage(stagingBuffer, textureImage, image.m_width, image.m_height);
-    try TransitionImageLayout(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    //transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
+    try GenerateMipmaps(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB, image.m_width, image.m_height, textureMipLevels);
 }
 
-fn CreateImageView(image: c.VkImage, format: c.VkFormat, aspectFlags: c.VkImageAspectFlags) !c.VkImageView {
+fn CreateImageView(
+    image: c.VkImage,
+    format: c.VkFormat,
+    aspectFlags: c.VkImageAspectFlags,
+    mipLevels: u32,
+) !c.VkImageView {
     const imageViewInfo = c.VkImageViewCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = image,
@@ -1217,7 +1408,7 @@ fn CreateImageView(image: c.VkImage, format: c.VkFormat, aspectFlags: c.VkImageA
         .subresourceRange = c.VkImageSubresourceRange{
             .aspectMask = aspectFlags,
             .baseMipLevel = 0,
-            .levelCount = 1,
+            .levelCount = mipLevels,
             .baseArrayLayer = 0,
             .layerCount = 1,
         },
@@ -1235,7 +1426,12 @@ fn CreateImageView(image: c.VkImage, format: c.VkFormat, aspectFlags: c.VkImageA
 }
 
 fn CreateTextureImageView() !void {
-    textureImageView = try CreateImageView(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB, c.VK_IMAGE_ASPECT_COLOR_BIT);
+    textureImageView = try CreateImageView(
+        textureImage,
+        c.VK_FORMAT_R8G8B8A8_SRGB,
+        c.VK_IMAGE_ASPECT_COLOR_BIT,
+        textureMipLevels,
+    );
 }
 
 fn CreateTextureSampler() !void {
@@ -1255,7 +1451,7 @@ fn CreateTextureSampler() !void {
         .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
         .mipLodBias = 0.0,
         .minLod = 0.0,
-        .maxLod = 0.0,
+        .maxLod = @intToFloat(f32, textureMipLevels),
         .flags = 0,
         .pNext = null,
     };
@@ -1430,7 +1626,13 @@ fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u
     try EndSingleTimeCommands(commandBuffer);
 }
 
-fn TransitionImageLayout(image: c.VkImage, format: c.VkFormat, oldLayout: c.VkImageLayout, newLayout: c.VkImageLayout) !void {
+fn TransitionImageLayout(
+    image: c.VkImage,
+    format: c.VkFormat,
+    oldLayout: c.VkImageLayout,
+    newLayout: c.VkImageLayout,
+    mipLevels: u32,
+) !void {
     var commandBuffer = try BeginSingleTimeCommands();
 
     var barrier = c.VkImageMemoryBarrier{
@@ -1443,7 +1645,7 @@ fn TransitionImageLayout(image: c.VkImage, format: c.VkFormat, oldLayout: c.VkIm
         .subresourceRange = c.VkImageSubresourceRange{
             .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
-            .levelCount = 1,
+            .levelCount = mipLevels,
             .baseArrayLayer = 0,
             .layerCount = 1,
         },

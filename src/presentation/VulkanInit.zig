@@ -63,6 +63,10 @@ pub var uniformBuffersMemory: []c.VkDeviceMemory = undefined;
 pub var descriptorPool: c.VkDescriptorPool = undefined;
 pub var descriptorSets: []c.VkDescriptorSet = undefined;
 
+pub var depthImage: c.VkImage = undefined;
+pub var depthImageMemory: c.VkDeviceMemory = undefined;
+pub var depthImageView: c.VkImageView = undefined;
+
 pub var textureImage: c.VkImage = undefined;
 pub var textureImageMemory: c.VkDeviceMemory = undefined;
 pub var textureImageView: c.VkImageView = undefined;
@@ -158,11 +162,14 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     std.debug.print("CreateGraphicsPipeline()...\n", .{});
     try CreateGraphicsPipeline(allocator, "src/shaders/compiled/basic_mesh-vert.spv", "src/shaders/compiled/basic_mesh-frag.spv");
 
-    std.debug.print("CreateFrameBuffers()...\n", .{});
-    try CreateFrameBuffers(allocator);
-
     std.debug.print("CreateCommandPool()...\n", .{});
     try CreateCommandPool();
+
+    std.debug.print("CreateDepthResources()...\n", .{});
+    try CreateDepthResources();
+
+    std.debug.print("CreateFrameBuffers()...\n", .{});
+    try CreateFrameBuffers(allocator);
 
     const testImagePath = "test-assets\\test.png";
     std.debug.print("CreateTextureImage()...\n", .{});
@@ -669,7 +676,7 @@ fn CreateSwapchainImageViews(allocator: Allocator) !void {
     swapchainImageViews = try allocator.alloc(c.VkImageView, swapchainImages.len);
     var i: u32 = 0;
     while (i < swapchainImages.len) : (i += 1) {
-        swapchainImageViews[i] = try CreateImageView(swapchainImages[i], swapchainImageFormat);
+        swapchainImageViews[i] = try CreateImageView(swapchainImages[i], swapchainImageFormat, c.VK_IMAGE_ASPECT_COLOR_BIT);
     }
 }
 
@@ -689,6 +696,21 @@ fn CreateRenderPass() !void {
         .attachment = 0,
         .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     };
+    const depthAttachment = c.VkAttachmentDescription{
+        .format = try FindDepthFormat(),
+        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .flags = 0,
+    };
+    const depthAttachmentRef = c.VkAttachmentReference{
+        .attachment = 1,
+        .layout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
     const subpass = c.VkSubpassDescription{
         .flags = 0,
         .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -697,20 +719,30 @@ fn CreateRenderPass() !void {
         .colorAttachmentCount = 1,
         .pColorAttachments = &colorAttachmentRef,
         .pResolveAttachments = null,
-        .pDepthStencilAttachment = null,
+        .pDepthStencilAttachment = &depthAttachmentRef,
         .preserveAttachmentCount = 0,
         .pPreserveAttachments = null,
     };
+    const dependency = c.VkSubpassDependency{
+        .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = 0,
+    };
+    const attachments = [_]c.VkAttachmentDescription{ colorAttachment, depthAttachment };
     const renderPassInfo = c.VkRenderPassCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .pNext = null,
         .flags = 0,
-        .attachmentCount = 1,
-        .pAttachments = &colorAttachment,
+        .attachmentCount = 2,
+        .pAttachments = &attachments,
         .subpassCount = 1,
         .pSubpasses = &subpass,
-        .dependencyCount = 0,
-        .pDependencies = null,
+        .dependencyCount = 1,
+        .pDependencies = &dependency,
     };
 
     try CheckVkSuccess(
@@ -894,7 +926,36 @@ pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []co
         .pNext = null,
         .flags = 0,
     };
-    //TODO VkPipelineDepthStencilStateCreateInfo
+    const depthStencilState = c.VkPipelineDepthStencilStateCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = c.VK_TRUE,
+        .depthWriteEnable = c.VK_TRUE,
+        .depthCompareOp = c.VK_COMPARE_OP_LESS,
+        .depthBoundsTestEnable = c.VK_FALSE,
+        .stencilTestEnable = c.VK_FALSE,
+        .minDepthBounds = 0.0,
+        .maxDepthBounds = 1.0,
+        .front = c.VkStencilOpState{
+            .failOp = c.VK_STENCIL_OP_KEEP,
+            .passOp = c.VK_STENCIL_OP_KEEP,
+            .depthFailOp = c.VK_STENCIL_OP_KEEP,
+            .compareOp = c.VK_COMPARE_OP_NEVER,
+            .compareMask = 0,
+            .writeMask = 0,
+            .reference = 0,
+        },
+        .back = c.VkStencilOpState{
+            .failOp = c.VK_STENCIL_OP_KEEP,
+            .passOp = c.VK_STENCIL_OP_KEEP,
+            .depthFailOp = c.VK_STENCIL_OP_KEEP,
+            .compareOp = c.VK_COMPARE_OP_NEVER,
+            .compareMask = 0,
+            .writeMask = 0,
+            .reference = 0,
+        },
+        .flags = 0,
+        .pNext = null,
+    };
 
     const colorBlending = c.VkPipelineColorBlendAttachmentState{
         .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT | c.VK_COLOR_COMPONENT_G_BIT | c.VK_COLOR_COMPONENT_B_BIT | c.VK_COLOR_COMPONENT_A_BIT,
@@ -942,7 +1003,7 @@ pub fn CreateGraphicsPipeline(allocator: Allocator, vertShaderRelativePath: []co
         .pRasterizationState = &rasterizationState,
         .pTessellationState = null,
         .pMultisampleState = &multisamplingState,
-        .pDepthStencilState = null,
+        .pDepthStencilState = &depthStencilState,
         .pColorBlendState = &colorBlendingState,
         .pDynamicState = null,
         .layout = pipelineLayout,
@@ -963,12 +1024,15 @@ fn CreateFrameBuffers(allocator: Allocator) !void {
     swapchainFrameBuffers = try allocator.alloc(c.VkFramebuffer, swapchainImageViews.len);
     var i: usize = 0;
     while (i < swapchainImageViews.len) : (i += 1) {
-        var attachments = [_]c.VkImageView{swapchainImageViews[i]};
+        var attachments = [_]c.VkImageView{
+            swapchainImageViews[i],
+            depthImageView,
+        };
 
         const framebufferInfo = c.VkFramebufferCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
             .renderPass = renderPass,
-            .attachmentCount = 1,
+            .attachmentCount = attachments.len,
             .pAttachments = &attachments,
             .width = swapchainExtent.width,
             .height = swapchainExtent.height,
@@ -996,6 +1060,47 @@ fn CreateCommandPool() !void {
         c.vkCreateCommandPool(logicalDevice, &poolInfo, null, &commandPool),
         VKInitError.FailedToCreateCommandPool,
     );
+}
+
+fn FindSupportedFormat(candidates: []const c.VkFormat, tiling: c.VkImageTiling, features: c.VkFormatFeatureFlags) !c.VkFormat {
+    for (candidates) |format| {
+        var properties: c.VkFormatProperties = undefined;
+        c.vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &properties);
+        if (tiling == c.VK_IMAGE_TILING_LINEAR and (properties.linearTilingFeatures & features) == features) {
+            return format;
+        } else if (tiling == c.VK_IMAGE_TILING_OPTIMAL and (properties.optimalTilingFeatures & features) == features) {
+            return format;
+        }
+    }
+    return VKInitError.VKError;
+}
+
+fn HasStencilComponent(format: c.VkFormat) bool {
+    return format == c.VK_FORMAT_D32_SFLOAT_S8_UINT or format == c.VK_FORMAT_D24_UNORM_S8_UINT;
+}
+
+fn FindDepthFormat() !c.VkFormat {
+    return FindSupportedFormat(
+        &[_]c.VkFormat{ c.VK_FORMAT_D32_SFLOAT, c.VK_FORMAT_D32_SFLOAT_S8_UINT, c.VK_FORMAT_D24_UNORM_S8_UINT },
+        c.VK_IMAGE_TILING_OPTIMAL,
+        c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    );
+}
+
+fn CreateDepthResources() !void {
+    const depthFormat = try FindDepthFormat();
+    try CreateImage(
+        swapchainExtent.width,
+        swapchainExtent.height,
+        depthFormat,
+        c.VK_IMAGE_TILING_OPTIMAL,
+        c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &depthImage,
+        &depthImageMemory,
+    );
+    depthImageView = try CreateImageView(depthImage, depthFormat, c.VK_IMAGE_ASPECT_DEPTH_BIT);
+    try TransitionImageLayout(depthImage, depthFormat, c.VK_IMAGE_LAYOUT_UNDEFINED, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 }
 
 fn CreateImage(
@@ -1048,7 +1153,7 @@ fn CreateImage(
     );
 
     try CheckVkSuccess(
-        c.vkBindImageMemory(logicalDevice, textureImage, textureImageMemory, 0),
+        c.vkBindImageMemory(logicalDevice, image.*, imageMemory.*, 0),
         VKInitError.VKError,
     );
 }
@@ -1092,12 +1197,12 @@ fn CreateTextureImage(imagePath: []const u8) !void {
     );
 
     //TODO pass c.VK_FORMAT_R8G8B8A8_SRGB to TransitionImageLayout?
-    try TransitionImageLayout(textureImage, c.VK_IMAGE_LAYOUT_UNDEFINED, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    try TransitionImageLayout(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB, c.VK_IMAGE_LAYOUT_UNDEFINED, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     try CopyBufferToImage(stagingBuffer, textureImage, image.m_width, image.m_height);
-    try TransitionImageLayout(textureImage, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    try TransitionImageLayout(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB, c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
-fn CreateImageView(image: c.VkImage, format: c.VkFormat) !c.VkImageView {
+fn CreateImageView(image: c.VkImage, format: c.VkFormat, aspectFlags: c.VkImageAspectFlags) !c.VkImageView {
     const imageViewInfo = c.VkImageViewCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = image,
@@ -1110,7 +1215,7 @@ fn CreateImageView(image: c.VkImage, format: c.VkFormat) !c.VkImageView {
             .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
         },
         .subresourceRange = c.VkImageSubresourceRange{
-            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .aspectMask = aspectFlags,
             .baseMipLevel = 0,
             .levelCount = 1,
             .baseArrayLayer = 0,
@@ -1130,7 +1235,7 @@ fn CreateImageView(image: c.VkImage, format: c.VkFormat) !c.VkImageView {
 }
 
 fn CreateTextureImageView() !void {
-    textureImageView = try CreateImageView(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB);
+    textureImageView = try CreateImageView(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB, c.VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 fn CreateTextureSampler() !void {
@@ -1325,8 +1430,7 @@ fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u
     try EndSingleTimeCommands(commandBuffer);
 }
 
-//TODO pass VkFormat?
-fn TransitionImageLayout(image: c.VkImage, oldLayout: c.VkImageLayout, newLayout: c.VkImageLayout) !void {
+fn TransitionImageLayout(image: c.VkImage, format: c.VkFormat, oldLayout: c.VkImageLayout, newLayout: c.VkImageLayout) !void {
     var commandBuffer = try BeginSingleTimeCommands();
 
     var barrier = c.VkImageMemoryBarrier{
@@ -1348,6 +1452,14 @@ fn TransitionImageLayout(image: c.VkImage, oldLayout: c.VkImageLayout, newLayout
         .pNext = null,
     };
 
+    if (newLayout == c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        barrier.subresourceRange.aspectMask = c.VK_IMAGE_ASPECT_DEPTH_BIT;
+
+        if (HasStencilComponent(format)) {
+            barrier.subresourceRange.aspectMask |= c.VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    }
+
     var srcStage: c.VkPipelineStageFlags = undefined;
     var dstStage: c.VkPipelineStageFlags = undefined;
     if (oldLayout == c.VK_IMAGE_LAYOUT_UNDEFINED and newLayout == c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
@@ -1362,6 +1474,12 @@ fn TransitionImageLayout(image: c.VkImage, oldLayout: c.VkImageLayout, newLayout
 
         srcStage = c.VK_PIPELINE_STAGE_TRANSFER_BIT;
         dstStage = c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else if (oldLayout == c.VK_IMAGE_LAYOUT_UNDEFINED and newLayout == c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+        srcStage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dstStage = c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     } else {
         return VKInitError.VKError;
     }
@@ -1618,9 +1736,14 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
             c.vkBeginCommandBuffer(commandBuffers[i], &beginInfo),
             VKInitError.FailedToCreateCommandBuffers,
         );
+
         const clearColor = c.VkClearValue{
             .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
         };
+        const clearDepth = c.VkClearValue{
+            .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
+        };
+        const clearValues = [_]c.VkClearValue{ clearColor, clearDepth };
         const renderPassInfo = c.VkRenderPassBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = renderPass,
@@ -1632,8 +1755,8 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
                 },
                 .extent = swapchainExtent,
             },
-            .clearValueCount = 1,
-            .pClearValues = &clearColor,
+            .clearValueCount = 2,
+            .pClearValues = &clearValues,
             .pNext = null,
         };
 

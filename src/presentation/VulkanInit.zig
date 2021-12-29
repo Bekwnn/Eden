@@ -37,6 +37,8 @@ pub var presentQueue: c.VkQueue = undefined;
 pub const BUFFER_FRAMES = 2;
 pub var curFrameBufferIdx: u32 = 0;
 
+pub var msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT;
+
 pub var swapchain: c.VkSwapchainKHR = undefined;
 pub var swapchainImageCount: u32 = undefined;
 pub var swapchainImages: []c.VkImage = undefined;
@@ -66,6 +68,10 @@ pub var descriptorSets: []c.VkDescriptorSet = undefined;
 pub var depthImage: c.VkImage = undefined;
 pub var depthImageMemory: c.VkDeviceMemory = undefined;
 pub var depthImageView: c.VkImageView = undefined;
+
+pub var colorImage: c.VkImage = undefined;
+pub var colorImageMemory: c.VkDeviceMemory = undefined;
+pub var colorImageView: c.VkImageView = undefined;
 
 pub var textureMipLevels: u32 = undefined;
 pub var textureImage: c.VkImage = undefined;
@@ -166,6 +172,9 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     std.debug.print("CreateCommandPool()...\n", .{});
     try CreateCommandPool();
 
+    std.debug.print("CreateColorResources()...\n", .{});
+    try CreateColorResources();
+
     std.debug.print("CreateDepthResources()...\n", .{});
     try CreateDepthResources();
 
@@ -237,17 +246,11 @@ pub fn VulkanCleanup() void {
     defer c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
 
     defer {
+        c.vkDestroyImageView(logicalDevice, textureImageView, null);
         c.vkDestroyImage(logicalDevice, textureImage, null);
         c.vkFreeMemory(logicalDevice, textureImageMemory, null);
     }
-    defer c.vkDestroyImageView(logicalDevice, textureImageView, null);
     defer c.vkDestroySampler(logicalDevice, textureSampler, null);
-
-    defer {
-        c.vkDestroyImage(logicalDevice, depthImage, null);
-        c.vkFreeMemory(logicalDevice, depthImageMemory, null);
-    }
-    defer c.vkDestroyImageView(logicalDevice, depthImageView, null);
 
     defer CleanupSwapchain();
 }
@@ -265,6 +268,8 @@ pub fn RecreateSwapchain(allocator: Allocator) !void {
     try CreateSwapchainImageViews(allocator);
     try CreateRenderPass();
     try CreateGraphicsPipeline(allocator, "src/shaders/compiled/basic_mesh-vert.spv", "src/shaders/compiled/basic_mesh-frag.spv");
+    try CreateColorResources();
+    try CreateDepthResources();
     try CreateFrameBuffers(allocator);
     try CreateUniformBuffers(allocator);
     try CreateDescriptorPool();
@@ -301,6 +306,18 @@ fn CleanupSwapchain() void {
         for (swapchainFrameBuffers) |frameBuffer| {
             c.vkDestroyFramebuffer(logicalDevice, frameBuffer, null);
         }
+    }
+
+    defer {
+        c.vkDestroyImageView(logicalDevice, depthImageView, null);
+        c.vkDestroyImage(logicalDevice, depthImage, null);
+        c.vkFreeMemory(logicalDevice, depthImageMemory, null);
+    }
+
+    defer {
+        c.vkDestroyImage(logicalDevice, colorImage, null);
+        c.vkFreeMemory(logicalDevice, colorImageMemory, null);
+        c.vkDestroyImageView(logicalDevice, colorImageView, null);
     }
 }
 
@@ -372,6 +389,21 @@ fn CreateVKInstance(allocator: Allocator, window: *c.SDL_Window) !void {
         c.vkCreateInstance(&instanceInfo, null, &instance),
         VKInitError.VKError,
     );
+}
+
+fn GetMaxUsableSampleCount() c.VkSampleCountFlagBits {
+    var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
+    c.vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+
+    const counts = deviceProperties.limits.framebufferColorSampleCounts & deviceProperties.limits.framebufferDepthSampleCounts;
+    if (counts & c.VK_SAMPLE_COUNT_64_BIT != 0) return c.VK_SAMPLE_COUNT_64_BIT;
+    if (counts & c.VK_SAMPLE_COUNT_32_BIT != 0) return c.VK_SAMPLE_COUNT_32_BIT;
+    if (counts & c.VK_SAMPLE_COUNT_16_BIT != 0) return c.VK_SAMPLE_COUNT_16_BIT;
+    if (counts & c.VK_SAMPLE_COUNT_8_BIT != 0) return c.VK_SAMPLE_COUNT_8_BIT;
+    if (counts & c.VK_SAMPLE_COUNT_4_BIT != 0) return c.VK_SAMPLE_COUNT_4_BIT;
+    if (counts & c.VK_SAMPLE_COUNT_2_BIT != 0) return c.VK_SAMPLE_COUNT_2_BIT;
+
+    return c.VK_SAMPLE_COUNT_1_BIT;
 }
 
 // Currently just checks if geometry shaders are supported and if the device supports VK_QUEUE_GRAPHICS_BIT
@@ -473,6 +505,7 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
     for (deviceList) |device| {
         if (try PhysicalDeviceIsSuitable(allocator, device, window, surface)) {
             physicalDevice = device;
+            msaaSamples = GetMaxUsableSampleCount();
             return;
         }
     }
@@ -689,8 +722,23 @@ fn CreateSwapchainImageViews(allocator: Allocator) !void {
 fn CreateRenderPass() !void {
     const colorAttachment = c.VkAttachmentDescription{
         .format = swapchainImageFormat,
-        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .samples = msaaSamples,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .flags = 0,
+    };
+    const colorAttachmentRef = c.VkAttachmentReference{
+        .attachment = 0,
+        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+    const colorAttachmentResolve = c.VkAttachmentDescription{
+        .format = swapchainImageFormat,
+        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
         .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -698,13 +746,13 @@ fn CreateRenderPass() !void {
         .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         .flags = 0,
     };
-    const colorAttachmentRef = c.VkAttachmentReference{
-        .attachment = 0,
+    const colorAttachmentResolveRef = c.VkAttachmentReference{
+        .attachment = 2,
         .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     };
     const depthAttachment = c.VkAttachmentDescription{
         .format = try FindDepthFormat(),
-        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .samples = msaaSamples,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -724,7 +772,7 @@ fn CreateRenderPass() !void {
         .pInputAttachments = null,
         .colorAttachmentCount = 1,
         .pColorAttachments = &colorAttachmentRef,
-        .pResolveAttachments = null,
+        .pResolveAttachments = &colorAttachmentResolveRef,
         .pDepthStencilAttachment = &depthAttachmentRef,
         .preserveAttachmentCount = 0,
         .pPreserveAttachments = null,
@@ -738,12 +786,12 @@ fn CreateRenderPass() !void {
         .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         .dependencyFlags = 0,
     };
-    const attachments = [_]c.VkAttachmentDescription{ colorAttachment, depthAttachment };
+    const attachments = [_]c.VkAttachmentDescription{ colorAttachment, depthAttachment, colorAttachmentResolve };
     const renderPassInfo = c.VkRenderPassCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .pNext = null,
         .flags = 0,
-        .attachmentCount = 2,
+        .attachmentCount = attachments.len,
         .pAttachments = &attachments,
         .subpassCount = 1,
         .pSubpasses = &subpass,
@@ -928,7 +976,7 @@ pub fn CreateGraphicsPipeline(
     const multisamplingState = c.VkPipelineMultisampleStateCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .sampleShadingEnable = c.VK_FALSE,
-        .rasterizationSamples = c.VK_SAMPLE_COUNT_1_BIT,
+        .rasterizationSamples = msaaSamples,
         .minSampleShading = 1.0,
         .pSampleMask = null,
         .alphaToCoverageEnable = c.VK_FALSE,
@@ -1038,8 +1086,9 @@ fn CreateFrameBuffers(allocator: Allocator) !void {
     var i: usize = 0;
     while (i < swapchainImageViews.len) : (i += 1) {
         var attachments = [_]c.VkImageView{
-            swapchainImageViews[i],
+            colorImageView,
             depthImageView,
+            swapchainImageViews[i],
         };
 
         const framebufferInfo = c.VkFramebufferCreateInfo{
@@ -1096,6 +1145,25 @@ fn FindSupportedFormat(
     return VKInitError.VKError;
 }
 
+fn CreateColorResources() !void {
+    const colorFormat = swapchainImageFormat;
+
+    try CreateImage(
+        swapchainExtent.width,
+        swapchainExtent.height,
+        1,
+        msaaSamples,
+        colorFormat,
+        c.VK_IMAGE_TILING_OPTIMAL,
+        c.VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+            c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &colorImage,
+        &colorImageMemory,
+    );
+    colorImageView = try CreateImageView(colorImage, colorFormat, c.VK_IMAGE_ASPECT_COLOR_BIT, 1);
+}
+
 fn HasStencilComponent(format: c.VkFormat) bool {
     return format == c.VK_FORMAT_D32_SFLOAT_S8_UINT or format == c.VK_FORMAT_D24_UNORM_S8_UINT;
 }
@@ -1114,6 +1182,7 @@ fn CreateDepthResources() !void {
         swapchainExtent.width,
         swapchainExtent.height,
         1,
+        msaaSamples,
         depthFormat,
         c.VK_IMAGE_TILING_OPTIMAL,
         c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -1126,7 +1195,7 @@ fn CreateDepthResources() !void {
         depthImage,
         depthFormat,
         c.VK_IMAGE_LAYOUT_UNDEFINED,
-        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         1,
     );
 }
@@ -1135,6 +1204,7 @@ fn CreateImage(
     width: u32,
     height: u32,
     mipLevels: u32,
+    numSamples: c.VkSampleCountFlagBits,
     format: c.VkFormat,
     tiling: c.VkImageTiling,
     usage: c.VkImageUsageFlags,
@@ -1157,7 +1227,7 @@ fn CreateImage(
         .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
         .usage = usage,
         .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
-        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .samples = numSamples,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = null,
         .pNext = null,
@@ -1368,6 +1438,7 @@ fn CreateTextureImage(imagePath: []const u8) !void {
         image.m_width,
         image.m_height,
         textureMipLevels,
+        c.VK_SAMPLE_COUNT_1_BIT,
         c.VK_FORMAT_R8G8B8A8_SRGB,
         c.VK_IMAGE_TILING_OPTIMAL,
         c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_SAMPLED_BIT,

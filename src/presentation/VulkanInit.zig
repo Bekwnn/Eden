@@ -396,13 +396,32 @@ fn GetMaxUsableSampleCount() c.VkSampleCountFlagBits {
     c.vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
 
     const counts = deviceProperties.limits.framebufferColorSampleCounts & deviceProperties.limits.framebufferDepthSampleCounts;
-    if (counts & c.VK_SAMPLE_COUNT_64_BIT != 0) return c.VK_SAMPLE_COUNT_64_BIT;
-    if (counts & c.VK_SAMPLE_COUNT_32_BIT != 0) return c.VK_SAMPLE_COUNT_32_BIT;
-    if (counts & c.VK_SAMPLE_COUNT_16_BIT != 0) return c.VK_SAMPLE_COUNT_16_BIT;
-    if (counts & c.VK_SAMPLE_COUNT_8_BIT != 0) return c.VK_SAMPLE_COUNT_8_BIT;
-    if (counts & c.VK_SAMPLE_COUNT_4_BIT != 0) return c.VK_SAMPLE_COUNT_4_BIT;
-    if (counts & c.VK_SAMPLE_COUNT_2_BIT != 0) return c.VK_SAMPLE_COUNT_2_BIT;
+    if (counts & c.VK_SAMPLE_COUNT_64_BIT != 0) {
+        std.debug.print("MSAA detected: SAMPLE_COUNT_64_BIT\n", .{});
+        return c.VK_SAMPLE_COUNT_64_BIT;
+    }
+    if (counts & c.VK_SAMPLE_COUNT_32_BIT != 0) {
+        std.debug.print("MSAA detected: SAMPLE_COUNT_32_BIT\n", .{});
+        return c.VK_SAMPLE_COUNT_32_BIT;
+    }
+    if (counts & c.VK_SAMPLE_COUNT_16_BIT != 0) {
+        std.debug.print("MSAA detected: SAMPLE_COUNT_16_BIT\n", .{});
+        return c.VK_SAMPLE_COUNT_16_BIT;
+    }
+    if (counts & c.VK_SAMPLE_COUNT_8_BIT != 0) {
+        std.debug.print("MSAA detected: SAMPLE_COUNT_8_BIT\n", .{});
+        return c.VK_SAMPLE_COUNT_8_BIT;
+    }
+    if (counts & c.VK_SAMPLE_COUNT_4_BIT != 0) {
+        std.debug.print("MSAA detected: SAMPLE_COUNT_4_BIT\n", .{});
+        return c.VK_SAMPLE_COUNT_4_BIT;
+    }
+    if (counts & c.VK_SAMPLE_COUNT_2_BIT != 0) {
+        std.debug.print("MSAA detected: SAMPLE_COUNT_2_BIT\n", .{});
+        return c.VK_SAMPLE_COUNT_2_BIT;
+    }
 
+    std.debug.print("MSAA detected: SAMPLE_COUNT_1_BIT\n", .{});
     return c.VK_SAMPLE_COUNT_1_BIT;
 }
 

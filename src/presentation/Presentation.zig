@@ -117,13 +117,13 @@ pub fn RenderFrame() !void {
 
     try vk.UpdateUniformBuffer(&vk.curCamera, currentFrame);
 
-    if (vk.imagesInFlight[imageIndex] != null) {
-        const imageFenceResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.imagesInFlight[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
-        if (imageFenceResult != c.VK_SUCCESS and imageFenceResult != c.VK_TIMEOUT) {
-            return RenderLoopError.FailedToWaitForImageFence;
-        }
-    }
-    vk.imagesInFlight[imageIndex] = vk.inFlightFences[currentFrame];
+    try vk.CheckVkSuccess(
+        c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]),
+        RenderLoopError.FailedToResetFences,
+    );
+
+    //vkResetCommandBuffer?
+    //recordCommandBuffer?
 
     const waitSemaphores = [_]c.VkSemaphore{vk.imageAvailableSemaphores[currentFrame]};
     const waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -139,11 +139,6 @@ pub fn RenderFrame() !void {
         .pSignalSemaphores = &signalSemaphores,
         .pNext = null,
     };
-
-    try vk.CheckVkSuccess(
-        c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]),
-        RenderLoopError.FailedToResetFences,
-    );
 
     try vk.CheckVkSuccess(
         c.vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.inFlightFences[currentFrame]),

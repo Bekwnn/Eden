@@ -82,7 +82,6 @@ pub var textureSampler: c.VkSampler = undefined;
 pub var imageAvailableSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
 pub var renderFinishedSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
 pub var inFlightFences: [BUFFER_FRAMES]c.VkFence = undefined;
-pub var imagesInFlight: [BUFFER_FRAMES]c.VkFence = undefined;
 
 const validationLayers = [_][*:0]const u8{
     "VK_LAYER_KHRONOS_validation",

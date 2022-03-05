@@ -1132,7 +1132,7 @@ fn CreateCommandPool() !void {
     const poolInfo = c.VkCommandPoolCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .queueFamilyIndex = queueFamilyDetails.graphicsQueueIdx.?,
-        .flags = 0,
+        .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .pNext = null,
     };
 

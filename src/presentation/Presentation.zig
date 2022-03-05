@@ -31,7 +31,11 @@ const RenderLoopError = error{
     FailedToWaitForInFlightFence,
     FailedToWaitForImageFence,
     FailedToResetFences,
+    FailedToResetCommandBuffer,
     FailedToAcquireNextImage,
+    FailedToBeginCommandBuffer,
+    FailedToEndCommandBuffer,
+    MissingMesh,
 };
 
 //var imguiIO: ?*ImGuiIO = null;
@@ -61,6 +65,69 @@ pub fn Initialize() void {
 
     //TODO get imgui working again
     //ImguiInit();
+}
+
+pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
+    const beginInfo = c.VkCommandBufferBeginInfo{
+        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = null,
+        .flags = 0,
+        .pInheritanceInfo = null,
+    };
+
+    try vk.CheckVkSuccess(
+        c.vkBeginCommandBuffer(commandBuffer, &beginInfo),
+        RenderLoopError.FailedToBeginCommandBuffer,
+    );
+
+    const clearColor = c.VkClearValue{
+        .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
+    };
+    const clearDepth = c.VkClearValue{
+        .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
+    };
+    const clearValues = [_]c.VkClearValue{ clearColor, clearDepth };
+    const renderPassInfo = c.VkRenderPassBeginInfo{
+        .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = vk.renderPass,
+        .framebuffer = vk.swapchainFrameBuffers[imageIndex],
+        .renderArea = c.VkRect2D{
+            .offset = c.VkOffset2D{
+                .x = 0,
+                .y = 0,
+            },
+            .extent = vk.swapchainExtent,
+        },
+        .clearValueCount = 2,
+        .pClearValues = &clearValues,
+        .pNext = null,
+    };
+
+    c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
+    {
+        c.vkCmdBindPipeline(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, vk.graphicsPipeline);
+
+        const vertexBuffers = [_]c.VkBuffer{vk.vertexBuffer};
+        const offsets = [_]c.VkDeviceSize{0};
+        c.vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers, &offsets);
+
+        c.vkCmdBindIndexBuffer(commandBuffer, vk.indexBuffer, 0, c.VK_INDEX_TYPE_UINT32);
+
+        c.vkCmdBindDescriptorSets(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, vk.pipelineLayout, 0, 1, &vk.descriptorSets[currentFrame], 0, null);
+
+        //TODO testing mesh
+        if (vk.curMesh) |*meshPtr| {
+            c.vkCmdDrawIndexed(commandBuffer, @intCast(u32, meshPtr.m_indices.items.len), 1, 0, 0, 0);
+        } else {
+            return RenderLoopError.MissingMesh;
+        }
+    }
+    c.vkCmdEndRenderPass(commandBuffer);
+
+    try vk.CheckVkSuccess(
+        c.vkEndCommandBuffer(commandBuffer),
+        RenderLoopError.FailedToEndCommandBuffer,
+    );
 }
 
 //fn ImguiUpdate() void {
@@ -101,7 +168,7 @@ pub fn RenderFrame() !void {
     vk.curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
     vk.curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
 
-    const fencesResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, std.math.maxInt(u64));
+    const fencesResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, 2000000000);
     if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {
         return RenderLoopError.FailedToWaitForInFlightFence;
     }
@@ -123,7 +190,11 @@ pub fn RenderFrame() !void {
     );
 
     //vkResetCommandBuffer?
-    //recordCommandBuffer?
+    try vk.CheckVkSuccess(
+        c.vkResetCommandBuffer(vk.commandBuffers[imageIndex], 0),
+        RenderLoopError.FailedToResetCommandBuffer,
+    );
+    try RecordCommandBuffer(vk.commandBuffers[imageIndex], imageIndex);
 
     const waitSemaphores = [_]c.VkSemaphore{vk.imageAvailableSemaphores[currentFrame]};
     const waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};

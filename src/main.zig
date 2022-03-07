@@ -5,6 +5,7 @@ const debug = std.debug;
 const gameWorld = @import("game/GameWorld.zig");
 
 const presentation = @import("presentation/Presentation.zig");
+const imgui = @import("presentation/ImGui.zig");
 const sdlInit = @import("presentation/SDLInit.zig");
 const vk = @import("presentation/VulkanInit.zig");
 
@@ -28,12 +29,9 @@ pub fn main() !void {
         vk.VulkanCleanup();
     }
 
-    // imgui setup TODO relocate TODO handle returns
-    //_ = c.igCreateContext(null);
-    //defer c.igDestroyContext(null);
-
-    //_ = c.ImGui_ImplSDL2_InitForOpenGL(window, glContext);
-    //_ = c.ImGui_ImplOpenGL3_Init(null);
+    // imgui setup
+    try imgui.InitImgui(window);
+    defer imgui.CleanupImgui();
 
     //stb image wip test
     const testImagePath = "test-assets\\test.png";
@@ -48,10 +46,10 @@ pub fn main() !void {
     //presentation.Initialize(renderer);
     gameWorld.Initialize();
 
-    try MainGameLoop();
+    try MainGameLoop(window);
 }
 
-pub fn MainGameLoop() !void {
+pub fn MainGameLoop(window: *c.SDL_Window) !void {
     //TODO input handling
     var quit = false;
     while (!quit) {
@@ -62,6 +60,13 @@ pub fn MainGameLoop() !void {
                 c.SDL_QUIT => {
                     quit = true;
                 },
+                c.SDL_WINDOWEVENT => {
+                    if (event.window.event == c.SDL_WINDOWEVENT_RESIZED and
+                        event.window.windowID == c.SDL_GetWindowID(window))
+                    {
+                        //TODO handle recreating swapchain(s)
+                    }
+                },
                 else => {},
             }
         }
@@ -69,7 +74,7 @@ pub fn MainGameLoop() !void {
         gameWorld.WritableInstance().Update(1.0 / 60.0);
         gameWorld.WritableInstance().FixedUpdate();
 
-        try presentation.RenderFrame();
+        try presentation.RenderFrame(window);
 
         c.SDL_Delay(17);
     }

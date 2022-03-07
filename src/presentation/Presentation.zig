@@ -155,18 +155,45 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
 //TODO make a generalized function
 var framebufferResized = false;
+var showDemoWindow = true;
+var f: f32 = 0.0;
+var counter: u32 = 0;
 //TODO
 //pub fun FramebufferResizeCallback(GLFWwindow* window, u32 width, u32 height) void {
 //    framebufferResized = true;
 //}
 var currentFrame: usize = 0;
-pub fn RenderFrame() !void {
+pub fn RenderFrame(window: *c.SDL_Window) !void {
     const swapchainAllocator = std.heap.page_allocator;
 
     vk.curCamera.m_pos.z = -2.0;
     curTime += game.deltaTime;
     vk.curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
     vk.curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
+
+    c.ImGui_ImplVulkan_NewFrame();
+    c.ImGui_ImplSDL2_NewFrame(window);
+    c.igNewFrame();
+    c.igShowDemoWindow(&showDemoWindow);
+    c.igBegin("Hello, world!");
+    {
+        c.igText("This is some useful text.");
+        c.igCheckbox("Demo Window", &showDemoWindow);
+
+        c.igSliderFloat("float", &f, 0.0, 1.0);
+
+        if (c.igButton("Button")) {
+            counter += 1;
+        }
+
+        c.igSameLine();
+        c.igText("counter = %d", counter);
+
+        c.igText("Application average {} ms/frame ({} FPS)", 1000.0 / c.igGetIO().Framerate, c.igGetIO().Framerate);
+    }
+    c.igEnd();
+
+    c.igRender();
 
     const fencesResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, 2000000000);
     if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {

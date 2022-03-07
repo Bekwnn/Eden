@@ -4,11 +4,11 @@ pub usingnamespace @cImport({
     @cInclude("SDL_Vulkan.h");
 
     //IMGUI
-    //@cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", {});
-    //@cInclude("cimgui.h");
-    //@cDefine("IMGUI_IMPL_API", {});
-    //@cInclude("imgui_impl_sdl.h");
-    //@cInclude("imgui_impl_vulkan.h");
+    @cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", {});
+    @cInclude("cimgui.h");
+    @cDefine("IMGUI_IMPL_API", {});
+    @cInclude("imgui_impl_sdl.h");
+    @cInclude("imgui_impl_vulkan.h");
 
     //Vulkan
     @cInclude("vulkan/vulkan.h");

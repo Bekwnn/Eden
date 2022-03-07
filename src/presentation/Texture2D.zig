@@ -1,5 +1,12 @@
-pub const Texture2D = struct {
-    //texture data, texture loading, gl objects, etc.
-    width: u32,
-    height: u32,
-};
+const c = @import("../c.zig");
+
+// Represents a texture asset, used by the graphics api
+//pub const Texture2D = struct {
+//    mipLevels: u32,
+//    image: GraphicsImage,
+//    vkSampler: c.VkSampler,
+//
+//    pub fn CreateTexture() !Texture2D {}
+//
+//    pub fn DeleteTexture() void {}
+//};

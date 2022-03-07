@@ -124,25 +124,25 @@ pub fn build(b: *Builder) !void {
 
     exe.addIncludeDir("src");
 
-    //TODO imgui
-    //exe.addIncludeDir("dependency/cimgui");
-    //exe.addIncludeDir("dependency/cimgui/imgui");
-    //exe.addIncludeDir("dependency/cimgui/imgui/examples");
-    //const imgui_flags = &[_][]const u8{
-    //    "-std=c++17",
-    //    "-Wno-return-type-c-linkage",
-    //    "-DIMGUI_IMPL_OPENGL_LOADER_GLEW=1",
-    //    "-fno-exceptions",
-    //    "-fno-rtti",
-    //    "-Wno-pragma-pack",
-    //};
-    //exe.addCSourceFile("dependency/cimgui/cimgui.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/imgui.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_demo.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
+    exe.addIncludeDir("dependency/cimgui");
+    exe.addIncludeDir("dependency/cimgui/imgui");
+    exe.addIncludeDir("dependency/cimgui/imgui/examples");
+    const imgui_flags = &[_][]const u8{
+        "-std=c++17",
+        "-Wno-return-type-c-linkage",
+        "-fno-exceptions",
+        "-DIMGUI_STATIC=yes",
+        "-fno-threadsafe-statics",
+        "-fno-rtti",
+        "-Wno-pragma-pack",
+    };
+    exe.addCSourceFile("dependency/cimgui/cimgui.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/imgui.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/imgui_demo.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
+    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
 
     exe.addIncludeDir("dependency/SDL2/include");
     exe.addLibPath("dependency/SDL2/lib/x64");

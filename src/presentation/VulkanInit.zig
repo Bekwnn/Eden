@@ -1,12 +1,13 @@
 //TODO WIP initial vulkan implementation referencing andrewrk/zig-vulkan-triangle and github gist YukiSnowy/dc31f47448ac61dd6aedee18b5d53858
 // and shout out to Alexander Overvoorde for his vulkan tutorial book
 
-const c = @import("../c.zig"); // keeping c import explicit for clarity
+const c = @import("../c.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Mesh = @import("Mesh.zig").Mesh;
+const Texture2D = @import("Texture2D.zig").Texture2D;
 const VertexData = @import("Mesh.zig").VertexData;
 const Camera = @import("Camera.zig").Camera;
 const mat4x4 = @import("../math/Mat4x4.zig");
@@ -17,13 +18,12 @@ const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
 //TODO: these should be optional or something, but it seems like a PITA to unwrap them every time after intialization.
 //maybe they should all be contained in one giant struct which is optional based on whether vulkan has initialized yet?
 //A getter function which checks and returns the unwrapped optional and reports an error function if it doesn't exist
+
+//TODO abstract these pipeline items to a presentation "instance" or something like that
+// PIPELINE START
 pub var instance: c.VkInstance = undefined;
 
 //var debugCallback: c.VkDebugReportCallbackEXT = undefined;
-
-//TODO parts of initialization should be moved out to assets that determine shader usage and shader structs which have differing layouts
-pub var curMesh: ?Mesh = null;
-pub var curCamera = Camera{};
 
 pub var surface: c.VkSurfaceKHR = undefined;
 
@@ -52,32 +52,10 @@ pub var renderPass: c.VkRenderPass = undefined;
 pub var descriptorSetLayout: c.VkDescriptorSetLayout = undefined;
 pub var pipelineLayout: c.VkPipelineLayout = undefined;
 pub var graphicsPipeline: c.VkPipeline = undefined;
+pub var pipelineCache: c.VkPipelineCache = undefined;
 pub var swapchainFrameBuffers: []c.VkFramebuffer = undefined;
 pub var commandPool: c.VkCommandPool = undefined;
 pub var commandBuffers: []c.VkCommandBuffer = undefined;
-
-pub var vertexBuffer: c.VkBuffer = undefined;
-pub var vertexBufferMemory: c.VkDeviceMemory = undefined;
-pub var indexBuffer: c.VkBuffer = undefined;
-pub var indexBufferMemory: c.VkDeviceMemory = undefined;
-pub var uniformBuffers: []c.VkBuffer = undefined;
-pub var uniformBuffersMemory: []c.VkDeviceMemory = undefined;
-pub var descriptorPool: c.VkDescriptorPool = undefined;
-pub var descriptorSets: []c.VkDescriptorSet = undefined;
-
-pub var depthImage: c.VkImage = undefined;
-pub var depthImageMemory: c.VkDeviceMemory = undefined;
-pub var depthImageView: c.VkImageView = undefined;
-
-pub var colorImage: c.VkImage = undefined;
-pub var colorImageMemory: c.VkDeviceMemory = undefined;
-pub var colorImageView: c.VkImageView = undefined;
-
-pub var textureMipLevels: u32 = undefined;
-pub var textureImage: c.VkImage = undefined;
-pub var textureImageMemory: c.VkDeviceMemory = undefined;
-pub var textureImageView: c.VkImageView = undefined;
-pub var textureSampler: c.VkSampler = undefined;
 
 pub var imageAvailableSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
 pub var renderFinishedSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
@@ -89,6 +67,41 @@ const validationLayers = [_][*:0]const u8{
 
 const INITIAL_WIDTH = 1280;
 const INITIAL_HEIGHT = 720;
+//PIPELINE END
+
+pub var curMesh: ?Mesh = null;
+pub var curCamera = Camera{};
+
+// Mesh
+pub var vertexBuffer: c.VkBuffer = undefined;
+pub var vertexBufferMemory: c.VkDeviceMemory = undefined;
+pub var indexBuffer: c.VkBuffer = undefined;
+pub var indexBufferMemory: c.VkDeviceMemory = undefined;
+// Mesh mvp
+pub var uniformBuffers: []c.VkBuffer = undefined;
+pub var uniformBuffersMemory: []c.VkDeviceMemory = undefined;
+pub var descriptorPool: c.VkDescriptorPool = undefined;
+pub var descriptorSets: []c.VkDescriptorSet = undefined;
+
+pub var depthImage = GraphicsImage{
+    .vkImage = undefined,
+    .vkMemory = undefined,
+    .vkView = undefined,
+};
+
+pub var colorImage = GraphicsImage{
+    .vkImage = undefined,
+    .vkMemory = undefined,
+    .vkView = undefined,
+};
+
+pub var textureMipLevels: u32 = undefined;
+pub var textureImage = GraphicsImage{
+    .vkImage = undefined,
+    .vkMemory = undefined,
+    .vkView = undefined,
+};
+pub var textureSampler: c.VkSampler = undefined;
 
 const VKInitError = error{
     VKError, //TODO anything with this error should be replaced with a more specific error
@@ -118,6 +131,13 @@ const VKInitError = error{
     FailedToCheckInstanceLayerProperties,
     MissingValidationLayer,
     MissingCurMesh, //TODO delete after testing
+};
+
+//TODO move, rename, create image asset abstraction
+pub const GraphicsImage = struct {
+    vkImage: c.VkImage,
+    vkMemory: c.VkDeviceMemory,
+    vkView: c.VkImageView,
 };
 
 //TODO could have a better home
@@ -245,9 +265,9 @@ pub fn VulkanCleanup() void {
     defer c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
 
     defer {
-        c.vkDestroyImageView(logicalDevice, textureImageView, null);
-        c.vkDestroyImage(logicalDevice, textureImage, null);
-        c.vkFreeMemory(logicalDevice, textureImageMemory, null);
+        c.vkDestroyImageView(logicalDevice, textureImage.vkView, null);
+        c.vkDestroyImage(logicalDevice, textureImage.vkImage, null);
+        c.vkFreeMemory(logicalDevice, textureImage.vkMemory, null);
     }
     defer c.vkDestroySampler(logicalDevice, textureSampler, null);
 
@@ -308,15 +328,15 @@ fn CleanupSwapchain() void {
     }
 
     defer {
-        c.vkDestroyImageView(logicalDevice, depthImageView, null);
-        c.vkDestroyImage(logicalDevice, depthImage, null);
-        c.vkFreeMemory(logicalDevice, depthImageMemory, null);
+        c.vkDestroyImageView(logicalDevice, depthImage.vkView, null);
+        c.vkDestroyImage(logicalDevice, depthImage.vkImage, null);
+        c.vkFreeMemory(logicalDevice, depthImage.vkMemory, null);
     }
 
     defer {
-        c.vkDestroyImage(logicalDevice, colorImage, null);
-        c.vkFreeMemory(logicalDevice, colorImageMemory, null);
-        c.vkDestroyImageView(logicalDevice, colorImageView, null);
+        c.vkDestroyImage(logicalDevice, colorImage.vkImage, null);
+        c.vkFreeMemory(logicalDevice, colorImage.vkMemory, null);
+        c.vkDestroyImageView(logicalDevice, colorImage.vkView, null);
     }
 }
 
@@ -1104,8 +1124,8 @@ fn CreateFrameBuffers(allocator: Allocator) !void {
     var i: usize = 0;
     while (i < swapchainImageViews.len) : (i += 1) {
         var attachments = [_]c.VkImageView{
-            colorImageView,
-            depthImageView,
+            colorImage.vkView,
+            depthImage.vkView,
             swapchainImageViews[i],
         };
 
@@ -1176,10 +1196,10 @@ fn CreateColorResources() !void {
         c.VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
             c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &colorImage,
-        &colorImageMemory,
+        &colorImage.vkImage,
+        &colorImage.vkMemory,
     );
-    colorImageView = try CreateImageView(colorImage, colorFormat, c.VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    colorImage.vkView = try CreateImageView(colorImage.vkImage, colorFormat, c.VK_IMAGE_ASPECT_COLOR_BIT, 1);
 }
 
 fn HasStencilComponent(format: c.VkFormat) bool {
@@ -1205,12 +1225,12 @@ fn CreateDepthResources() !void {
         c.VK_IMAGE_TILING_OPTIMAL,
         c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &depthImage,
-        &depthImageMemory,
+        &depthImage.vkImage,
+        &depthImage.vkMemory,
     );
-    depthImageView = try CreateImageView(depthImage, depthFormat, c.VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+    depthImage.vkView = try CreateImageView(depthImage.vkImage, depthFormat, c.VK_IMAGE_ASPECT_DEPTH_BIT, 1);
     try TransitionImageLayout(
-        depthImage,
+        depthImage.vkImage,
         depthFormat,
         c.VK_IMAGE_LAYOUT_UNDEFINED,
         c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
@@ -1461,20 +1481,20 @@ fn CreateTextureImage(imagePath: []const u8) !void {
         c.VK_IMAGE_TILING_OPTIMAL,
         c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_SAMPLED_BIT,
         c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &textureImage,
-        &textureImageMemory,
+        &textureImage.vkImage,
+        &textureImage.vkMemory,
     );
 
     try TransitionImageLayout(
-        textureImage,
+        textureImage.vkImage,
         c.VK_FORMAT_R8G8B8A8_SRGB,
         c.VK_IMAGE_LAYOUT_UNDEFINED,
         c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         textureMipLevels,
     );
-    try CopyBufferToImage(stagingBuffer, textureImage, image.m_width, image.m_height);
+    try CopyBufferToImage(stagingBuffer, textureImage.vkImage, image.m_width, image.m_height);
     //transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
-    try GenerateMipmaps(textureImage, c.VK_FORMAT_R8G8B8A8_SRGB, image.m_width, image.m_height, textureMipLevels);
+    try GenerateMipmaps(textureImage.vkImage, c.VK_FORMAT_R8G8B8A8_SRGB, image.m_width, image.m_height, textureMipLevels);
 }
 
 fn CreateImageView(
@@ -1515,8 +1535,8 @@ fn CreateImageView(
 }
 
 fn CreateTextureImageView() !void {
-    textureImageView = try CreateImageView(
-        textureImage,
+    textureImage.vkView = try CreateImageView(
+        textureImage.vkImage,
         c.VK_FORMAT_R8G8B8A8_SRGB,
         c.VK_IMAGE_ASPECT_COLOR_BIT,
         textureMipLevels,
@@ -1967,7 +1987,7 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
         };
         const imageInfo = c.VkDescriptorImageInfo{
             .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .imageView = textureImageView,
+            .imageView = textureImage.vkView,
             .sampler = textureSampler,
         };
         const uboDescriptorWrite = c.VkWriteDescriptorSet{

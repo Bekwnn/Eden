@@ -115,12 +115,4 @@ struct ImGui_ImplVulkanH_Window
     uint32_t            SemaphoreIndex;         // Current set of swapchain wait semaphores we're using (needs to be distinct from per frame data)
     struct ImGui_ImplVulkanH_Frame*            Frames;
     struct ImGui_ImplVulkanH_FrameSemaphores*  FrameSemaphores;
-
-    ImGui_ImplVulkanH_Window()
-    {
-        memset(this, 0, sizeof(*this));
-        PresentMode = VK_PRESENT_MODE_MAX_ENUM_KHR;
-        ClearEnable = true;
-    }
 };
-

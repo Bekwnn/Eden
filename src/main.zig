@@ -30,8 +30,8 @@ pub fn main() !void {
     }
 
     // imgui setup
-    try imgui.InitImgui(window);
-    defer imgui.CleanupImgui();
+    //try imgui.InitImgui(window);
+    //defer imgui.CleanupImgui();
 
     //stb image wip test
     const testImagePath = "test-assets\\test.png";
@@ -64,7 +64,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
                     if (event.window.event == c.SDL_WINDOWEVENT_RESIZED and
                         event.window.windowID == c.SDL_GetWindowID(window))
                     {
-                        //TODO handle recreating swapchain(s)
+                        try presentation.OnWindowResized(window);
                     }
                 },
                 else => {},
@@ -74,7 +74,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
         gameWorld.WritableInstance().Update(1.0 / 60.0);
         gameWorld.WritableInstance().FixedUpdate();
 
-        try presentation.RenderFrame(window);
+        try presentation.RenderFrame();
 
         c.SDL_Delay(17);
     }

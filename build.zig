@@ -68,16 +68,21 @@ fn cleanCompiledShaders() !void {
     cwdDir.makeDir(compiledShaderDirName) catch return ShaderCleanError.Remake;
 }
 
-// ex usage: buildVKShaders(b, exe, "oceanshader", "vert");
-// will compile "shaders/oceanshader.vert" to "shaders/compiled/oceanshader-vert.spv"
 const shaderDirName = "src\\shaders";
 const compiledShaderDirName = "src\\shaders\\compiled";
 //const compiledShaderDirName = "zig-out\\bin\\shaders"; //TODO: output shaders to build location/bin
+//
+// ex usage: buildVKShaders(b, exe, "oceanshader", "vert");
+// will compile "shaders/oceanshader.vert" to "shaders/compiled/oceanshader-vert.spv"
 fn buildVKShaders(b: *Builder, exe: anytype, shaderName: []const u8, shaderExt: []const u8) !void {
 
     //TODO iterate over shaders directory and compile
     // .vert .frag .geom .tesc .tese .comp
     // to shaders/compiled .spv automatically (shaders/compiled should be skipped)
+
+    // TODO if a shader has a compile error, replace it with an error shader that renders all pink
+
+    // TODO create a directory for excluded shaders which are not compiled; it will allow for you to have wip shaders or to move shaders which currently have errors/bugs into there to address later
 
     // For now, call this per file
     var inFileName = std.ArrayList(u8).init(b.allocator);
@@ -124,25 +129,25 @@ pub fn build(b: *Builder) !void {
 
     exe.addIncludeDir("src");
 
-    exe.addIncludeDir("dependency/cimgui");
-    exe.addIncludeDir("dependency/cimgui/imgui");
-    exe.addIncludeDir("dependency/cimgui/imgui/examples");
-    const imgui_flags = &[_][]const u8{
-        "-std=c++17",
-        "-Wno-return-type-c-linkage",
-        "-fno-exceptions",
-        "-DIMGUI_STATIC=yes",
-        "-fno-threadsafe-statics",
-        "-fno-rtti",
-        "-Wno-pragma-pack",
-    };
-    exe.addCSourceFile("dependency/cimgui/cimgui.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui_demo.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
-    exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
+    //exe.addIncludeDir("dependency/cimgui");
+    //exe.addIncludeDir("dependency/cimgui/imgui");
+    //exe.addIncludeDir("dependency/cimgui/imgui/examples");
+    //const imgui_flags = &[_][]const u8{
+    //    "-std=c++17",
+    //    "-Wno-return-type-c-linkage",
+    //    "-fno-exceptions",
+    //    "-DIMGUI_STATIC=yes",
+    //    "-fno-threadsafe-statics",
+    //    "-fno-rtti",
+    //    "-Wno-pragma-pack",
+    //};
+    //exe.addCSourceFile("dependency/cimgui/cimgui.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/imgui.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_demo.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
+    //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
 
     exe.addIncludeDir("dependency/SDL2/include");
     exe.addLibPath("dependency/SDL2/lib/x64");

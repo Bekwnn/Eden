@@ -1,4 +1,4 @@
-//TODO WIP initial vulkan implementation mainly referencing andrewrk/zig-vulkan-triangle and github gist YukiSnowy/dc31f47448ac61dd6aedee18b5d53858
+//TODO WIP initial vulkan implementation
 
 const std = @import("std");
 const debug = std.debug;
@@ -51,6 +51,15 @@ const RenderLoopError = error{
 //        @panic("imguiIO is null");
 //    }
 //}
+
+pub fn OnWindowResized(window: *c.SDL_Window) !void {
+    var width: c_int = 0;
+    var height: c_int = 0;
+    c.SDL_GetWindowSize(window, &width, &height);
+    debug.print("Window resized to {} x {}\n", .{ width, height });
+    vk.curCamera.m_aspectRatio = @intToFloat(f32, width) / @intToFloat(f32, height);
+    try vk.RecreateSwapchain(allocator);
+}
 
 pub fn Initialize() void {
     const meshPath = filePathUtils.CwdToAbsolute(allocator, "test-assets\\test.obj") catch {
@@ -163,7 +172,8 @@ var counter: u32 = 0;
 //    framebufferResized = true;
 //}
 var currentFrame: usize = 0;
-pub fn RenderFrame(window: *c.SDL_Window) !void {
+//pub fn RenderFrame(window: *c.SDL_Window) !void { //ImGui
+pub fn RenderFrame() !void {
     const swapchainAllocator = std.heap.page_allocator;
 
     vk.curCamera.m_pos.z = -2.0;
@@ -171,29 +181,29 @@ pub fn RenderFrame(window: *c.SDL_Window) !void {
     vk.curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
     vk.curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
 
-    c.ImGui_ImplVulkan_NewFrame();
-    c.ImGui_ImplSDL2_NewFrame(window);
-    c.igNewFrame();
-    c.igShowDemoWindow(&showDemoWindow);
-    c.igBegin("Hello, world!");
-    {
-        c.igText("This is some useful text.");
-        c.igCheckbox("Demo Window", &showDemoWindow);
+    //c.ImGui_ImplVulkan_NewFrame();
+    //c.ImGui_ImplSDL2_NewFrame(window);
+    //c.igNewFrame();
+    //c.igShowDemoWindow(&showDemoWindow);
+    //c.igBegin("Hello, world!");
+    //{
+    //    c.igText("This is some useful text.");
+    //    c.igCheckbox("Demo Window", &showDemoWindow);
 
-        c.igSliderFloat("float", &f, 0.0, 1.0);
+    //    c.igSliderFloat("float", &f, 0.0, 1.0);
 
-        if (c.igButton("Button")) {
-            counter += 1;
-        }
+    //    if (c.igButton("Button")) {
+    //        counter += 1;
+    //    }
 
-        c.igSameLine();
-        c.igText("counter = %d", counter);
+    //    c.igSameLine();
+    //    c.igText("counter = %d", counter);
 
-        c.igText("Application average {} ms/frame ({} FPS)", 1000.0 / c.igGetIO().Framerate, c.igGetIO().Framerate);
-    }
-    c.igEnd();
+    //    c.igText("Application average {} ms/frame ({} FPS)", 1000.0 / c.igGetIO().Framerate, c.igGetIO().Framerate);
+    //}
+    //c.igEnd();
 
-    c.igRender();
+    //c.igRender();
 
     const fencesResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, 2000000000);
     if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {

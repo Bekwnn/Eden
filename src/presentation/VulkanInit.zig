@@ -1,5 +1,5 @@
-//TODO WIP initial vulkan implementation referencing andrewrk/zig-vulkan-triangle and github gist YukiSnowy/dc31f47448ac61dd6aedee18b5d53858
-// and shout out to Alexander Overvoorde for his vulkan tutorial book
+//TODO WIP initial vulkan implementation
+// shout out to Alexander Overvoorde for his vulkan tutorial book
 
 const c = @import("../c.zig");
 
@@ -10,16 +10,17 @@ const Mesh = @import("Mesh.zig").Mesh;
 const Texture2D = @import("Texture2D.zig").Texture2D;
 const VertexData = @import("Mesh.zig").VertexData;
 const Camera = @import("Camera.zig").Camera;
+const Shader = @import("Shader.zig").Shader;
+
 const mat4x4 = @import("../math/Mat4x4.zig");
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 
 const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
 
-//TODO: these should be optional or something, but it seems like a PITA to unwrap them every time after intialization.
-//maybe they should all be contained in one giant struct which is optional based on whether vulkan has initialized yet?
-//A getter function which checks and returns the unwrapped optional and reports an error function if it doesn't exist
+//TODO: Gradually wrap these vk structs into structs that then handle creation, destruction, etc.
 
-//TODO abstract these pipeline items to a presentation "instance" or something like that
+//TODO maybe the renderer should have some big optional "render world" that can be initialized/torn down/rebuilt?
+
 // PIPELINE START
 pub var instance: c.VkInstance = undefined;
 
@@ -114,10 +115,8 @@ const VKInitError = error{
     FailedToCreateSwapchain,
     FailedToCreateImageView,
     FailedToCreateRenderPass,
-    FailedToCreateShader,
     FailedToCreateLayout,
     FailedToCreatePipeline,
-    FailedToReadShaderFile,
     FailedToCreateFramebuffers,
     FailedToCreateCommandPool,
     FailedToCreateVertexBuffer,
@@ -843,52 +842,6 @@ fn CreateRenderPass() !void {
     );
 }
 
-// returns owned slice; caller needs to free
-fn ReadShaderFile(comptime alignment: comptime_int, allocator: Allocator, relativeShaderPath: []const u8) ![]align(alignment) const u8 {
-    std.debug.print("Reading shader {s}...\n", .{relativeShaderPath});
-
-    var shaderDir = std.fs.cwd();
-    var splitShaderPath = std.mem.tokenize(u8, relativeShaderPath, "\\/");
-
-    while (splitShaderPath.next()) |path| {
-        shaderDir = shaderDir.openDir(path, .{}) catch |err| {
-            if (err != std.fs.Dir.OpenError.NotDir) {
-                return err;
-            } else {
-                const shaderFile = try shaderDir.openFile(path, .{});
-                defer shaderFile.close();
-
-                var shaderCode: []align(alignment) u8 = try allocator.allocAdvanced(u8, alignment, try shaderFile.getEndPos(), .exact);
-
-                _ = try shaderFile.read(shaderCode);
-                return shaderCode;
-            }
-        };
-    }
-    return VKInitError.FailedToReadShaderFile;
-}
-
-fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.VkShaderModule {
-    const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFile(@alignOf(u32), allocator, relativeShaderPath);
-    defer allocator.free(shaderCode);
-
-    const createInfo = c.VkShaderModuleCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = shaderCode.len,
-        .pCode = std.mem.bytesAsSlice(u32, shaderCode).ptr,
-        .pNext = null,
-        .flags = 0,
-    };
-
-    var shaderModule: c.VkShaderModule = undefined;
-    try CheckVkSuccess(
-        c.vkCreateShaderModule(logicalDevice, &createInfo, null, &shaderModule),
-        VKInitError.FailedToCreateShader,
-    );
-
-    return shaderModule;
-}
-
 pub fn CreateDescriptorSetLayout() !void {
     const mvpUniformDescriptor = c.VkDescriptorSetLayoutBinding{
         .binding = 0,
@@ -916,7 +869,7 @@ pub fn CreateDescriptorSetLayout() !void {
 
     try CheckVkSuccess(
         c.vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, null, &descriptorSetLayout),
-        VKInitError.FailedToCreateShader,
+        VKInitError.FailedToCreateDescriptorSets,
     );
 }
 
@@ -925,15 +878,17 @@ pub fn CreateGraphicsPipeline(
     vertShaderRelativePath: []const u8,
     fragShaderRelativePath: []const u8,
 ) !void {
-    const vertShaderModule = try CreateShaderModule(allocator, vertShaderRelativePath);
-    defer c.vkDestroyShaderModule(logicalDevice, vertShaderModule, null);
-    const fragShaderModule = try CreateShaderModule(allocator, fragShaderRelativePath);
-    defer c.vkDestroyShaderModule(logicalDevice, fragShaderModule, null);
+    var shader = try Shader.CreateBasicShader(
+        allocator,
+        vertShaderRelativePath,
+        fragShaderRelativePath,
+    );
+    defer shader.FreeShader();
 
     const vertPipelineCreateInfo = c.VkPipelineShaderStageCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = c.VK_SHADER_STAGE_VERTEX_BIT,
-        .module = vertShaderModule,
+        .module = shader.m_vertShader.?,
         .pName = "main",
         .pSpecializationInfo = null,
         .pNext = null,
@@ -942,7 +897,7 @@ pub fn CreateGraphicsPipeline(
     const fragPipelineCreateInfo = c.VkPipelineShaderStageCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        .module = fragShaderModule,
+        .module = shader.m_fragShader.?,
         .pName = "main",
         .pSpecializationInfo = null,
         .pNext = null,

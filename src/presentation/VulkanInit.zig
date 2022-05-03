@@ -11,15 +11,16 @@ const Texture2D = @import("Texture2D.zig").Texture2D;
 const VertexData = @import("Mesh.zig").VertexData;
 const Camera = @import("Camera.zig").Camera;
 const Shader = @import("Shader.zig").Shader;
+const Swapchain = @import("Swapchain.zig").Swapchain;
 
 const mat4x4 = @import("../math/Mat4x4.zig");
-const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
+const Mat4x4 = mat4x4.Mat4x4;
 
 const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
 
 //TODO: Gradually wrap these vk structs into structs that then handle creation, destruction, etc.
 
-//TODO maybe the renderer should have some big optional "render world" that can be initialized/torn down/rebuilt?
+//TODO the renderer should be some big optional "render world" that can be initialized/torn down/rebuilt
 
 // PIPELINE START
 pub var instance: c.VkInstance = undefined;
@@ -40,21 +41,13 @@ pub var curFrameBufferIdx: u32 = 0;
 
 pub var msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT;
 
-pub var swapchain: c.VkSwapchainKHR = undefined;
-pub var swapchainImageCount: u32 = undefined;
-pub var swapchainImages: []c.VkImage = undefined;
-pub var swapchainImageFormat: c.VkFormat = undefined;
-pub var swapchainSurfaceFormat: c.VkSurfaceFormatKHR = undefined;
-pub var swapchainFormat: c.VkSurfaceFormatKHR = undefined;
-pub var swapchainExtent: c.VkExtent2D = undefined;
-pub var swapchainImageViews: []c.VkImageView = undefined;
+pub var swapchain: Swapchain = undefined;
 
 pub var renderPass: c.VkRenderPass = undefined;
 pub var descriptorSetLayout: c.VkDescriptorSetLayout = undefined;
 pub var pipelineLayout: c.VkPipelineLayout = undefined;
 pub var graphicsPipeline: c.VkPipeline = undefined;
 pub var pipelineCache: c.VkPipelineCache = undefined;
-pub var swapchainFrameBuffers: []c.VkFramebuffer = undefined;
 pub var commandPool: c.VkCommandPool = undefined;
 pub var commandBuffers: []c.VkCommandBuffer = undefined;
 
@@ -65,9 +58,6 @@ pub var inFlightFences: [BUFFER_FRAMES]c.VkFence = undefined;
 const validationLayers = [_][*:0]const u8{
     "VK_LAYER_KHRONOS_validation",
 };
-
-const INITIAL_WIDTH = 1280;
-const INITIAL_HEIGHT = 720;
 //PIPELINE END
 
 pub var curMesh: ?Mesh = null;
@@ -84,18 +74,6 @@ pub var uniformBuffersMemory: []c.VkDeviceMemory = undefined;
 pub var descriptorPool: c.VkDescriptorPool = undefined;
 pub var descriptorSets: []c.VkDescriptorSet = undefined;
 
-pub var depthImage = GraphicsImage{
-    .vkImage = undefined,
-    .vkMemory = undefined,
-    .vkView = undefined,
-};
-
-pub var colorImage = GraphicsImage{
-    .vkImage = undefined,
-    .vkMemory = undefined,
-    .vkView = undefined,
-};
-
 pub var textureMipLevels: u32 = undefined;
 pub var textureImage = GraphicsImage{
     .vkImage = undefined,
@@ -110,14 +88,11 @@ const VKInitError = error{
     NoSupportedDevice, // no device supporting vulkan detected
     NoSuitableDevice, // device with vulkan support detected; does not satisfy properties
     LogicDeviceCreationFailed,
-    NoAvailablePresentMode,
     NoAvailableSwapSurfaceFormat,
-    FailedToCreateSwapchain,
     FailedToCreateImageView,
     FailedToCreateRenderPass,
     FailedToCreateLayout,
     FailedToCreatePipeline,
-    FailedToCreateFramebuffers,
     FailedToCreateCommandPool,
     FailedToCreateVertexBuffer,
     FailedToCreateDescriptorPool,
@@ -175,9 +150,6 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     std.debug.print("CreateSwapchain()...\n", .{});
     try CreateSwapchain(allocator);
 
-    std.debug.print("CreateSwapchainImageViews()...\n", .{});
-    try CreateSwapchainImageViews(allocator);
-
     std.debug.print("CreateRenderPass()...\n", .{});
     try CreateRenderPass();
 
@@ -185,19 +157,20 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     try CreateDescriptorSetLayout();
 
     std.debug.print("CreateGraphicsPipeline()...\n", .{});
-    try CreateGraphicsPipeline(allocator, "src/shaders/compiled/basic_mesh-vert.spv", "src/shaders/compiled/basic_mesh-frag.spv");
+    try CreateGraphicsPipeline(
+        allocator,
+        "src/shaders/compiled/basic_mesh-vert.spv",
+        "src/shaders/compiled/basic_mesh-frag.spv",
+    );
 
     std.debug.print("CreateCommandPool()...\n", .{});
     try CreateCommandPool();
 
-    std.debug.print("CreateColorResources()...\n", .{});
-    try CreateColorResources();
-
-    std.debug.print("CreateDepthResources()...\n", .{});
-    try CreateDepthResources();
+    std.debug.print("CreateColorAndDepthResources()...\n", .{});
+    try swapchain.CreateColorAndDepthResources(msaaSamples);
 
     std.debug.print("CreateFrameBuffers()...\n", .{});
-    try CreateFrameBuffers(allocator);
+    try swapchain.CreateFrameBuffers(allocator, logicalDevice, renderPass);
 
     const testImagePath = "test-assets\\test.png";
     std.debug.print("CreateTextureImage()...\n", .{});
@@ -232,12 +205,12 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
 }
 
 pub fn VulkanCleanup() void {
-    // defer so execution happens in unwinding order--easier to match init order above
+    // defer so execution happens in unwinding order--easier to compare with init order above
     defer c.vkDestroyInstance(instance, null);
 
     defer c.vkDestroySurfaceKHR(instance, surface, null);
 
-    // if (enableValidationLayers) destroy debug utils messanger
+    // if (enableValidationLayers) destroy debug utils messenger
 
     defer c.vkDestroyDevice(logicalDevice, null);
 
@@ -283,16 +256,26 @@ pub fn RecreateSwapchain(allocator: Allocator) !void {
     CleanupSwapchain();
 
     try CreateSwapchain(allocator);
-    try CreateSwapchainImageViews(allocator);
     try CreateRenderPass();
     try CreateGraphicsPipeline(allocator, "src/shaders/compiled/basic_mesh-vert.spv", "src/shaders/compiled/basic_mesh-frag.spv");
-    try CreateColorResources();
-    try CreateDepthResources();
-    try CreateFrameBuffers(allocator);
     try CreateUniformBuffers(allocator);
     try CreateDescriptorPool();
     try CreateDescriptorSets(allocator);
     try CreateCommandBuffers(allocator);
+}
+
+fn CreateSwapchain(allocator: Allocator) !void {
+    if (queueFamilyDetails.graphicsQueueIdx == null or queueFamilyDetails.presentQueueIdx == null) {
+        return VKInitError.VKError;
+    }
+    swapchain = try Swapchain.CreateSwapchain(
+        allocator,
+        logicalDevice,
+        physicalDevice,
+        surface,
+        queueFamilyDetails.graphicsQueueIdx.?,
+        queueFamilyDetails.presentQueueIdx.?,
+    );
 }
 
 fn CleanupSwapchain() void {
@@ -306,37 +289,13 @@ fn CleanupSwapchain() void {
         c.vkDestroyDescriptorPool(logicalDevice, descriptorPool, null);
     }
 
-    defer c.vkDestroySwapchainKHR(logicalDevice, swapchain, null);
-
-    defer {
-        for (swapchainImageViews) |imageView| {
-            c.vkDestroyImageView(logicalDevice, imageView, null);
-        }
-    }
+    defer swapchain.FreeSwapchain(logicalDevice);
 
     defer c.vkDestroyRenderPass(logicalDevice, renderPass, null);
     defer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
     defer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
 
     defer c.vkFreeCommandBuffers(logicalDevice, commandPool, @intCast(u32, commandBuffers.len), commandBuffers.ptr);
-
-    defer {
-        for (swapchainFrameBuffers) |frameBuffer| {
-            c.vkDestroyFramebuffer(logicalDevice, frameBuffer, null);
-        }
-    }
-
-    defer {
-        c.vkDestroyImageView(logicalDevice, depthImage.vkView, null);
-        c.vkDestroyImage(logicalDevice, depthImage.vkImage, null);
-        c.vkFreeMemory(logicalDevice, depthImage.vkMemory, null);
-    }
-
-    defer {
-        c.vkDestroyImage(logicalDevice, colorImage.vkImage, null);
-        c.vkFreeMemory(logicalDevice, colorImage.vkMemory, null);
-        c.vkDestroyImageView(logicalDevice, colorImage.vkView, null);
-    }
 }
 
 fn CheckValidationLayerSupport(allocator: Allocator) !void {
@@ -485,7 +444,8 @@ fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, wi
     return swapchainSupported and graphicsSupportExists and deviceFeatures.geometryShader == c.VK_TRUE and deviceFeatures.samplerAnisotropy == c.VK_TRUE;
 }
 
-fn QuerySwapchainSupport(allocator: Allocator, physDevice: c.VkPhysicalDevice, s: c.VkSurfaceKHR) !SwapchainSupportDetails {
+//TODO shared function, where should this live?
+pub fn QuerySwapchainSupport(allocator: Allocator, physDevice: c.VkPhysicalDevice, s: c.VkSurfaceKHR) !SwapchainSupportDetails {
     var details: SwapchainSupportDetails = undefined;
 
     try CheckVkSuccess(
@@ -649,116 +609,9 @@ fn CreateSurface(window: *c.SDL_Window) !void {
     }
 }
 
-fn ChooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
-    if (capabilities.currentExtent.width != std.math.maxInt(u32)) {
-        return capabilities.currentExtent;
-    } else {
-        return c.VkExtent2D{
-            .width = std.math.clamp(INITIAL_WIDTH, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-            .height = std.math.clamp(INITIAL_HEIGHT, capabilities.minImageExtent.height, capabilities.maxImageExtent.height),
-        };
-    }
-}
-
-fn ChooseSwapSurfaceFormat(availableFormats: []c.VkSurfaceFormatKHR) !c.VkSurfaceFormatKHR {
-    for (availableFormats) |format| {
-        if (format.format == c.VK_FORMAT_B8G8R8A8_SRGB and format.colorSpace == c.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            return format;
-        }
-    }
-
-    if (availableFormats.len == 0) {
-        return VKInitError.NoAvailableSwapSurfaceFormat;
-    }
-
-    return availableFormats[0];
-}
-
-fn ChooseSwapPresentMode(availablePresentModes: []c.VkPresentModeKHR) !c.VkPresentModeKHR {
-    for (availablePresentModes) |presentMode| {
-        if (presentMode == c.VK_PRESENT_MODE_MAILBOX_KHR) {
-            return presentMode;
-        }
-    }
-
-    if (availablePresentModes.len == 0) {
-        return VKInitError.NoAvailablePresentMode;
-    }
-
-    return availablePresentModes[0];
-}
-
-fn CreateSwapchain(allocator: Allocator) !void {
-    const swapchainSupport = try QuerySwapchainSupport(allocator, physicalDevice, surface);
-
-    swapchainExtent = ChooseSwapExtent(swapchainSupport.capabilities);
-
-    swapchainFormat = try ChooseSwapSurfaceFormat(swapchainSupport.formats);
-    swapchainImageFormat = swapchainFormat.format;
-    const presentMode: c.VkPresentModeKHR = try ChooseSwapPresentMode(swapchainSupport.presentModes);
-
-    // you want 1 more than minimum to avoid waiting
-    swapchainImageCount = swapchainSupport.capabilities.minImageCount + 1;
-
-    // ensure we're within max image count
-    if (swapchainSupport.capabilities.maxImageCount > 0 and swapchainImageCount > swapchainSupport.capabilities.maxImageCount) {
-        swapchainImageCount = swapchainSupport.capabilities.maxImageCount;
-    }
-
-    const queueFamilyIndices = [_]u32{
-        queueFamilyDetails.graphicsQueueIdx orelse return VKInitError.FailedToCreateSwapchain,
-        queueFamilyDetails.presentQueueIdx orelse return VKInitError.FailedToCreateSwapchain,
-    };
-    const queuesAreConcurrent = queueFamilyIndices[0] != queueFamilyIndices[1];
-    const createInfo = c.VkSwapchainCreateInfoKHR{
-        .sType = c.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .surface = surface,
-        .minImageCount = swapchainImageCount,
-        .imageFormat = swapchainFormat.format,
-        .imageColorSpace = swapchainFormat.colorSpace,
-        .imageExtent = swapchainExtent,
-        .imageArrayLayers = 1,
-        .imageUsage = c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-
-        .imageSharingMode = if (queuesAreConcurrent) c.VK_SHARING_MODE_CONCURRENT else c.VK_SHARING_MODE_EXCLUSIVE,
-        .queueFamilyIndexCount = if (queuesAreConcurrent) 2 else 0,
-        .pQueueFamilyIndices = if (queuesAreConcurrent) &queueFamilyIndices else null,
-
-        .preTransform = swapchainSupport.capabilities.currentTransform,
-        .compositeAlpha = c.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = presentMode,
-        .clipped = c.VK_TRUE,
-        .oldSwapchain = null, //TODO check the sanity of this
-        .pNext = null,
-        .flags = 0,
-    };
-    try CheckVkSuccess(
-        c.vkCreateSwapchainKHR(logicalDevice, &createInfo, null, &swapchain),
-        VKInitError.FailedToCreateSwapchain,
-    );
-
-    try CheckVkSuccess(
-        c.vkGetSwapchainImagesKHR(logicalDevice, swapchain, &swapchainImageCount, null),
-        VKInitError.VKError,
-    );
-    swapchainImages = try allocator.alloc(c.VkImage, swapchainImageCount);
-    try CheckVkSuccess(
-        c.vkGetSwapchainImagesKHR(logicalDevice, swapchain, &swapchainImageCount, &swapchainImages[0]),
-        VKInitError.VKError,
-    );
-}
-
-fn CreateSwapchainImageViews(allocator: Allocator) !void {
-    swapchainImageViews = try allocator.alloc(c.VkImageView, swapchainImages.len);
-    var i: u32 = 0;
-    while (i < swapchainImages.len) : (i += 1) {
-        swapchainImageViews[i] = try CreateImageView(swapchainImages[i], swapchainImageFormat, c.VK_IMAGE_ASPECT_COLOR_BIT, 1);
-    }
-}
-
 fn CreateRenderPass() !void {
     const colorAttachment = c.VkAttachmentDescription{
-        .format = swapchainImageFormat,
+        .format = swapchain.m_format.format,
         .samples = msaaSamples,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
@@ -773,7 +626,7 @@ fn CreateRenderPass() !void {
         .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     };
     const colorAttachmentResolve = c.VkAttachmentDescription{
-        .format = swapchainImageFormat,
+        .format = swapchain.m_format.format,
         .samples = c.VK_SAMPLE_COUNT_1_BIT,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
@@ -933,14 +786,14 @@ pub fn CreateGraphicsPipeline(
     const viewport = c.VkViewport{
         .x = 0.0,
         .y = 0.0,
-        .width = @intToFloat(f32, swapchainExtent.width),
-        .height = @intToFloat(f32, swapchainExtent.height),
+        .width = @intToFloat(f32, swapchain.m_extent.width),
+        .height = @intToFloat(f32, swapchain.m_extent.height),
         .minDepth = 0.0,
         .maxDepth = 1.0,
     };
     const scissor = c.VkRect2D{
         .offset = c.VkOffset2D{ .x = 0, .y = 0 },
-        .extent = swapchainExtent,
+        .extent = swapchain.m_extent,
     };
     const viewportState = c.VkPipelineViewportStateCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -1074,35 +927,6 @@ pub fn CreateGraphicsPipeline(
     );
 }
 
-fn CreateFrameBuffers(allocator: Allocator) !void {
-    swapchainFrameBuffers = try allocator.alloc(c.VkFramebuffer, swapchainImageViews.len);
-    var i: usize = 0;
-    while (i < swapchainImageViews.len) : (i += 1) {
-        var attachments = [_]c.VkImageView{
-            colorImage.vkView,
-            depthImage.vkView,
-            swapchainImageViews[i],
-        };
-
-        const framebufferInfo = c.VkFramebufferCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            .renderPass = renderPass,
-            .attachmentCount = attachments.len,
-            .pAttachments = &attachments,
-            .width = swapchainExtent.width,
-            .height = swapchainExtent.height,
-            .layers = 1,
-            .flags = 0,
-            .pNext = null,
-        };
-
-        try CheckVkSuccess(
-            c.vkCreateFramebuffer(logicalDevice, &framebufferInfo, null, &swapchainFrameBuffers[i]),
-            VKInitError.FailedToCreateFramebuffers,
-        );
-    }
-}
-
 fn CreateCommandPool() !void {
     const poolInfo = c.VkCommandPoolCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -1117,7 +941,17 @@ fn CreateCommandPool() !void {
     );
 }
 
-fn FindSupportedFormat(
+//TODO shared function; should this live here?
+pub fn FindDepthFormat() !c.VkFormat {
+    return FindSupportedFormat(
+        &[_]c.VkFormat{ c.VK_FORMAT_D32_SFLOAT, c.VK_FORMAT_D32_SFLOAT_S8_UINT, c.VK_FORMAT_D24_UNORM_S8_UINT },
+        c.VK_IMAGE_TILING_OPTIMAL,
+        c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    );
+}
+
+//TODO shared function; should this live here?
+pub fn FindSupportedFormat(
     candidates: []const c.VkFormat,
     tiling: c.VkImageTiling,
     features: c.VkFormatFeatureFlags,
@@ -1138,62 +972,12 @@ fn FindSupportedFormat(
     return VKInitError.VKError;
 }
 
-fn CreateColorResources() !void {
-    const colorFormat = swapchainImageFormat;
-
-    try CreateImage(
-        swapchainExtent.width,
-        swapchainExtent.height,
-        1,
-        msaaSamples,
-        colorFormat,
-        c.VK_IMAGE_TILING_OPTIMAL,
-        c.VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-            c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &colorImage.vkImage,
-        &colorImage.vkMemory,
-    );
-    colorImage.vkView = try CreateImageView(colorImage.vkImage, colorFormat, c.VK_IMAGE_ASPECT_COLOR_BIT, 1);
-}
-
 fn HasStencilComponent(format: c.VkFormat) bool {
     return format == c.VK_FORMAT_D32_SFLOAT_S8_UINT or format == c.VK_FORMAT_D24_UNORM_S8_UINT;
 }
 
-fn FindDepthFormat() !c.VkFormat {
-    return FindSupportedFormat(
-        &[_]c.VkFormat{ c.VK_FORMAT_D32_SFLOAT, c.VK_FORMAT_D32_SFLOAT_S8_UINT, c.VK_FORMAT_D24_UNORM_S8_UINT },
-        c.VK_IMAGE_TILING_OPTIMAL,
-        c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
-    );
-}
-
-fn CreateDepthResources() !void {
-    const depthFormat = try FindDepthFormat();
-    try CreateImage(
-        swapchainExtent.width,
-        swapchainExtent.height,
-        1,
-        msaaSamples,
-        depthFormat,
-        c.VK_IMAGE_TILING_OPTIMAL,
-        c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &depthImage.vkImage,
-        &depthImage.vkMemory,
-    );
-    depthImage.vkView = try CreateImageView(depthImage.vkImage, depthFormat, c.VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-    try TransitionImageLayout(
-        depthImage.vkImage,
-        depthFormat,
-        c.VK_IMAGE_LAYOUT_UNDEFINED,
-        c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        1,
-    );
-}
-
-fn CreateImage(
+//TODO shared function; where should it live?
+pub fn CreateImage(
     width: u32,
     height: u32,
     mipLevels: u32,
@@ -1452,7 +1236,8 @@ fn CreateTextureImage(imagePath: []const u8) !void {
     try GenerateMipmaps(textureImage.vkImage, c.VK_FORMAT_R8G8B8A8_SRGB, image.m_width, image.m_height, textureMipLevels);
 }
 
-fn CreateImageView(
+//TODO shared function; where should it live?
+pub fn CreateImageView(
     image: c.VkImage,
     format: c.VkFormat,
     aspectFlags: c.VkImageAspectFlags,
@@ -1690,7 +1475,8 @@ fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u
     try EndSingleTimeCommands(commandBuffer);
 }
 
-fn TransitionImageLayout(
+//TODO shared function; where should it live?
+pub fn TransitionImageLayout(
     image: c.VkImage,
     format: c.VkFormat,
     oldLayout: c.VkImageLayout,
@@ -1853,11 +1639,11 @@ const MeshUBO = packed struct {
 fn CreateUniformBuffers(allocator: Allocator) !void {
     var bufferSize: c.VkDeviceSize = @sizeOf(MeshUBO);
 
-    uniformBuffers = try allocator.alloc(c.VkBuffer, swapchainImages.len);
-    uniformBuffersMemory = try allocator.alloc(c.VkDeviceMemory, swapchainImages.len);
+    uniformBuffers = try allocator.alloc(c.VkBuffer, swapchain.m_images.len);
+    uniformBuffersMemory = try allocator.alloc(c.VkDeviceMemory, swapchain.m_images.len);
 
     var i: u32 = 0;
-    while (i < swapchainImages.len) : (i += 1) {
+    while (i < swapchain.m_images.len) : (i += 1) {
         try CreateBuffer(
             bufferSize,
             c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -1890,11 +1676,11 @@ pub fn UpdateUniformBuffer(camera: *Camera, currentFrame: usize) !void {
 fn CreateDescriptorPool() !void {
     const uboSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = @intCast(u32, swapchainImages.len),
+        .descriptorCount = @intCast(u32, swapchain.m_images.len),
     };
     const imageSamplerSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = @intCast(u32, swapchainImages.len),
+        .descriptorCount = @intCast(u32, swapchain.m_images.len),
     };
 
     const poolSizes = [_]c.VkDescriptorPoolSize{ uboSize, imageSamplerSize };
@@ -1902,7 +1688,7 @@ fn CreateDescriptorPool() !void {
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .poolSizeCount = poolSizes.len,
         .pPoolSizes = &poolSizes,
-        .maxSets = @intCast(u32, swapchainImages.len),
+        .maxSets = @intCast(u32, swapchain.m_images.len),
         .flags = 0,
         .pNext = null,
     };
@@ -1914,7 +1700,7 @@ fn CreateDescriptorPool() !void {
 }
 
 fn CreateDescriptorSets(allocator: Allocator) !void {
-    var layouts = try allocator.alloc(c.VkDescriptorSetLayout, swapchainImages.len);
+    var layouts = try allocator.alloc(c.VkDescriptorSetLayout, swapchain.m_images.len);
     for (layouts) |*layout| {
         layout.* = descriptorSetLayout;
     }
@@ -1922,19 +1708,19 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
     const allocInfo = c.VkDescriptorSetAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = descriptorPool,
-        .descriptorSetCount = @intCast(u32, swapchainImages.len),
+        .descriptorSetCount = @intCast(u32, swapchain.m_images.len),
         .pSetLayouts = layouts.ptr,
         .pNext = null,
     };
 
-    descriptorSets = try allocator.alloc(c.VkDescriptorSet, swapchainImages.len);
+    descriptorSets = try allocator.alloc(c.VkDescriptorSet, swapchain.m_images.len);
     try CheckVkSuccess(
         c.vkAllocateDescriptorSets(logicalDevice, &allocInfo, descriptorSets.ptr),
         VKInitError.FailedToCreateDescriptorSets,
     );
 
     var i: u32 = 0;
-    while (i < swapchainImages.len) : (i += 1) {
+    while (i < swapchain.m_images.len) : (i += 1) {
         const bufferInfo = c.VkDescriptorBufferInfo{
             .buffer = uniformBuffers[i],
             .offset = 0,
@@ -1975,7 +1761,7 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
 }
 
 fn CreateCommandBuffers(allocator: Allocator) !void {
-    commandBuffers = try allocator.alloc(c.VkCommandBuffer, swapchainFrameBuffers.len);
+    commandBuffers = try allocator.alloc(c.VkCommandBuffer, swapchain.m_frameBuffers.len);
     const allocInfo = c.VkCommandBufferAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = commandPool,
@@ -2013,13 +1799,13 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         const renderPassInfo = c.VkRenderPassBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = renderPass,
-            .framebuffer = swapchainFrameBuffers[i],
+            .framebuffer = swapchain.m_frameBuffers[i],
             .renderArea = c.VkRect2D{
                 .offset = c.VkOffset2D{
                     .x = 0,
                     .y = 0,
                 },
-                .extent = swapchainExtent,
+                .extent = swapchain.m_extent,
             },
             .clearValueCount = 2,
             .pClearValues = &clearValues,

@@ -99,13 +99,13 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     const renderPassInfo = c.VkRenderPassBeginInfo{
         .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = vk.renderPass,
-        .framebuffer = vk.swapchainFrameBuffers[imageIndex],
+        .framebuffer = vk.swapchain.m_frameBuffers[imageIndex],
         .renderArea = c.VkRect2D{
             .offset = c.VkOffset2D{
                 .x = 0,
                 .y = 0,
             },
-            .extent = vk.swapchainExtent,
+            .extent = vk.swapchain.m_extent,
         },
         .clearValueCount = 2,
         .pClearValues = &clearValues,
@@ -211,7 +211,7 @@ pub fn RenderFrame() !void {
     }
 
     var imageIndex: u32 = 0;
-    const acquireImageResult = c.vkAcquireNextImageKHR(vk.logicalDevice, vk.swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
+    const acquireImageResult = c.vkAcquireNextImageKHR(vk.logicalDevice, vk.swapchain.m_swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
     if (acquireImageResult == c.VK_ERROR_OUT_OF_DATE_KHR) {
         try vk.RecreateSwapchain(swapchainAllocator);
         return;
@@ -253,7 +253,7 @@ pub fn RenderFrame() !void {
         RenderLoopError.FailedToSubmitDrawCommandBuffer,
     );
 
-    const swapchains = [_]c.VkSwapchainKHR{vk.swapchain};
+    const swapchains = [_]c.VkSwapchainKHR{vk.swapchain.m_swapchain};
     const presentInfo = c.VkPresentInfoKHR{
         .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,

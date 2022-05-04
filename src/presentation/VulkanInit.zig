@@ -7,7 +7,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Mesh = @import("Mesh.zig").Mesh;
-const Texture2D = @import("Texture2D.zig").Texture2D;
+const Texture = @import("Texture.zig").Texture;
 const VertexData = @import("Mesh.zig").VertexData;
 const Camera = @import("Camera.zig").Camera;
 const Shader = @import("Shader.zig").Shader;
@@ -74,12 +74,7 @@ pub var uniformBuffersMemory: []c.VkDeviceMemory = undefined;
 pub var descriptorPool: c.VkDescriptorPool = undefined;
 pub var descriptorSets: []c.VkDescriptorSet = undefined;
 
-pub var textureMipLevels: u32 = undefined;
-pub var textureImage = GraphicsImage{
-    .vkImage = undefined,
-    .vkMemory = undefined,
-    .vkView = undefined,
-};
+pub var textureImage: Texture = undefined;
 pub var textureSampler: c.VkSampler = undefined;
 
 const VKInitError = error{
@@ -105,13 +100,6 @@ const VKInitError = error{
     FailedToCheckInstanceLayerProperties,
     MissingValidationLayer,
     MissingCurMesh, //TODO delete after testing
-};
-
-//TODO move, rename, create image asset abstraction
-pub const GraphicsImage = struct {
-    vkImage: c.VkImage,
-    vkMemory: c.VkDeviceMemory,
-    vkView: c.VkImageView,
 };
 
 //TODO could have a better home
@@ -167,7 +155,7 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     try CreateCommandPool();
 
     std.debug.print("CreateColorAndDepthResources()...\n", .{});
-    try swapchain.CreateColorAndDepthResources(msaaSamples);
+    try swapchain.CreateColorAndDepthResources(logicalDevice, msaaSamples);
 
     std.debug.print("CreateFrameBuffers()...\n", .{});
     try swapchain.CreateFrameBuffers(allocator, logicalDevice, renderPass);
@@ -236,11 +224,8 @@ pub fn VulkanCleanup() void {
 
     defer c.vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayout, null);
 
-    defer {
-        c.vkDestroyImageView(logicalDevice, textureImage.vkView, null);
-        c.vkDestroyImage(logicalDevice, textureImage.vkImage, null);
-        c.vkFreeMemory(logicalDevice, textureImage.vkMemory, null);
-    }
+    defer textureImage.FreeTexture(logicalDevice);
+
     defer c.vkDestroySampler(logicalDevice, textureSampler, null);
 
     defer CleanupSwapchain();
@@ -257,7 +242,13 @@ pub fn RecreateSwapchain(allocator: Allocator) !void {
 
     try CreateSwapchain(allocator);
     try CreateRenderPass();
-    try CreateGraphicsPipeline(allocator, "src/shaders/compiled/basic_mesh-vert.spv", "src/shaders/compiled/basic_mesh-frag.spv");
+    try CreateGraphicsPipeline(
+        allocator,
+        "src/shaders/compiled/basic_mesh-vert.spv",
+        "src/shaders/compiled/basic_mesh-frag.spv",
+    );
+    try swapchain.CreateColorAndDepthResources(logicalDevice, msaaSamples);
+    try swapchain.CreateFrameBuffers(allocator, logicalDevice, renderPass);
     try CreateUniformBuffers(allocator);
     try CreateDescriptorPool();
     try CreateDescriptorSets(allocator);
@@ -295,7 +286,11 @@ fn CleanupSwapchain() void {
     defer c.vkDestroyPipelineLayout(logicalDevice, pipelineLayout, null);
     defer c.vkDestroyPipeline(logicalDevice, graphicsPipeline, null);
 
+    defer swapchain.CleanupFrameBuffers(logicalDevice);
+
     defer c.vkFreeCommandBuffers(logicalDevice, commandPool, @intCast(u32, commandBuffers.len), commandBuffers.ptr);
+
+    defer swapchain.CleanupDepthAndColorImages(logicalDevice);
 }
 
 fn CheckValidationLayerSupport(allocator: Allocator) !void {
@@ -977,266 +972,6 @@ fn HasStencilComponent(format: c.VkFormat) bool {
 }
 
 //TODO shared function; where should it live?
-pub fn CreateImage(
-    width: u32,
-    height: u32,
-    mipLevels: u32,
-    numSamples: c.VkSampleCountFlagBits,
-    format: c.VkFormat,
-    tiling: c.VkImageTiling,
-    usage: c.VkImageUsageFlags,
-    properties: c.VkMemoryPropertyFlags,
-    image: *c.VkImage,
-    imageMemory: *c.VkDeviceMemory,
-) !void {
-    const imageInfo = c.VkImageCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType = c.VK_IMAGE_TYPE_2D,
-        .extent = c.VkExtent3D{
-            .width = width,
-            .height = height,
-            .depth = 1,
-        },
-        .mipLevels = mipLevels,
-        .arrayLayers = 1,
-        .format = format,
-        .tiling = tiling,
-        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .usage = usage,
-        .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
-        .samples = numSamples,
-        .queueFamilyIndexCount = 0,
-        .pQueueFamilyIndices = null,
-        .pNext = null,
-        .flags = 0,
-    };
-    try CheckVkSuccess(
-        c.vkCreateImage(logicalDevice, &imageInfo, null, image),
-        VKInitError.VKError,
-    );
-
-    var memRequirements: c.VkMemoryRequirements = undefined;
-    c.vkGetImageMemoryRequirements(logicalDevice, image.*, &memRequirements);
-    const allocInfo = c.VkMemoryAllocateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = memRequirements.size,
-        .memoryTypeIndex = try FindMemoryType(memRequirements.memoryTypeBits, properties),
-        .pNext = null,
-    };
-    try CheckVkSuccess(
-        c.vkAllocateMemory(logicalDevice, &allocInfo, null, imageMemory),
-        VKInitError.VKError,
-    );
-
-    try CheckVkSuccess(
-        c.vkBindImageMemory(logicalDevice, image.*, imageMemory.*, 0),
-        VKInitError.VKError,
-    );
-}
-
-//TODO generating mip maps should be done offline; possibly as a build step/function?
-// shader compilation and other rendering-baking could join it
-fn GenerateMipmaps(image: c.VkImage, imageFormat: c.VkFormat, imageWidth: u32, imageHeight: u32, mipLevels: u32) !void {
-    var formatProperties: c.VkFormatProperties = undefined;
-    c.vkGetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, &formatProperties);
-    if (formatProperties.optimalTilingFeatures & c.VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT == 0) {
-        return VKInitError.VKError;
-    }
-
-    var commandBuffer = try BeginSingleTimeCommands();
-
-    var barrier = c.VkImageMemoryBarrier{
-        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .image = image,
-        .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
-        .subresourceRange = c.VkImageSubresourceRange{
-            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        },
-        .srcAccessMask = 0,
-        .dstAccessMask = 0,
-        .pNext = null,
-    };
-
-    var mipWidth = imageWidth;
-    var mipHeight = imageHeight;
-    var i: u32 = 1;
-    while (i < mipLevels) : (i += 1) {
-        barrier.subresourceRange.baseMipLevel = i - 1;
-        barrier.oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT;
-
-        c.vkCmdPipelineBarrier(
-            commandBuffer,
-            c.VK_PIPELINE_STAGE_TRANSFER_BIT,
-            c.VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            0,
-            null,
-            0,
-            null,
-            1,
-            &barrier,
-        );
-
-        const blit = c.VkImageBlit{
-            .srcOffsets = [2]c.VkOffset3D{
-                c.VkOffset3D{
-                    .x = 0,
-                    .y = 0,
-                    .z = 0,
-                },
-                c.VkOffset3D{
-                    .x = @intCast(i32, mipWidth),
-                    .y = @intCast(i32, mipHeight),
-                    .z = 1,
-                },
-            },
-            .dstOffsets = [2]c.VkOffset3D{
-                c.VkOffset3D{
-                    .x = 0,
-                    .y = 0,
-                    .z = 0,
-                },
-                c.VkOffset3D{
-                    .x = @intCast(i32, if (mipWidth > 1) mipWidth / 2 else 1),
-                    .y = @intCast(i32, if (mipHeight > 1) mipHeight / 2 else 1),
-                    .z = 1,
-                },
-            },
-            .srcSubresource = c.VkImageSubresourceLayers{
-                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                .mipLevel = i - 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-            .dstSubresource = c.VkImageSubresourceLayers{
-                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-                .mipLevel = i,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-        };
-
-        c.vkCmdBlitImage(
-            commandBuffer,
-            image,
-            c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            image,
-            c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1,
-            &blit,
-            c.VK_FILTER_LINEAR,
-        );
-
-        barrier.oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
-
-        c.vkCmdPipelineBarrier(
-            commandBuffer,
-            c.VK_PIPELINE_STAGE_TRANSFER_BIT,
-            c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0,
-            0,
-            null,
-            0,
-            null,
-            1,
-            &barrier,
-        );
-
-        if (mipWidth > 1) mipWidth /= 2;
-        if (mipHeight > 1) mipHeight /= 2;
-    }
-
-    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
-    barrier.oldLayout = c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barrier.srcAccessMask = c.VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = c.VK_ACCESS_SHADER_READ_BIT;
-
-    c.vkCmdPipelineBarrier(
-        commandBuffer,
-        c.VK_PIPELINE_STAGE_TRANSFER_BIT,
-        c.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        0,
-        0,
-        null,
-        0,
-        null,
-        1,
-        &barrier,
-    );
-
-    try EndSingleTimeCommands(commandBuffer);
-}
-
-fn CreateTextureImage(imagePath: []const u8) !void {
-    std.debug.print("Loading Image {s} ...\n", .{imagePath});
-    var image = try imageFileUtil.LoadImage(imagePath);
-    defer image.FreeImage();
-
-    //TODO decouple from this variable in particular
-    textureMipLevels = @floatToInt(u32, std.math.floor(std.math.log2(@intToFloat(f32, std.math.max(image.m_width, image.m_height))))) + 1;
-
-    const imageSize: c.VkDeviceSize = image.m_width * image.m_height * 4;
-    var stagingBuffer: c.VkBuffer = undefined;
-    var stagingBufferMemory: c.VkDeviceMemory = undefined;
-    try CreateBuffer(
-        imageSize,
-        c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &stagingBuffer,
-        &stagingBufferMemory,
-    );
-    defer c.vkDestroyBuffer(logicalDevice, stagingBuffer, null);
-    defer c.vkFreeMemory(logicalDevice, stagingBufferMemory, null);
-
-    var data: [*]u8 = undefined;
-    try CheckVkSuccess(
-        c.vkMapMemory(logicalDevice, stagingBufferMemory, 0, imageSize, 0, @ptrCast([*c]?*anyopaque, &data)),
-        VKInitError.VKError,
-    );
-
-    @memcpy(data, image.m_imageData, imageSize);
-    c.vkUnmapMemory(logicalDevice, stagingBufferMemory);
-
-    try CreateImage(
-        image.m_width,
-        image.m_height,
-        textureMipLevels,
-        c.VK_SAMPLE_COUNT_1_BIT,
-        c.VK_FORMAT_R8G8B8A8_SRGB,
-        c.VK_IMAGE_TILING_OPTIMAL,
-        c.VK_IMAGE_USAGE_TRANSFER_SRC_BIT | c.VK_IMAGE_USAGE_TRANSFER_DST_BIT | c.VK_IMAGE_USAGE_SAMPLED_BIT,
-        c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &textureImage.vkImage,
-        &textureImage.vkMemory,
-    );
-
-    try TransitionImageLayout(
-        textureImage.vkImage,
-        c.VK_FORMAT_R8G8B8A8_SRGB,
-        c.VK_IMAGE_LAYOUT_UNDEFINED,
-        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        textureMipLevels,
-    );
-    try CopyBufferToImage(stagingBuffer, textureImage.vkImage, image.m_width, image.m_height);
-    //transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
-    try GenerateMipmaps(textureImage.vkImage, c.VK_FORMAT_R8G8B8A8_SRGB, image.m_width, image.m_height, textureMipLevels);
-}
-
-//TODO shared function; where should it live?
 pub fn CreateImageView(
     image: c.VkImage,
     format: c.VkFormat,
@@ -1274,12 +1009,16 @@ pub fn CreateImageView(
     return imageView;
 }
 
+fn CreateTextureImage(imagePath: []const u8) !void {
+    textureImage = try Texture.CreateTexture(logicalDevice, physicalDevice, imagePath);
+}
+
 fn CreateTextureImageView() !void {
-    textureImage.vkView = try CreateImageView(
-        textureImage.vkImage,
+    textureImage.m_imageView = try CreateImageView(
+        textureImage.m_image,
         c.VK_FORMAT_R8G8B8A8_SRGB,
         c.VK_IMAGE_ASPECT_COLOR_BIT,
-        textureMipLevels,
+        textureImage.m_mipLevels,
     );
 }
 
@@ -1300,7 +1039,7 @@ fn CreateTextureSampler() !void {
         .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
         .mipLodBias = 0.0,
         .minLod = 0.0,
-        .maxLod = @intToFloat(f32, textureMipLevels),
+        .maxLod = @intToFloat(f32, textureImage.m_mipLevels),
         .flags = 0,
         .pNext = null,
     };
@@ -1311,7 +1050,8 @@ fn CreateTextureSampler() !void {
     );
 }
 
-fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32 {
+//TODO shared function; where should it live?
+pub fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32 {
     var memProperties: c.VkPhysicalDeviceMemoryProperties = undefined;
     c.vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
 
@@ -1326,7 +1066,8 @@ fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32 {
     return VKInitError.FailedToFindMemoryType;
 }
 
-fn CreateBuffer(
+//TODO shared function; where should it live?
+pub fn CreateBuffer(
     size: c.VkDeviceSize,
     usage: c.VkBufferUsageFlags,
     properties: c.VkMemoryPropertyFlags,
@@ -1368,7 +1109,8 @@ fn CreateBuffer(
     );
 }
 
-fn BeginSingleTimeCommands() !c.VkCommandBuffer {
+//TODO shared function; where should it live?
+pub fn BeginSingleTimeCommands() !c.VkCommandBuffer {
     const allocInfo = c.VkCommandBufferAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
@@ -1398,7 +1140,7 @@ fn BeginSingleTimeCommands() !c.VkCommandBuffer {
     return commandBuffer;
 }
 
-fn EndSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void {
+pub fn EndSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void {
     try CheckVkSuccess(
         c.vkEndCommandBuffer(commandBuffer),
         VKInitError.VKError,
@@ -1439,7 +1181,8 @@ fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize
     try EndSingleTimeCommands(commandBuffer);
 }
 
-fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u32) !void {
+//TODO shared function; where should it live?
+pub fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u32) !void {
     var commandBuffer = try BeginSingleTimeCommands();
 
     const region = c.VkBufferImageCopy{
@@ -1728,7 +1471,7 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
         };
         const imageInfo = c.VkDescriptorImageInfo{
             .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .imageView = textureImage.vkView,
+            .imageView = textureImage.m_imageView,
             .sampler = textureSampler,
         };
         const uboDescriptorWrite = c.VkWriteDescriptorSet{

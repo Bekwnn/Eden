@@ -1,5 +1,6 @@
 const c = @import("../c.zig");
 const vk = @import("VulkanInit.zig");
+const Texture = @import("Texture.zig").Texture;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -21,8 +22,8 @@ pub const Swapchain = struct {
     m_imageViews: []c.VkImageView,
     m_frameBuffers: []c.VkFramebuffer,
     m_currentImageIndex: u32,
-    m_depthImage: vk.GraphicsImage,
-    m_colorImage: vk.GraphicsImage,
+    m_depthImage: Texture,
+    m_colorImage: Texture,
 
     pub fn CreateSwapchain(
         allocator: Allocator,
@@ -137,60 +138,33 @@ pub const Swapchain = struct {
         return newSwapchain;
     }
 
-    pub fn CreateColorAndDepthResources(self: *Swapchain, msaaSamples: c.VkSampleCountFlagBits) !void {
-        //CREATE DEPTH RESOURCES START
-        const depthFormat = try vk.FindDepthFormat();
-        try vk.CreateImage(
+    pub fn CreateColorAndDepthResources(
+        self: *Swapchain,
+        logicalDevice: c.VkDevice,
+        msaaSamples: c.VkSampleCountFlagBits,
+    ) !void {
+        self.m_colorImage = try Texture.CreateColorImage(
+            logicalDevice,
             self.m_extent.width,
             self.m_extent.height,
-            1,
             msaaSamples,
-            depthFormat,
-            c.VK_IMAGE_TILING_OPTIMAL,
-            c.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-            c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            &self.m_depthImage.vkImage,
-            &self.m_depthImage.vkMemory,
+            self.m_format.format,
         );
-        self.m_depthImage.vkView = try vk.CreateImageView(
-            self.m_depthImage.vkImage,
-            depthFormat,
-            c.VK_IMAGE_ASPECT_DEPTH_BIT,
-            1,
-        );
-        try vk.TransitionImageLayout(
-            self.m_depthImage.vkImage,
-            depthFormat,
-            c.VK_IMAGE_LAYOUT_UNDEFINED,
-            c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            1,
-        );
-
-        //CREATE COLOR RESOURCES START
-        const colorFormat = self.m_format.format;
-
-        try vk.CreateImage(
+        self.m_depthImage = try Texture.CreateDepthImage(
+            logicalDevice,
             self.m_extent.width,
             self.m_extent.height,
-            1,
             msaaSamples,
-            colorFormat,
-            c.VK_IMAGE_TILING_OPTIMAL,
-            c.VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-            c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            &self.m_colorImage.vkImage,
-            &self.m_colorImage.vkMemory,
-        );
-        self.m_colorImage.vkView = try vk.CreateImageView(
-            self.m_colorImage.vkImage,
-            colorFormat,
-            c.VK_IMAGE_ASPECT_COLOR_BIT,
-            1,
+            try vk.FindDepthFormat(),
         );
     }
 
-    pub fn CreateFrameBuffers(self: *Swapchain, allocator: Allocator, logicalDevice: c.VkDevice, renderPass: c.VkRenderPass) !void {
+    pub fn CreateFrameBuffers(
+        self: *Swapchain,
+        allocator: Allocator,
+        logicalDevice: c.VkDevice,
+        renderPass: c.VkRenderPass,
+    ) !void {
         //CREATE FRAMEBUFFERS START
         self.m_frameBuffers = try allocator.alloc(
             c.VkFramebuffer,
@@ -199,8 +173,8 @@ pub const Swapchain = struct {
         var i: usize = 0;
         while (i < self.m_imageViews.len) : (i += 1) {
             var attachments = [_]c.VkImageView{
-                self.m_colorImage.vkView,
-                self.m_depthImage.vkView,
+                self.m_colorImage.m_imageView,
+                self.m_depthImage.m_imageView,
                 self.m_imageViews[i],
             };
 
@@ -235,22 +209,23 @@ pub const Swapchain = struct {
                 c.vkDestroyImageView(logicalDevice, imageView, null);
             }
         }
-        defer {
-            for (self.m_frameBuffers) |frameBuffer| {
-                c.vkDestroyFramebuffer(logicalDevice, frameBuffer, null);
-            }
-        }
-        defer {
-            c.vkDestroyImageView(logicalDevice, self.m_depthImage.vkView, null);
-            c.vkDestroyImage(logicalDevice, self.m_depthImage.vkImage, null);
-            c.vkFreeMemory(logicalDevice, self.m_depthImage.vkMemory, null);
-        }
+    }
 
-        defer {
-            c.vkDestroyImage(logicalDevice, self.m_colorImage.vkImage, null);
-            c.vkFreeMemory(logicalDevice, self.m_colorImage.vkMemory, null);
-            c.vkDestroyImageView(logicalDevice, self.m_colorImage.vkView, null);
+    pub fn CleanupFrameBuffers(
+        self: *Swapchain,
+        logicalDevice: c.VkDevice,
+    ) void {
+        for (self.m_frameBuffers) |frameBuffer| {
+            c.vkDestroyFramebuffer(logicalDevice, frameBuffer, null);
         }
+    }
+
+    pub fn CleanupDepthAndColorImages(
+        self: *Swapchain,
+        logicalDevice: c.VkDevice,
+    ) void {
+        self.m_depthImage.FreeTexture(logicalDevice);
+        self.m_colorImage.FreeTexture(logicalDevice);
     }
 };
 

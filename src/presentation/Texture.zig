@@ -3,8 +3,7 @@ const c = @import("../c.zig");
 const std = @import("std");
 const vk = @import("VulkanInit.zig");
 
-const PresentationInstance =
-    @import("PresentationInstance.zig").PresentationInstance;
+const RenderContext = @import("RenderContext.zig").RenderContext;
 const Buffer = @import("Buffer.zig").Buffer;
 
 const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
@@ -27,7 +26,7 @@ pub const Texture = struct {
     pub fn CreateTexture(
         imagePath: []const u8,
     ) !Texture {
-        const presInstance = try PresentationInstance.GetInstance();
+        const rContext = try RenderContext.GetInstance();
 
         std.debug.print("Loading Image {s} ...\n", .{imagePath});
         var image = try imageFileUtil.LoadImage(imagePath);
@@ -41,19 +40,19 @@ pub const Texture = struct {
             c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         );
-        defer stagingBuffer.DestroyBuffer(presInstance.m_logicalDevice);
+        defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
         var data: [*]u8 = undefined;
         try vk.CheckVkSuccess(
-            c.vkMapMemory(presInstance.m_logicalDevice, stagingBuffer.m_memory, 0, imageSize, 0, @ptrCast([*c]?*anyopaque, &data)),
+            c.vkMapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory, 0, imageSize, 0, @ptrCast([*c]?*anyopaque, &data)),
             TextureError.FailedToMapMemory,
         );
 
         @memcpy(data, image.m_imageData, imageSize);
-        c.vkUnmapMemory(presInstance.m_logicalDevice, stagingBuffer.m_memory);
+        c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
 
         try CreateImage(
-            presInstance.m_logicalDevice,
+            rContext.m_logicalDevice,
             image.m_width,
             image.m_height,
             newTexture.m_mipLevels,
@@ -76,7 +75,7 @@ pub const Texture = struct {
         try CopyBufferToImage(stagingBuffer.m_buffer, newTexture.m_image, image.m_width, image.m_height);
         //transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
         try GenerateMipmaps(
-            presInstance.m_physicalDevice,
+            rContext.m_physicalDevice,
             newTexture.m_image,
             c.VK_FORMAT_R8G8B8A8_SRGB,
             image.m_width,

@@ -4,8 +4,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const vk = @import("VulkanInit.zig");
-const PresentationInstance =
-    @import("PresentationInstance.zig").PresentationInstance;
+const RenderContext = @import("RenderContext.zig").RenderContext;
 
 pub const ShaderError = error{
     FailedToCreateShader,
@@ -45,9 +44,9 @@ pub const Shader = struct {
 
 fn CheckAndFreeShaderModule(shader: *?c.VkShaderModule) void {
     if (shader.* != null) {
-        const presInstance = PresentationInstance.GetInstance() catch return;
+        const rContext = RenderContext.GetInstance() catch return;
         c.vkDestroyShaderModule(
-            presInstance.m_logicalDevice,
+            rContext.m_logicalDevice,
             shader.*.?,
             null,
         );
@@ -92,10 +91,10 @@ fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.V
         .flags = 0,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     var shaderModule: c.VkShaderModule = undefined;
     try vk.CheckVkSuccess(
-        c.vkCreateShaderModule(presInstance.m_logicalDevice, &createInfo, null, &shaderModule),
+        c.vkCreateShaderModule(rContext.m_logicalDevice, &createInfo, null, &shaderModule),
         ShaderError.FailedToCreateShader,
     );
 

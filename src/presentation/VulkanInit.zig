@@ -6,7 +6,7 @@ const c = @import("../c.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const PresentationInstance = @import("PresentationInstance.zig").PresentationInstance;
+const RenderContext = @import("RenderContext.zig").RenderContext;
 const Buffer = @import("Buffer.zig").Buffer;
 const Mesh = @import("Mesh.zig").Mesh;
 const Texture = @import("Texture.zig").Texture;
@@ -24,7 +24,6 @@ const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
 
 //TODO the renderer should be some big optional "render world" that can be initialized/torn down/rebuilt
 
-// PIPELINE START
 const applicationName = "Eden Demo";
 const applicationVersion = c.VK_MAKE_API_VERSION(0, 1, 0, 0);
 
@@ -32,6 +31,7 @@ pub const BUFFER_FRAMES = 2;
 
 pub var swapchain: Swapchain = undefined;
 
+// PIPELINE START
 pub var renderPass: c.VkRenderPass = undefined;
 pub var descriptorSetLayout: c.VkDescriptorSetLayout = undefined;
 pub var pipelineLayout: c.VkPipelineLayout = undefined;
@@ -43,7 +43,6 @@ pub var commandBuffers: []c.VkCommandBuffer = undefined;
 pub var imageAvailableSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
 pub var renderFinishedSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
 pub var inFlightFences: [BUFFER_FRAMES]c.VkFence = undefined;
-
 //PIPELINE END
 
 pub var curMesh: ?Mesh = null;
@@ -97,16 +96,16 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     const allocator = std.heap.page_allocator;
 
     std.debug.print("CreateVKInstance()...\n", .{});
-    try PresentationInstance.Initialize(
+    try RenderContext.Initialize(
         allocator,
         window,
         applicationName,
         applicationVersion,
     );
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
 
     std.debug.print("CreateSwapchain()...\n", .{});
-    try CreateSwapchain(allocator, presInstance);
+    try CreateSwapchain(allocator, rContext);
 
     std.debug.print("CreateRenderPass()...\n", .{});
     try CreateRenderPass();
@@ -125,10 +124,10 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     try CreateCommandPool();
 
     std.debug.print("CreateColorAndDepthResources()...\n", .{});
-    try swapchain.CreateColorAndDepthResources(presInstance.m_logicalDevice, presInstance.m_msaaSamples);
+    try swapchain.CreateColorAndDepthResources(rContext.m_logicalDevice, rContext.m_msaaSamples);
 
     std.debug.print("CreateFrameBuffers()...\n", .{});
-    try swapchain.CreateFrameBuffers(allocator, presInstance.m_logicalDevice, renderPass);
+    try swapchain.CreateFrameBuffers(allocator, rContext.m_logicalDevice, renderPass);
 
     const testImagePath = "test-assets\\test.png";
     std.debug.print("CreateTexture()...\n", .{});
@@ -168,96 +167,96 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
 
 //TODO really we don't want this to be able to return an error
 pub fn VulkanCleanup() !void {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
 
     // defer so execution happens in unwinding order--easier to compare with
     // init order above
-    defer PresentationInstance.Shutdown();
+    defer RenderContext.Shutdown();
 
-    defer c.vkDestroyCommandPool(presInstance.m_logicalDevice, commandPool, null);
+    defer c.vkDestroyCommandPool(rContext.m_logicalDevice, commandPool, null);
 
     defer {
         var i: usize = 0;
         while (i < BUFFER_FRAMES) : (i += 1) {
-            c.vkDestroySemaphore(presInstance.m_logicalDevice, imageAvailableSemaphores[i], null);
-            c.vkDestroySemaphore(presInstance.m_logicalDevice, renderFinishedSemaphores[i], null);
-            c.vkDestroyFence(presInstance.m_logicalDevice, inFlightFences[i], null);
+            c.vkDestroySemaphore(rContext.m_logicalDevice, imageAvailableSemaphores[i], null);
+            c.vkDestroySemaphore(rContext.m_logicalDevice, renderFinishedSemaphores[i], null);
+            c.vkDestroyFence(rContext.m_logicalDevice, inFlightFences[i], null);
         }
     }
 
-    defer vertexBuffer.DestroyBuffer(presInstance.m_logicalDevice);
-    defer indexBuffer.DestroyBuffer(presInstance.m_logicalDevice);
+    defer vertexBuffer.DestroyBuffer(rContext.m_logicalDevice);
+    defer indexBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
-    defer c.vkDestroyDescriptorSetLayout(presInstance.m_logicalDevice, descriptorSetLayout, null);
+    defer c.vkDestroyDescriptorSetLayout(rContext.m_logicalDevice, descriptorSetLayout, null);
 
-    defer textureImage.FreeTexture(presInstance.m_logicalDevice);
+    defer textureImage.FreeTexture(rContext.m_logicalDevice);
 
-    defer c.vkDestroySampler(presInstance.m_logicalDevice, textureSampler, null);
+    defer c.vkDestroySampler(rContext.m_logicalDevice, textureSampler, null);
 
     defer CleanupSwapchain();
 }
 
 pub fn RecreateSwapchain(allocator: Allocator) !void {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     try CheckVkSuccess(
-        c.vkDeviceWaitIdle(presInstance.m_logicalDevice),
+        c.vkDeviceWaitIdle(rContext.m_logicalDevice),
         VKInitError.VKError,
     );
 
     std.debug.print("Recreating Swapchain...\n", .{});
     CleanupSwapchain();
 
-    try CreateSwapchain(allocator, presInstance);
+    try CreateSwapchain(allocator, rContext);
     try CreateRenderPass();
     try CreateGraphicsPipeline(
         allocator,
         "src/shaders/compiled/basic_mesh-vert.spv",
         "src/shaders/compiled/basic_mesh-frag.spv",
     );
-    try swapchain.CreateColorAndDepthResources(presInstance.m_logicalDevice, presInstance.m_msaaSamples);
-    try swapchain.CreateFrameBuffers(allocator, presInstance.m_logicalDevice, renderPass);
+    try swapchain.CreateColorAndDepthResources(rContext.m_logicalDevice, rContext.m_msaaSamples);
+    try swapchain.CreateFrameBuffers(allocator, rContext.m_logicalDevice, renderPass);
     try CreateUniformBuffers(allocator);
     try CreateDescriptorPool();
     try CreateDescriptorSets(allocator);
     try CreateCommandBuffers(allocator);
 }
 
-fn CreateSwapchain(allocator: Allocator, presInstance: *const PresentationInstance) !void {
-    if (presInstance.m_graphicsQueueIdx == null or presInstance.m_presentQueueIdx == null) {
+fn CreateSwapchain(allocator: Allocator, rContext: *const RenderContext) !void {
+    if (rContext.m_graphicsQueueIdx == null or rContext.m_presentQueueIdx == null) {
         return VKInitError.VKError;
     }
     swapchain = try Swapchain.CreateSwapchain(
         allocator,
-        presInstance.m_logicalDevice,
-        presInstance.m_physicalDevice,
-        presInstance.m_surface,
-        presInstance.m_graphicsQueueIdx.?,
-        presInstance.m_presentQueueIdx.?,
+        rContext.m_logicalDevice,
+        rContext.m_physicalDevice,
+        rContext.m_surface,
+        rContext.m_graphicsQueueIdx.?,
+        rContext.m_presentQueueIdx.?,
     );
 }
 
 //TODO rename? make swapchain struct include more things?
 fn CleanupSwapchain() void {
-    const presInstance = PresentationInstance.GetInstance() catch @panic("!");
+    const rContext = RenderContext.GetInstance() catch @panic("!");
 
     defer {
         for (uniformBuffers) |*uniformBuffer| {
-            uniformBuffer.DestroyBuffer(presInstance.m_logicalDevice);
+            uniformBuffer.DestroyBuffer(rContext.m_logicalDevice);
         }
-        c.vkDestroyDescriptorPool(presInstance.m_logicalDevice, descriptorPool, null);
+        c.vkDestroyDescriptorPool(rContext.m_logicalDevice, descriptorPool, null);
     }
 
-    defer swapchain.FreeSwapchain(presInstance.m_logicalDevice);
+    defer swapchain.FreeSwapchain(rContext.m_logicalDevice);
 
-    defer c.vkDestroyRenderPass(presInstance.m_logicalDevice, renderPass, null);
-    defer c.vkDestroyPipelineLayout(presInstance.m_logicalDevice, pipelineLayout, null);
-    defer c.vkDestroyPipeline(presInstance.m_logicalDevice, graphicsPipeline, null);
+    defer c.vkDestroyRenderPass(rContext.m_logicalDevice, renderPass, null);
+    defer c.vkDestroyPipelineLayout(rContext.m_logicalDevice, pipelineLayout, null);
+    defer c.vkDestroyPipeline(rContext.m_logicalDevice, graphicsPipeline, null);
 
-    defer swapchain.CleanupFrameBuffers(presInstance.m_logicalDevice);
+    defer swapchain.CleanupFrameBuffers(rContext.m_logicalDevice);
 
-    defer c.vkFreeCommandBuffers(presInstance.m_logicalDevice, commandPool, @intCast(u32, commandBuffers.len), commandBuffers.ptr);
+    defer c.vkFreeCommandBuffers(rContext.m_logicalDevice, commandPool, @intCast(u32, commandBuffers.len), commandBuffers.ptr);
 
-    defer swapchain.CleanupDepthAndColorImages(presInstance.m_logicalDevice);
+    defer swapchain.CleanupDepthAndColorImages(rContext.m_logicalDevice);
 }
 
 //TODO shared function, where should this live?
@@ -299,10 +298,10 @@ pub fn QuerySwapchainSupport(allocator: Allocator, physDevice: c.VkPhysicalDevic
 }
 
 fn CreateRenderPass() !void {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     const colorAttachment = c.VkAttachmentDescription{
         .format = swapchain.m_format.format,
-        .samples = presInstance.m_msaaSamples,
+        .samples = rContext.m_msaaSamples,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
         .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -332,7 +331,7 @@ fn CreateRenderPass() !void {
     };
     const depthAttachment = c.VkAttachmentDescription{
         .format = try FindDepthFormat(),
-        .samples = presInstance.m_msaaSamples,
+        .samples = rContext.m_msaaSamples,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -380,7 +379,7 @@ fn CreateRenderPass() !void {
     };
 
     try CheckVkSuccess(
-        c.vkCreateRenderPass(presInstance.m_logicalDevice, &renderPassInfo, null, &renderPass),
+        c.vkCreateRenderPass(rContext.m_logicalDevice, &renderPassInfo, null, &renderPass),
         VKInitError.FailedToCreateRenderPass,
     );
 }
@@ -410,9 +409,9 @@ pub fn CreateDescriptorSetLayout() !void {
         .flags = 0,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     try CheckVkSuccess(
-        c.vkCreateDescriptorSetLayout(presInstance.m_logicalDevice, &layoutInfo, null, &descriptorSetLayout),
+        c.vkCreateDescriptorSetLayout(rContext.m_logicalDevice, &layoutInfo, null, &descriptorSetLayout),
         VKInitError.FailedToCreateDescriptorSets,
     );
 }
@@ -511,11 +510,11 @@ pub fn CreateGraphicsPipeline(
         .flags = 0,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     const multisamplingState = c.VkPipelineMultisampleStateCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .sampleShadingEnable = c.VK_FALSE,
-        .rasterizationSamples = presInstance.m_msaaSamples,
+        .rasterizationSamples = rContext.m_msaaSamples,
         .minSampleShading = 1.0,
         .pSampleMask = null,
         .alphaToCoverageEnable = c.VK_FALSE,
@@ -589,7 +588,7 @@ pub fn CreateGraphicsPipeline(
     };
 
     try CheckVkSuccess(
-        c.vkCreatePipelineLayout(presInstance.m_logicalDevice, &pipelineLayoutState, null, &pipelineLayout),
+        c.vkCreatePipelineLayout(rContext.m_logicalDevice, &pipelineLayoutState, null, &pipelineLayout),
         VKInitError.FailedToCreateLayout,
     );
 
@@ -615,26 +614,26 @@ pub fn CreateGraphicsPipeline(
         .flags = 0,
     };
     try CheckVkSuccess(
-        c.vkCreateGraphicsPipelines(presInstance.m_logicalDevice, null, 1, &pipelineInfo, null, &graphicsPipeline),
+        c.vkCreateGraphicsPipelines(rContext.m_logicalDevice, null, 1, &pipelineInfo, null, &graphicsPipeline),
         VKInitError.FailedToCreatePipeline,
     );
 }
 
 fn CreateCommandPool() !void {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
 
-    if (presInstance.m_graphicsQueueIdx == null) {
+    if (rContext.m_graphicsQueueIdx == null) {
         return VKInitError.FailedToCreateCommandPool;
     }
     const poolInfo = c.VkCommandPoolCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .queueFamilyIndex = presInstance.m_graphicsQueueIdx.?,
+        .queueFamilyIndex = rContext.m_graphicsQueueIdx.?,
         .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .pNext = null,
     };
 
     try CheckVkSuccess(
-        c.vkCreateCommandPool(presInstance.m_logicalDevice, &poolInfo, null, &commandPool),
+        c.vkCreateCommandPool(rContext.m_logicalDevice, &poolInfo, null, &commandPool),
         VKInitError.FailedToCreateCommandPool,
     );
 }
@@ -654,10 +653,10 @@ pub fn FindSupportedFormat(
     tiling: c.VkImageTiling,
     features: c.VkFormatFeatureFlags,
 ) !c.VkFormat {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     for (candidates) |format| {
         var properties: c.VkFormatProperties = undefined;
-        c.vkGetPhysicalDeviceFormatProperties(presInstance.m_physicalDevice, format, &properties);
+        c.vkGetPhysicalDeviceFormatProperties(rContext.m_physicalDevice, format, &properties);
         if (tiling == c.VK_IMAGE_TILING_LINEAR and
             (properties.linearTilingFeatures & features) == features)
         {
@@ -682,7 +681,7 @@ pub fn CreateImageView(
     aspectFlags: c.VkImageAspectFlags,
     mipLevels: u32,
 ) !c.VkImageView {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     const imageViewInfo = c.VkImageViewCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = image,
@@ -707,7 +706,7 @@ pub fn CreateImageView(
 
     var imageView: c.VkImageView = undefined;
     try CheckVkSuccess(
-        c.vkCreateImageView(presInstance.m_logicalDevice, &imageViewInfo, null, &imageView),
+        c.vkCreateImageView(rContext.m_logicalDevice, &imageViewInfo, null, &imageView),
         VKInitError.FailedToCreateImageView,
     );
 
@@ -745,18 +744,18 @@ fn CreateTextureSampler() !void {
         .pNext = null,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     try CheckVkSuccess(
-        c.vkCreateSampler(presInstance.m_logicalDevice, &samplerInfo, null, &textureSampler),
+        c.vkCreateSampler(rContext.m_logicalDevice, &samplerInfo, null, &textureSampler),
         VKInitError.VKError,
     );
 }
 
 //TODO shared function; where should it live?
 pub fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32 {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     var memProperties: c.VkPhysicalDeviceMemoryProperties = undefined;
-    c.vkGetPhysicalDeviceMemoryProperties(presInstance.m_physicalDevice, &memProperties);
+    c.vkGetPhysicalDeviceMemoryProperties(rContext.m_physicalDevice, &memProperties);
 
     var i: u5 = 0;
     while (i < memProperties.memoryTypeCount) : (i += 1) {
@@ -779,10 +778,10 @@ pub fn BeginSingleTimeCommands() !c.VkCommandBuffer {
         .pNext = null,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     var commandBuffer: c.VkCommandBuffer = undefined;
     try CheckVkSuccess(
-        c.vkAllocateCommandBuffers(presInstance.m_logicalDevice, &allocInfo, &commandBuffer),
+        c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, &commandBuffer),
         VKInitError.VKError,
     );
 
@@ -819,13 +818,13 @@ pub fn EndSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void {
         .pSignalSemaphores = null,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     try CheckVkSuccess(
-        c.vkQueueSubmit(presInstance.m_graphicsQueue, 1, &submitInfo, null),
+        c.vkQueueSubmit(rContext.m_graphicsQueue, 1, &submitInfo, null),
         VKInitError.VKError,
     );
     try CheckVkSuccess(
-        c.vkQueueWaitIdle(presInstance.m_graphicsQueue),
+        c.vkQueueWaitIdle(rContext.m_graphicsQueue),
         VKInitError.VKError,
     );
 }
@@ -939,10 +938,10 @@ pub fn UpdateUniformBuffer(camera: *Camera, currentFrame: usize) !void {
     };
 
     var data: [*]u8 = undefined;
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     try CheckVkSuccess(
         c.vkMapMemory(
-            presInstance.m_logicalDevice,
+            rContext.m_logicalDevice,
             uniformBuffers[currentFrame].m_memory,
             0,
             bufferSize,
@@ -952,7 +951,7 @@ pub fn UpdateUniformBuffer(camera: *Camera, currentFrame: usize) !void {
         VKInitError.FailedToUpdateUniformBuffer,
     );
     @memcpy(data, @ptrCast([*]u8, &cameraMVP), bufferSize);
-    c.vkUnmapMemory(presInstance.m_logicalDevice, uniformBuffers[currentFrame].m_memory);
+    c.vkUnmapMemory(rContext.m_logicalDevice, uniformBuffers[currentFrame].m_memory);
 }
 
 fn CreateDescriptorPool() !void {
@@ -975,9 +974,9 @@ fn CreateDescriptorPool() !void {
         .pNext = null,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     try CheckVkSuccess(
-        c.vkCreateDescriptorPool(presInstance.m_logicalDevice, &poolInfo, null, &descriptorPool),
+        c.vkCreateDescriptorPool(rContext.m_logicalDevice, &poolInfo, null, &descriptorPool),
         VKInitError.FailedToCreateDescriptorPool,
     );
 }
@@ -997,9 +996,9 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
     };
 
     descriptorSets = try allocator.alloc(c.VkDescriptorSet, swapchain.m_images.len);
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     try CheckVkSuccess(
-        c.vkAllocateDescriptorSets(presInstance.m_logicalDevice, &allocInfo, descriptorSets.ptr),
+        c.vkAllocateDescriptorSets(rContext.m_logicalDevice, &allocInfo, descriptorSets.ptr),
         VKInitError.FailedToCreateDescriptorSets,
     );
 
@@ -1040,7 +1039,7 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
             .pNext = null,
         };
         const descriptorWrites = [_]c.VkWriteDescriptorSet{ uboDescriptorWrite, textureSamplerDescriptorWrite };
-        c.vkUpdateDescriptorSets(presInstance.m_logicalDevice, descriptorWrites.len, &descriptorWrites, 0, null);
+        c.vkUpdateDescriptorSets(rContext.m_logicalDevice, descriptorWrites.len, &descriptorWrites, 0, null);
     }
 }
 
@@ -1054,9 +1053,9 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         .pNext = null,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     try CheckVkSuccess(
-        c.vkAllocateCommandBuffers(presInstance.m_logicalDevice, &allocInfo, commandBuffers.ptr),
+        c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, commandBuffers.ptr),
         VKInitError.FailedToCreateCommandBuffers,
     );
 
@@ -1138,19 +1137,19 @@ fn CreateFencesAndSemaphores() !void {
         .pNext = null,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     var i: usize = 0;
     while (i < BUFFER_FRAMES) : (i += 1) {
         try CheckVkSuccess(
-            c.vkCreateSemaphore(presInstance.m_logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]),
+            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]),
             VKInitError.FailedToCreateSemaphores,
         );
         try CheckVkSuccess(
-            c.vkCreateSemaphore(presInstance.m_logicalDevice, &semaphoreInfo, null, &imageAvailableSemaphores[i]),
+            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &imageAvailableSemaphores[i]),
             VKInitError.FailedToCreateSemaphores,
         );
         try CheckVkSuccess(
-            c.vkCreateFence(presInstance.m_logicalDevice, &fenceInfo, null, &inFlightFences[i]),
+            c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &inFlightFences[i]),
             VKInitError.FailedToCreateFences,
         );
     }

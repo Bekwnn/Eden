@@ -5,7 +5,7 @@ const debug = std.debug;
 const gameWorld = @import("game/GameWorld.zig");
 
 const presentation = @import("presentation/Presentation.zig");
-const PresentationInstance = @import("presentation/PresentationInstance.zig").PresentationInstance;
+const RenderContext = @import("presentation/RenderContext.zig").RenderContext;
 const imgui = @import("presentation/ImGui.zig");
 const sdlInit = @import("presentation/SDLInit.zig");
 const vk = @import("presentation/VulkanInit.zig");
@@ -46,8 +46,8 @@ pub fn main() !void {
     try MainGameLoop(window);
 
     // teardown
-    const presInstance = try PresentationInstance.GetInstance();
-    _ = c.vkDeviceWaitIdle(presInstance.m_logicalDevice);
+    const rContext = try RenderContext.GetInstance();
+    _ = c.vkDeviceWaitIdle(rContext.m_logicalDevice);
     try vk.VulkanCleanup();
 }
 

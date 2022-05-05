@@ -1,6 +1,6 @@
 const c = @import("../c.zig");
 const vk = @import("VulkanInit.zig");
-const PresentationInstance = @import("PresentationInstance.zig").PresentationInstance;
+const RenderContext = @import("RenderContext.zig").RenderContext;
 
 const VertexData = @import("Mesh.zig").VertexData;
 const Mesh = @import("Mesh.zig").Mesh;
@@ -21,18 +21,18 @@ pub const Buffer = struct {
     pub fn CreateVertexBuffer(mesh: *const Mesh) !Buffer {
         const bufferSize: c.VkDeviceSize = mesh.m_vertexData.items.len * @sizeOf(VertexData);
 
-        const presInstance = try PresentationInstance.GetInstance();
+        const rContext = try RenderContext.GetInstance();
         var stagingBuffer: Buffer = try CreateBuffer(
             bufferSize,
             c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         );
-        defer stagingBuffer.DestroyBuffer(presInstance.m_logicalDevice);
+        defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
         var data: [*]u8 = undefined;
         try vk.CheckVkSuccess(
             c.vkMapMemory(
-                presInstance.m_logicalDevice,
+                rContext.m_logicalDevice,
                 stagingBuffer.m_memory,
                 0,
                 bufferSize,
@@ -46,7 +46,7 @@ pub const Buffer = struct {
             @ptrCast([*]u8, mesh.m_vertexData.items.ptr),
             bufferSize,
         );
-        c.vkUnmapMemory(presInstance.m_logicalDevice, stagingBuffer.m_memory);
+        c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
 
         var newVertexBuffer = try CreateBuffer(
             bufferSize,
@@ -63,18 +63,18 @@ pub const Buffer = struct {
         const bufferSize: c.VkDeviceSize =
             mesh.m_indices.items.len * @sizeOf(u32);
 
-        const presInstance = try PresentationInstance.GetInstance();
+        const rContext = try RenderContext.GetInstance();
         var stagingBuffer: Buffer = try CreateBuffer(
             bufferSize,
             c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         );
-        defer stagingBuffer.DestroyBuffer(presInstance.m_logicalDevice);
+        defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
         var data: [*]u8 = undefined;
         try vk.CheckVkSuccess(
             c.vkMapMemory(
-                presInstance.m_logicalDevice,
+                rContext.m_logicalDevice,
                 stagingBuffer.m_memory,
                 0,
                 bufferSize,
@@ -84,7 +84,7 @@ pub const Buffer = struct {
             BufferError.FailedToCreateIndexBuffer,
         );
         @memcpy(data, @ptrCast([*]u8, mesh.m_indices.items.ptr), bufferSize);
-        c.vkUnmapMemory(presInstance.m_logicalDevice, stagingBuffer.m_memory);
+        c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
 
         var newIndexBuffer: Buffer = try CreateBuffer(
             bufferSize,
@@ -102,7 +102,7 @@ pub const Buffer = struct {
         usage: c.VkBufferUsageFlags,
         properties: c.VkMemoryPropertyFlags,
     ) !Buffer {
-        const presInstance = try PresentationInstance.GetInstance();
+        const rContext = try RenderContext.GetInstance();
         var newBuffer: Buffer = undefined;
         const bufferInfo = c.VkBufferCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -117,7 +117,7 @@ pub const Buffer = struct {
 
         try vk.CheckVkSuccess(
             c.vkCreateBuffer(
-                presInstance.m_logicalDevice,
+                rContext.m_logicalDevice,
                 &bufferInfo,
                 null,
                 &newBuffer.m_buffer,
@@ -126,7 +126,7 @@ pub const Buffer = struct {
         );
         var memRequirements: c.VkMemoryRequirements = undefined;
         c.vkGetBufferMemoryRequirements(
-            presInstance.m_logicalDevice,
+            rContext.m_logicalDevice,
             newBuffer.m_buffer,
             &memRequirements,
         );
@@ -140,7 +140,7 @@ pub const Buffer = struct {
 
         try vk.CheckVkSuccess(
             c.vkAllocateMemory(
-                presInstance.m_logicalDevice,
+                rContext.m_logicalDevice,
                 &allocInfo,
                 null,
                 &newBuffer.m_memory,
@@ -149,7 +149,7 @@ pub const Buffer = struct {
         );
         try vk.CheckVkSuccess(
             c.vkBindBufferMemory(
-                presInstance.m_logicalDevice,
+                rContext.m_logicalDevice,
                 newBuffer.m_buffer,
                 newBuffer.m_memory,
                 0,

@@ -5,12 +5,12 @@ const Allocator = std.mem.Allocator;
 
 const vk = @import("VulkanInit.zig");
 
-var instance: ?PresentationInstance = null;
+var instance: ?RenderContext = null;
 
 const engineName = "Eden";
 const engineVersion = c.VK_MAKE_API_VERSION(0, 0, 1, 0);
 
-pub const PresentationError = error{
+pub const RenderContextError = error{
     AlreadyInitialized,
     FailedToCheckInstanceLayerProperties,
     FailedToCreateInstance,
@@ -24,7 +24,7 @@ pub const PresentationError = error{
 };
 
 //TODO settle on a shorter, better name
-pub const PresentationInstance = struct {
+pub const RenderContext = struct {
     m_vkInstance: c.VkInstance,
     m_surface: c.VkSurfaceKHR,
     m_physicalDevice: c.VkPhysicalDevice,
@@ -38,18 +38,23 @@ pub const PresentationInstance = struct {
 
     m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
 
-    pub fn GetInstance() !*PresentationInstance {
+    pub fn GetInstance() !*RenderContext {
         if (instance != null) {
             return &instance.?;
         } else {
-            return PresentationError.NotInitialized;
+            return RenderContextError.NotInitialized;
         }
     }
 
-    pub fn Initialize(allocator: Allocator, window: *c.SDL_Window, applicationName: []const u8, applicationVersion: u32) !void {
-        if (instance != null) return PresentationError.AlreadyInitialized;
+    pub fn Initialize(
+        allocator: Allocator,
+        window: *c.SDL_Window,
+        applicationName: []const u8,
+        applicationVersion: u32,
+    ) !void {
+        if (instance != null) return RenderContextError.AlreadyInitialized;
 
-        instance = PresentationInstance{
+        instance = RenderContext{
             .m_vkInstance = undefined,
             .m_surface = undefined,
             .m_physicalDevice = undefined,
@@ -76,16 +81,13 @@ pub const PresentationInstance = struct {
     }
 
     pub fn Shutdown() void {
-        defer instance = null;
-
-        const presInstance = PresentationInstance.GetInstance() catch @panic("!");
-        defer c.vkDestroyInstance(presInstance.m_vkInstance, null);
-
-        defer c.vkDestroySurfaceKHR(presInstance.m_vkInstance, presInstance.m_surface, null);
-
-        // if (enableValidationLayers) destroy debug utils messenger
-
-        defer c.vkDestroyDevice(presInstance.m_logicalDevice, null);
+        if (instance != null) {
+            defer instance = null;
+            defer c.vkDestroyInstance(instance.?.m_vkInstance, null);
+            defer c.vkDestroySurfaceKHR(instance.?.m_vkInstance, instance.?.m_surface, null);
+            // if (enableValidationLayers) destroy debug utils messenger
+            defer c.vkDestroyDevice(instance.?.m_logicalDevice, null);
+        }
     }
 };
 
@@ -96,13 +98,13 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
     var layerCount: u32 = 0;
     try vk.CheckVkSuccess(
         c.vkEnumerateInstanceLayerProperties(&layerCount, null),
-        PresentationError.FailedToCheckInstanceLayerProperties,
+        RenderContextError.FailedToCheckInstanceLayerProperties,
     );
 
     var detectedLayerProperties = try allocator.alloc(c.VkLayerProperties, layerCount);
     try vk.CheckVkSuccess(
         c.vkEnumerateInstanceLayerProperties(&layerCount, detectedLayerProperties.ptr),
-        PresentationError.FailedToCheckInstanceLayerProperties,
+        RenderContextError.FailedToCheckInstanceLayerProperties,
     );
 
     for (validationLayers) |validationLayer| {
@@ -122,16 +124,16 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
                 var trailingWhitespaceStripped = std.mem.tokenize(u8, std.mem.span(&detectedLayer.layerName), " ");
                 std.debug.print("\"{s}\"\n", .{trailingWhitespaceStripped.next().?});
             }
-            return PresentationError.MissingValidationLayer;
+            return RenderContextError.MissingValidationLayer;
         }
     }
 }
 
 fn CreateSurface(window: *c.SDL_Window) !void {
-    const presInstance = try PresentationInstance.GetInstance();
-    const result = c.SDL_Vulkan_CreateSurface(window, presInstance.m_vkInstance, &presInstance.m_surface);
+    const rContext = try RenderContext.GetInstance();
+    const result = c.SDL_Vulkan_CreateSurface(window, rContext.m_vkInstance, &rContext.m_surface);
     if (result != c.SDL_TRUE) {
-        return PresentationError.FailedToCreateSurface;
+        return RenderContextError.FailedToCreateSurface;
     }
 }
 
@@ -169,40 +171,40 @@ fn CreateVkInstance(
         .flags = 0,
     };
 
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     try vk.CheckVkSuccess(
-        c.vkCreateInstance(&instanceInfo, null, &presInstance.m_vkInstance),
-        PresentationError.FailedToCreateInstance,
+        c.vkCreateInstance(&instanceInfo, null, &rContext.m_vkInstance),
+        RenderContextError.FailedToCreateInstance,
     );
 }
 
 fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     var deviceCount: u32 = 0;
     try vk.CheckVkSuccess(
-        c.vkEnumeratePhysicalDevices(presInstance.m_vkInstance, &deviceCount, null),
-        PresentationError.FailedToFindPhysicalDevice,
+        c.vkEnumeratePhysicalDevices(rContext.m_vkInstance, &deviceCount, null),
+        RenderContextError.FailedToFindPhysicalDevice,
     );
     if (deviceCount == 0) {
-        return PresentationError.NoSupportedDevice; //no vulkan supporting devices
+        return RenderContextError.NoSupportedDevice; //no vulkan supporting devices
     }
 
     var deviceList = try allocator.alloc(c.VkPhysicalDevice, deviceCount);
     try vk.CheckVkSuccess(
-        c.vkEnumeratePhysicalDevices(presInstance.m_vkInstance, &deviceCount, deviceList.ptr),
-        PresentationError.FailedToFindPhysicalDevice,
+        c.vkEnumeratePhysicalDevices(rContext.m_vkInstance, &deviceCount, deviceList.ptr),
+        RenderContextError.FailedToFindPhysicalDevice,
     );
 
     //TODO rather than just picking first suitable device, could rate/score by some scheme and pick the best
     for (deviceList) |device| {
-        if (try PhysicalDeviceIsSuitable(allocator, device, window, presInstance.m_surface)) {
-            presInstance.m_physicalDevice = device;
-            presInstance.m_msaaSamples = try GetMaxUsableSampleCount();
+        if (try PhysicalDeviceIsSuitable(allocator, device, window, rContext.m_surface)) {
+            rContext.m_physicalDevice = device;
+            rContext.m_msaaSamples = try GetMaxUsableSampleCount();
             return;
         }
     }
 
-    return PresentationError.NoSuitableDevice;
+    return RenderContextError.NoSuitableDevice;
 }
 
 // Currently just checks if geometry shaders are supported and if the device supports VK_QUEUE_GRAPHICS_BIT
@@ -249,16 +251,16 @@ fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, wi
 
 const basicQueuePriority: f32 = 1.0; //TODO real queue priorities
 fn CreateLogicalDevice(allocator: Allocator) !void {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     //TODO just copying device features that we found on the selected physical device,
     //in the future it should just have features we're actually using
     var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
-    c.vkGetPhysicalDeviceFeatures(presInstance.m_physicalDevice, &deviceFeatures);
+    c.vkGetPhysicalDeviceFeatures(rContext.m_physicalDevice, &deviceFeatures);
 
     var queueFamilyCount: u32 = 0;
-    c.vkGetPhysicalDeviceQueueFamilyProperties(presInstance.m_physicalDevice, &queueFamilyCount, null);
+    c.vkGetPhysicalDeviceQueueFamilyProperties(rContext.m_physicalDevice, &queueFamilyCount, null);
     var queueFamilies = try allocator.alloc(c.VkQueueFamilyProperties, queueFamilyCount);
-    c.vkGetPhysicalDeviceQueueFamilyProperties(presInstance.m_physicalDevice, &queueFamilyCount, queueFamilies.ptr);
+    c.vkGetPhysicalDeviceQueueFamilyProperties(rContext.m_physicalDevice, &queueFamilyCount, queueFamilies.ptr);
 
     var graphicsQueueIndex: ?u32 = null;
     var presentQueueIndex: ?u32 = null;
@@ -272,8 +274,8 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         if (presentQueueIndex == null) {
             var presentationSupport: c.VkBool32 = c.VK_FALSE;
             try vk.CheckVkSuccess(
-                c.vkGetPhysicalDeviceSurfaceSupportKHR(presInstance.m_physicalDevice, i, presInstance.m_surface, &presentationSupport),
-                PresentationError.FailedToFindPhysicalDevice,
+                c.vkGetPhysicalDeviceSurfaceSupportKHR(rContext.m_physicalDevice, i, rContext.m_surface, &presentationSupport),
+                RenderContextError.FailedToFindPhysicalDevice,
             );
             if (presentationSupport == c.VK_TRUE) {
                 presentQueueIndex = i;
@@ -282,11 +284,11 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
     }
 
     if (graphicsQueueIndex == null or presentQueueIndex == null) {
-        return PresentationError.FailedToCreateLogicDevice;
+        return RenderContextError.FailedToCreateLogicDevice;
     }
 
-    presInstance.m_graphicsQueueIdx = graphicsQueueIndex;
-    presInstance.m_presentQueueIdx = presentQueueIndex;
+    rContext.m_graphicsQueueIdx = graphicsQueueIndex;
+    rContext.m_presentQueueIdx = presentQueueIndex;
 
     //TODO make handling of duplicate queues cleaner
     const numUniqueQueues: u32 = if (graphicsQueueIndex.? == presentQueueIndex.?) 1 else 2;
@@ -294,7 +296,7 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
     // graphics queue
     queueCreateInfos[0] = c.VkDeviceQueueCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = graphicsQueueIndex orelse return PresentationError.FailedToCreateLogicDevice,
+        .queueFamilyIndex = graphicsQueueIndex orelse return RenderContextError.FailedToCreateLogicDevice,
         .queueCount = 1,
         .pQueuePriorities = &basicQueuePriority,
         .flags = 0,
@@ -304,7 +306,7 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         // presentation queue
         queueCreateInfos[1] = c.VkDeviceQueueCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .queueFamilyIndex = presentQueueIndex orelse return PresentationError.FailedToCreateLogicDevice,
+            .queueFamilyIndex = presentQueueIndex orelse return RenderContextError.FailedToCreateLogicDevice,
             .queueCount = 1,
             .pQueuePriorities = &basicQueuePriority,
             .flags = 0,
@@ -327,20 +329,20 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
     };
 
     try vk.CheckVkSuccess(
-        c.vkCreateDevice(presInstance.m_physicalDevice, &deviceCreateInfo, null, &presInstance.m_logicalDevice),
-        PresentationError.FailedToCreateLogicDevice,
+        c.vkCreateDevice(rContext.m_physicalDevice, &deviceCreateInfo, null, &rContext.m_logicalDevice),
+        RenderContextError.FailedToCreateLogicDevice,
     );
 
-    if (presInstance.m_logicalDevice) |*ld| {
-        c.vkGetDeviceQueue(ld.*, graphicsQueueIndex orelse return PresentationError.FailedToCreateLogicDevice, 0, &presInstance.m_graphicsQueue);
-        c.vkGetDeviceQueue(ld.*, presentQueueIndex orelse return PresentationError.FailedToCreateLogicDevice, 0, &presInstance.m_presentQueue);
+    if (rContext.m_logicalDevice) |*ld| {
+        c.vkGetDeviceQueue(ld.*, graphicsQueueIndex orelse return RenderContextError.FailedToCreateLogicDevice, 0, &rContext.m_graphicsQueue);
+        c.vkGetDeviceQueue(ld.*, presentQueueIndex orelse return RenderContextError.FailedToCreateLogicDevice, 0, &rContext.m_presentQueue);
     }
 }
 
 fn GetMaxUsableSampleCount() !c.VkSampleCountFlagBits {
-    const presInstance = try PresentationInstance.GetInstance();
+    const rContext = try RenderContext.GetInstance();
     var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
-    c.vkGetPhysicalDeviceProperties(presInstance.m_physicalDevice, &deviceProperties);
+    c.vkGetPhysicalDeviceProperties(rContext.m_physicalDevice, &deviceProperties);
 
     const counts = deviceProperties.limits.framebufferColorSampleCounts & deviceProperties.limits.framebufferDepthSampleCounts;
     if (counts & c.VK_SAMPLE_COUNT_64_BIT != 0) {

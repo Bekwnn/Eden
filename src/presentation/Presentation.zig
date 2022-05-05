@@ -213,7 +213,14 @@ pub fn RenderFrame() !void {
     }
 
     var imageIndex: u32 = 0;
-    const acquireImageResult = c.vkAcquireNextImageKHR(rContext.m_logicalDevice, vk.swapchain.m_swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
+    const acquireImageResult = c.vkAcquireNextImageKHR(
+        rContext.m_logicalDevice,
+        vk.swapchain.m_swapchain,
+        std.math.maxInt(u64),
+        vk.imageAvailableSemaphores[currentFrame],
+        null,
+        &imageIndex,
+    );
     if (acquireImageResult == c.VK_ERROR_OUT_OF_DATE_KHR) {
         try vk.RecreateSwapchain(swapchainAllocator);
         return;

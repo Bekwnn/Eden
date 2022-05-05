@@ -7,6 +7,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const PresentationInstance = @import("PresentationInstance.zig").PresentationInstance;
+const Buffer = @import("Buffer.zig").Buffer;
 const Mesh = @import("Mesh.zig").Mesh;
 const Texture = @import("Texture.zig").Texture;
 const VertexData = @import("Mesh.zig").VertexData;
@@ -28,7 +29,6 @@ const applicationName = "Eden Demo";
 const applicationVersion = c.VK_MAKE_API_VERSION(0, 1, 0, 0);
 
 pub const BUFFER_FRAMES = 2;
-pub var curFrameBufferIdx: u32 = 0;
 
 pub var swapchain: Swapchain = undefined;
 
@@ -50,13 +50,10 @@ pub var curMesh: ?Mesh = null;
 pub var curCamera = Camera{};
 
 // Mesh
-pub var vertexBuffer: c.VkBuffer = undefined;
-pub var vertexBufferMemory: c.VkDeviceMemory = undefined;
-pub var indexBuffer: c.VkBuffer = undefined;
-pub var indexBufferMemory: c.VkDeviceMemory = undefined;
+pub var vertexBuffer: Buffer = undefined;
+pub var indexBuffer: Buffer = undefined;
 // Mesh mvp
-pub var uniformBuffers: []c.VkBuffer = undefined;
-pub var uniformBuffersMemory: []c.VkDeviceMemory = undefined;
+pub var uniformBuffers: []Buffer = undefined;
 pub var descriptorPool: c.VkDescriptorPool = undefined;
 pub var descriptorSets: []c.VkDescriptorSet = undefined;
 
@@ -74,9 +71,9 @@ const VKInitError = error{
     FailedToCreatePipeline,
     FailedToCreateRenderPass,
     FailedToCreateSemaphores,
-    FailedToCreateVertexBuffer,
     FailedToFindMemoryType,
     FailedToRecordCommandBuffers,
+    FailedToUpdateUniformBuffer,
     MissingCurMesh, //TODO delete after testing
     MissingValidationLayer,
     NoAvailableSwapSurfaceFormat,
@@ -134,8 +131,8 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     try swapchain.CreateFrameBuffers(allocator, presInstance.m_logicalDevice, renderPass);
 
     const testImagePath = "test-assets\\test.png";
-    std.debug.print("CreateTextureImage()...\n", .{});
-    try CreateTextureImage(testImagePath);
+    std.debug.print("CreateTexture()...\n", .{});
+    textureImage = try Texture.CreateTexture(testImagePath);
 
     std.debug.print("CreateTextureImageView()...\n", .{});
     try CreateTextureImageView();
@@ -143,11 +140,15 @@ pub fn VulkanInit(window: *c.SDL_Window) !void {
     std.debug.print("CreateTextureSampler()...\n", .{});
     try CreateTextureSampler();
 
-    std.debug.print("CreateVertexBuffer()...\n", .{});
-    try CreateVertexBuffer();
+    if (curMesh) |*mesh| {
+        std.debug.print("CreateVertexBuffer()...\n", .{});
+        vertexBuffer = try Buffer.CreateVertexBuffer(mesh);
 
-    std.debug.print("CreateIndexBuffer()...\n", .{});
-    try CreateIndexBuffer();
+        std.debug.print("CreateIndexBuffer()...\n", .{});
+        indexBuffer = try Buffer.CreateIndexBuffer(mesh);
+    } else {
+        return VKInitError.MissingCurMesh;
+    }
 
     std.debug.print("CreateUniformBuffers()...\n", .{});
     try CreateUniformBuffers(allocator);
@@ -184,14 +185,8 @@ pub fn VulkanCleanup() !void {
         }
     }
 
-    defer {
-        c.vkDestroyBuffer(presInstance.m_logicalDevice, vertexBuffer, null);
-        c.vkFreeMemory(presInstance.m_logicalDevice, vertexBufferMemory, null);
-    }
-    defer {
-        c.vkDestroyBuffer(presInstance.m_logicalDevice, indexBuffer, null);
-        c.vkFreeMemory(presInstance.m_logicalDevice, indexBufferMemory, null);
-    }
+    defer vertexBuffer.DestroyBuffer(presInstance.m_logicalDevice);
+    defer indexBuffer.DestroyBuffer(presInstance.m_logicalDevice);
 
     defer c.vkDestroyDescriptorSetLayout(presInstance.m_logicalDevice, descriptorSetLayout, null);
 
@@ -246,11 +241,8 @@ fn CleanupSwapchain() void {
     const presInstance = PresentationInstance.GetInstance() catch @panic("!");
 
     defer {
-        for (uniformBuffers) |uniformBuffer| {
-            c.vkDestroyBuffer(presInstance.m_logicalDevice, uniformBuffer, null);
-        }
-        for (uniformBuffersMemory) |memory| {
-            c.vkFreeMemory(presInstance.m_logicalDevice, memory, null);
+        for (uniformBuffers) |*uniformBuffer| {
+            uniformBuffer.DestroyBuffer(presInstance.m_logicalDevice);
         }
         c.vkDestroyDescriptorPool(presInstance.m_logicalDevice, descriptorPool, null);
     }
@@ -722,15 +714,6 @@ pub fn CreateImageView(
     return imageView;
 }
 
-fn CreateTextureImage(imagePath: []const u8) !void {
-    const presInstance = try PresentationInstance.GetInstance();
-    textureImage = try Texture.CreateTexture(
-        presInstance.m_logicalDevice,
-        presInstance.m_physicalDevice,
-        imagePath,
-    );
-}
-
 fn CreateTextureImageView() !void {
     textureImage.m_imageView = try CreateImageView(
         textureImage.m_image,
@@ -784,50 +767,6 @@ pub fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32
         }
     }
     return VKInitError.FailedToFindMemoryType;
-}
-
-//TODO shared function; where should it live?
-pub fn CreateBuffer(
-    size: c.VkDeviceSize,
-    usage: c.VkBufferUsageFlags,
-    properties: c.VkMemoryPropertyFlags,
-    buffer: *c.VkBuffer,
-    bufferMemory: *c.VkDeviceMemory,
-) !void {
-    const presInstance = try PresentationInstance.GetInstance();
-    const bufferInfo = c.VkBufferCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = size,
-        .usage = usage,
-        .sharingMode = c.VK_SHARING_MODE_EXCLUSIVE,
-        .queueFamilyIndexCount = 0,
-        .pQueueFamilyIndices = null,
-        .flags = 0,
-        .pNext = null,
-    };
-
-    try CheckVkSuccess(
-        c.vkCreateBuffer(presInstance.m_logicalDevice, &bufferInfo, null, buffer),
-        VKInitError.FailedToCreateVertexBuffer,
-    );
-    var memRequirements: c.VkMemoryRequirements = undefined;
-    c.vkGetBufferMemoryRequirements(presInstance.m_logicalDevice, buffer.*, &memRequirements);
-
-    const allocInfo = c.VkMemoryAllocateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = memRequirements.size,
-        .memoryTypeIndex = try FindMemoryType(memRequirements.memoryTypeBits, properties),
-        .pNext = null,
-    };
-
-    try CheckVkSuccess(
-        c.vkAllocateMemory(presInstance.m_logicalDevice, &allocInfo, null, bufferMemory),
-        VKInitError.FailedToCreateVertexBuffer,
-    );
-    try CheckVkSuccess(
-        c.vkBindBufferMemory(presInstance.m_logicalDevice, buffer.*, bufferMemory.*, 0),
-        VKInitError.VKError,
-    );
 }
 
 //TODO shared function; where should it live?
@@ -889,56 +828,6 @@ pub fn EndSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void {
         c.vkQueueWaitIdle(presInstance.m_graphicsQueue),
         VKInitError.VKError,
     );
-}
-
-fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize) !void {
-    var commandBuffer = try BeginSingleTimeCommands();
-
-    const copyRegion = c.VkBufferCopy{
-        .srcOffset = 0,
-        .dstOffset = 0,
-        .size = size,
-    };
-    c.vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-    try EndSingleTimeCommands(commandBuffer);
-}
-
-//TODO shared function; where should it live?
-pub fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u32) !void {
-    var commandBuffer = try BeginSingleTimeCommands();
-
-    const region = c.VkBufferImageCopy{
-        .bufferOffset = 0,
-        .bufferRowLength = 0,
-        .bufferImageHeight = 0,
-        .imageSubresource = c.VkImageSubresourceLayers{
-            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        },
-        .imageOffset = c.VkOffset3D{
-            .x = 0,
-            .y = 0,
-            .z = 0,
-        },
-        .imageExtent = c.VkExtent3D{
-            .width = width,
-            .height = height,
-            .depth = 1,
-        },
-    };
-    c.vkCmdCopyBufferToImage(
-        commandBuffer,
-        buffer,
-        image,
-        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        1,
-        &region,
-    );
-
-    try EndSingleTimeCommands(commandBuffer);
 }
 
 //TODO shared function; where should it live?
@@ -1018,86 +907,6 @@ pub fn TransitionImageLayout(
     try EndSingleTimeCommands(commandBuffer);
 }
 
-fn CreateVertexBuffer() !void {
-    if (curMesh) |*meshPtr| {
-        const bufferSize: c.VkDeviceSize = meshPtr.m_vertexData.items.len * @sizeOf(VertexData);
-
-        var stagingBuffer: c.VkBuffer = undefined;
-        var stagingBufferMemory: c.VkDeviceMemory = undefined;
-
-        const presInstance = try PresentationInstance.GetInstance();
-        try CreateBuffer(
-            bufferSize,
-            c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &stagingBuffer,
-            &stagingBufferMemory,
-        );
-        defer c.vkDestroyBuffer(presInstance.m_logicalDevice, stagingBuffer, null);
-        defer c.vkFreeMemory(presInstance.m_logicalDevice, stagingBufferMemory, null);
-
-        var data: [*]u8 = undefined;
-        try CheckVkSuccess(
-            c.vkMapMemory(presInstance.m_logicalDevice, stagingBufferMemory, 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data)),
-            VKInitError.VKError,
-        );
-        @memcpy(data, @ptrCast([*]u8, meshPtr.m_vertexData.items.ptr), bufferSize);
-        c.vkUnmapMemory(presInstance.m_logicalDevice, stagingBufferMemory);
-
-        try CreateBuffer(
-            bufferSize,
-            c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            &vertexBuffer,
-            &vertexBufferMemory,
-        );
-
-        try CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-    } else {
-        return VKInitError.MissingCurMesh;
-    }
-}
-
-fn CreateIndexBuffer() !void {
-    if (curMesh) |*meshPtr| {
-        const bufferSize: c.VkDeviceSize = meshPtr.m_indices.items.len * @sizeOf(u32);
-
-        var stagingBuffer: c.VkBuffer = undefined;
-        var stagingBufferMemory: c.VkDeviceMemory = undefined;
-
-        const presInstance = try PresentationInstance.GetInstance();
-        try CreateBuffer(
-            bufferSize,
-            c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &stagingBuffer,
-            &stagingBufferMemory,
-        );
-        defer c.vkDestroyBuffer(presInstance.m_logicalDevice, stagingBuffer, null);
-        defer c.vkFreeMemory(presInstance.m_logicalDevice, stagingBufferMemory, null);
-
-        var data: [*]u8 = undefined;
-        try CheckVkSuccess(
-            c.vkMapMemory(presInstance.m_logicalDevice, stagingBufferMemory, 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data)),
-            VKInitError.VKError,
-        );
-        @memcpy(data, @ptrCast([*]u8, meshPtr.m_indices.items.ptr), bufferSize);
-        c.vkUnmapMemory(presInstance.m_logicalDevice, stagingBufferMemory);
-
-        try CreateBuffer(
-            bufferSize,
-            c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            &indexBuffer,
-            &indexBufferMemory,
-        );
-
-        try CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
-    } else {
-        return VKInitError.MissingCurMesh;
-    }
-}
-
 const MeshUBO = packed struct {
     model: Mat4x4,
     view: Mat4x4,
@@ -1107,18 +916,15 @@ const MeshUBO = packed struct {
 fn CreateUniformBuffers(allocator: Allocator) !void {
     var bufferSize: c.VkDeviceSize = @sizeOf(MeshUBO);
 
-    uniformBuffers = try allocator.alloc(c.VkBuffer, swapchain.m_images.len);
-    uniformBuffersMemory = try allocator.alloc(c.VkDeviceMemory, swapchain.m_images.len);
+    uniformBuffers = try allocator.alloc(Buffer, swapchain.m_images.len);
 
     var i: u32 = 0;
     while (i < swapchain.m_images.len) : (i += 1) {
-        try CreateBuffer(
+        uniformBuffers[i] = try Buffer.CreateBuffer(
             bufferSize,
             c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                 c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &uniformBuffers[i],
-            &uniformBuffersMemory[i],
         );
     }
 }
@@ -1135,11 +941,18 @@ pub fn UpdateUniformBuffer(camera: *Camera, currentFrame: usize) !void {
     var data: [*]u8 = undefined;
     const presInstance = try PresentationInstance.GetInstance();
     try CheckVkSuccess(
-        c.vkMapMemory(presInstance.m_logicalDevice, uniformBuffersMemory[currentFrame], 0, bufferSize, 0, @ptrCast([*c]?*anyopaque, &data)),
-        VKInitError.VKError,
+        c.vkMapMemory(
+            presInstance.m_logicalDevice,
+            uniformBuffers[currentFrame].m_memory,
+            0,
+            bufferSize,
+            0,
+            @ptrCast([*c]?*anyopaque, &data),
+        ),
+        VKInitError.FailedToUpdateUniformBuffer,
     );
     @memcpy(data, @ptrCast([*]u8, &cameraMVP), bufferSize);
-    c.vkUnmapMemory(presInstance.m_logicalDevice, uniformBuffersMemory[currentFrame]);
+    c.vkUnmapMemory(presInstance.m_logicalDevice, uniformBuffers[currentFrame].m_memory);
 }
 
 fn CreateDescriptorPool() !void {
@@ -1193,7 +1006,7 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
     var i: u32 = 0;
     while (i < swapchain.m_images.len) : (i += 1) {
         const bufferInfo = c.VkDescriptorBufferInfo{
-            .buffer = uniformBuffers[i],
+            .buffer = uniformBuffers[i].m_buffer,
             .offset = 0,
             .range = @sizeOf(MeshUBO),
         };
@@ -1288,11 +1101,11 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         {
             c.vkCmdBindPipeline(commandBuffers[i], c.VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-            const vertexBuffers = [_]c.VkBuffer{vertexBuffer};
+            const vertexBuffers = [_]c.VkBuffer{vertexBuffer.m_buffer};
             const offsets = [_]c.VkDeviceSize{0};
             c.vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, &vertexBuffers, &offsets);
 
-            c.vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, c.VK_INDEX_TYPE_UINT32);
+            c.vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer.m_buffer, 0, c.VK_INDEX_TYPE_UINT32);
 
             c.vkCmdBindDescriptorSets(commandBuffers[i], c.VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, null);
 

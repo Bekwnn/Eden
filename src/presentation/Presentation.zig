@@ -117,11 +117,11 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     {
         c.vkCmdBindPipeline(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, vk.graphicsPipeline);
 
-        const vertexBuffers = [_]c.VkBuffer{vk.vertexBuffer};
+        const vertexBuffers = [_]c.VkBuffer{vk.vertexBuffer.m_buffer};
         const offsets = [_]c.VkDeviceSize{0};
         c.vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers, &offsets);
 
-        c.vkCmdBindIndexBuffer(commandBuffer, vk.indexBuffer, 0, c.VK_INDEX_TYPE_UINT32);
+        c.vkCmdBindIndexBuffer(commandBuffer, vk.indexBuffer.m_buffer, 0, c.VK_INDEX_TYPE_UINT32);
 
         c.vkCmdBindDescriptorSets(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, vk.pipelineLayout, 0, 1, &vk.descriptorSets[currentFrame], 0, null);
 

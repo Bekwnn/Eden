@@ -1,7 +1,11 @@
 //manages a texture asset for vulkan
 const c = @import("../c.zig");
-const vk = @import("VulkanInit.zig");
 const std = @import("std");
+const vk = @import("VulkanInit.zig");
+
+const PresentationInstance =
+    @import("PresentationInstance.zig").PresentationInstance;
+const Buffer = @import("Buffer.zig").Buffer;
 
 const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
 
@@ -21,10 +25,10 @@ pub const Texture = struct {
     m_mipLevels: u32,
 
     pub fn CreateTexture(
-        logicalDevice: c.VkDevice,
-        physicalDevice: c.VkPhysicalDevice,
         imagePath: []const u8,
     ) !Texture {
+        const presInstance = try PresentationInstance.GetInstance();
+
         std.debug.print("Loading Image {s} ...\n", .{imagePath});
         var image = try imageFileUtil.LoadImage(imagePath);
         defer image.FreeImage();
@@ -32,29 +36,24 @@ pub const Texture = struct {
         var newTexture: Texture = undefined;
         newTexture.m_mipLevels = CalcTextureMipLevels(image.m_width, image.m_height);
         const imageSize: c.VkDeviceSize = image.m_width * image.m_height * 4;
-        var stagingBuffer: c.VkBuffer = undefined;
-        var stagingBufferMemory: c.VkDeviceMemory = undefined;
-        try vk.CreateBuffer(
+        var stagingBuffer = try Buffer.CreateBuffer(
             imageSize,
             c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &stagingBuffer,
-            &stagingBufferMemory,
         );
-        defer c.vkDestroyBuffer(logicalDevice, stagingBuffer, null);
-        defer c.vkFreeMemory(logicalDevice, stagingBufferMemory, null);
+        defer stagingBuffer.DestroyBuffer(presInstance.m_logicalDevice);
 
         var data: [*]u8 = undefined;
         try vk.CheckVkSuccess(
-            c.vkMapMemory(logicalDevice, stagingBufferMemory, 0, imageSize, 0, @ptrCast([*c]?*anyopaque, &data)),
+            c.vkMapMemory(presInstance.m_logicalDevice, stagingBuffer.m_memory, 0, imageSize, 0, @ptrCast([*c]?*anyopaque, &data)),
             TextureError.FailedToMapMemory,
         );
 
         @memcpy(data, image.m_imageData, imageSize);
-        c.vkUnmapMemory(logicalDevice, stagingBufferMemory);
+        c.vkUnmapMemory(presInstance.m_logicalDevice, stagingBuffer.m_memory);
 
         try CreateImage(
-            logicalDevice,
+            presInstance.m_logicalDevice,
             image.m_width,
             image.m_height,
             newTexture.m_mipLevels,
@@ -74,10 +73,10 @@ pub const Texture = struct {
             c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             newTexture.m_mipLevels,
         );
-        try vk.CopyBufferToImage(stagingBuffer, newTexture.m_image, image.m_width, image.m_height);
+        try CopyBufferToImage(stagingBuffer.m_buffer, newTexture.m_image, image.m_width, image.m_height);
         //transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
         try GenerateMipmaps(
-            physicalDevice,
+            presInstance.m_physicalDevice,
             newTexture.m_image,
             c.VK_FORMAT_R8G8B8A8_SRGB,
             image.m_width,
@@ -374,6 +373,42 @@ fn GenerateMipmaps(
         null,
         1,
         &barrier,
+    );
+
+    try vk.EndSingleTimeCommands(commandBuffer);
+}
+
+fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u32) !void {
+    var commandBuffer = try vk.BeginSingleTimeCommands();
+
+    const region = c.VkBufferImageCopy{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = c.VkImageSubresourceLayers{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = c.VkOffset3D{
+            .x = 0,
+            .y = 0,
+            .z = 0,
+        },
+        .imageExtent = c.VkExtent3D{
+            .width = width,
+            .height = height,
+            .depth = 1,
+        },
+    };
+    c.vkCmdCopyBufferToImage(
+        commandBuffer,
+        buffer,
+        image,
+        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &region,
     );
 
     try vk.EndSingleTimeCommands(commandBuffer);

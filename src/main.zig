@@ -5,6 +5,7 @@ const debug = std.debug;
 const gameWorld = @import("game/GameWorld.zig");
 
 const presentation = @import("presentation/Presentation.zig");
+const PresentationInstance = @import("presentation/PresentationInstance.zig").PresentationInstance;
 const imgui = @import("presentation/ImGui.zig");
 const sdlInit = @import("presentation/SDLInit.zig");
 const vk = @import("presentation/VulkanInit.zig");
@@ -22,12 +23,8 @@ pub fn main() !void {
     defer c.SDL_DestroyRenderer(renderer);
 
     presentation.Initialize(); //TODO temp, delete should happen later
+    //TODO this should live in presentation init somewhere
     try vk.VulkanInit(window);
-    defer {
-        //TODO handle
-        _ = c.vkDeviceWaitIdle(vk.logicalDevice);
-        vk.VulkanCleanup();
-    }
 
     // imgui setup
     //try imgui.InitImgui(window);
@@ -47,6 +44,11 @@ pub fn main() !void {
     gameWorld.Initialize();
 
     try MainGameLoop(window);
+
+    // teardown
+    const presInstance = try PresentationInstance.GetInstance();
+    _ = c.vkDeviceWaitIdle(presInstance.m_logicalDevice);
+    try vk.VulkanCleanup();
 }
 
 pub fn MainGameLoop(window: *c.SDL_Window) !void {

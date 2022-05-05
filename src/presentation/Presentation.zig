@@ -4,6 +4,7 @@ const std = @import("std");
 const debug = std.debug;
 const allocator = std.heap.page_allocator;
 
+const PresentationInstance = @import("PresentationInstance.zig").PresentationInstance;
 const Shader = @import("Shader.zig").Shader;
 const Mesh = @import("Mesh.zig").Mesh;
 const assimp = @import("AssImpInterface.zig");
@@ -205,13 +206,14 @@ pub fn RenderFrame() !void {
 
     //c.igRender();
 
-    const fencesResult = c.vkWaitForFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, 2000000000);
+    const presInstance = try PresentationInstance.GetInstance();
+    const fencesResult = c.vkWaitForFences(presInstance.m_logicalDevice, 1, &vk.inFlightFences[currentFrame], c.VK_TRUE, 2000000000);
     if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {
         return RenderLoopError.FailedToWaitForInFlightFence;
     }
 
     var imageIndex: u32 = 0;
-    const acquireImageResult = c.vkAcquireNextImageKHR(vk.logicalDevice, vk.swapchain.m_swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
+    const acquireImageResult = c.vkAcquireNextImageKHR(presInstance.m_logicalDevice, vk.swapchain.m_swapchain, std.math.maxInt(u64), vk.imageAvailableSemaphores[currentFrame], null, &imageIndex);
     if (acquireImageResult == c.VK_ERROR_OUT_OF_DATE_KHR) {
         try vk.RecreateSwapchain(swapchainAllocator);
         return;
@@ -222,7 +224,7 @@ pub fn RenderFrame() !void {
     try vk.UpdateUniformBuffer(&vk.curCamera, currentFrame);
 
     try vk.CheckVkSuccess(
-        c.vkResetFences(vk.logicalDevice, 1, &vk.inFlightFences[currentFrame]),
+        c.vkResetFences(presInstance.m_logicalDevice, 1, &vk.inFlightFences[currentFrame]),
         RenderLoopError.FailedToResetFences,
     );
 
@@ -249,7 +251,7 @@ pub fn RenderFrame() !void {
     };
 
     try vk.CheckVkSuccess(
-        c.vkQueueSubmit(vk.graphicsQueue, 1, &submitInfo, vk.inFlightFences[currentFrame]),
+        c.vkQueueSubmit(presInstance.m_graphicsQueue, 1, &submitInfo, vk.inFlightFences[currentFrame]),
         RenderLoopError.FailedToSubmitDrawCommandBuffer,
     );
 
@@ -268,7 +270,7 @@ pub fn RenderFrame() !void {
     //TODO get imgui working again
     //ImguiUpdate()
 
-    const queuePresentResult = c.vkQueuePresentKHR(vk.presentQueue, &presentInfo);
+    const queuePresentResult = c.vkQueuePresentKHR(presInstance.m_presentQueue, &presentInfo);
 
     if (queuePresentResult == c.VK_ERROR_OUT_OF_DATE_KHR or queuePresentResult == c.VK_SUBOPTIMAL_KHR or framebufferResized) {
         framebufferResized = false;

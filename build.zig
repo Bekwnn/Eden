@@ -82,7 +82,7 @@ fn buildVKShaders(b: *Builder, exe: anytype, shaderName: []const u8, shaderExt: 
 
     // TODO if a shader has a compile error, replace it with an error shader that renders all pink
 
-    // TODO create a directory for excluded shaders which are not compiled; it will allow for you to have wip shaders or to move shaders which currently have errors/bugs into there to address later
+    // TODO create a directory for excluded shaders which are not compiled; it will allow for you to have wip shaders or to move shaders which currently have errors/bugs
 
     // For now, call this per file
     var inFileName = std.ArrayList(u8).init(b.allocator);

@@ -18,6 +18,8 @@ const defaultYFoV: f32 = 1.353540; // 110 degrees hfov -> 77.55 vfov at 16:9 -> 
 //const defaultYFoV: comptime f32 = 1.570796; // 90 deg -> convert to rad
 
 pub const Camera = struct {
+    m_name: []const u8,
+
     m_pos: Vec3 = vec3.zero,
     m_rotation: Quat = quat.identity,
     m_up: Vec3 = vec3.yAxis,

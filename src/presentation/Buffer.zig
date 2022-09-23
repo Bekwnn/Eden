@@ -15,7 +15,6 @@ pub const Buffer = struct {
     m_buffer: c.VkBuffer,
     m_memory: c.VkDeviceMemory,
 
-    //TODO this should take a vertex list not a mesh
     //TODO Creating index/vertex buffers should probably
     // live in mesh or meshutil and this class be more generic
     pub fn CreateVertexBuffer(mesh: *const Mesh) !Buffer {

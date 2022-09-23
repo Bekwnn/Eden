@@ -5,6 +5,9 @@ const Allocator = std.mem.Allocator;
 
 const vk = @import("VulkanInit.zig");
 
+const swapchain = @import("Swapchain.zig");
+const Swapchain = swapchain.Swapchain;
+
 var instance: ?RenderContext = null;
 
 const engineName = "Eden";
@@ -15,21 +18,30 @@ pub const RenderContextError = error{
     FailedToCheckInstanceLayerProperties,
     FailedToCreateInstance,
     FailedToCreateLogicDevice,
+    FailedToCreateRenderPass,
     FailedToCreateSurface,
     FailedToFindPhysicalDevice,
+    FailedToWait,
     MissingValidationLayer,
-    NoSuitableDevice, // device with vulkan support detected; does not satisfy properties
-    NoSupportedDevice, // no device supporting vulkan detected
+
+    // device with vulkan support detected; does not satisfy properties
+    NoSuitableDevice,
+
+    // no device supporting vulkan detected
+    NoSupportedDevice,
+
     NotInitialized,
 };
 
-//TODO settle on a shorter, better name
 pub const RenderContext = struct {
     m_vkInstance: c.VkInstance,
     m_surface: c.VkSurfaceKHR,
     m_physicalDevice: c.VkPhysicalDevice,
     m_logicalDevice: c.VkDevice,
     //m_debugCallback: c.VkDebugReportCallbackEXT,
+
+    m_swapchain: Swapchain,
+    m_renderPass: c.VkRenderPass,
 
     m_graphicsQueueIdx: ?u32,
     m_graphicsQueue: c.VkQueue,
@@ -60,6 +72,9 @@ pub const RenderContext = struct {
             .m_physicalDevice = undefined,
             .m_logicalDevice = undefined,
             //.m_debugCallback = undefined,
+
+            .m_swapchain = undefined,
+
             .m_graphicsQueueIdx = null,
             .m_graphicsQueue = undefined,
             .m_presentQueueIdx = null,
@@ -78,16 +93,107 @@ pub const RenderContext = struct {
         try PickPhysicalDevice(allocator, window);
 
         try CreateLogicalDevice(allocator);
+
+        //TODO move all swapchain initialization to Swapchain.zig
+        if (instance.m_graphicsQueueIdx == null or
+            instance.m_presentQueueIdx == null)
+        {
+            return RenderContextError.NotInitialized;
+        }
+        instance.m_swapchain = try Swapchain.CreateSwapchain(
+            allocator,
+            instance.m_logicalDevice,
+            instance.m_physicalDevice,
+            instance.m_surface,
+            instance.m_graphicsQueueIdx.?,
+            instance.m_presentQueueIdx.?,
+        );
+
+        try instance.m_swapchain.CreateColorAndDepthResources(
+            instance.m_logicalDevice,
+            instance.m_msaaSamples,
+        );
+
+        try instance.m_swapchain.CreateFrameBuffers(
+            allocator,
+            instance.m_logicalDevice,
+            instance.m_renderPass,
+        );
     }
 
     pub fn Shutdown() void {
         if (instance != null) {
-            defer instance = null;
-            defer c.vkDestroyInstance(instance.?.m_vkInstance, null);
-            defer c.vkDestroySurfaceKHR(instance.?.m_vkInstance, instance.?.m_surface, null);
+            instance.DestroySwapchain();
+            c.vkDestroyDevice(instance.?.m_logicalDevice, null);
+            c.vkDestroySurfaceKHR(
+                instance.?.m_vkInstance,
+                instance.?.m_surface,
+                null,
+            );
             // if (enableValidationLayers) destroy debug utils messenger
-            defer c.vkDestroyDevice(instance.?.m_logicalDevice, null);
+            c.vkDestroyInstance(instance.?.m_vkInstance, null);
+            instance = null;
         }
+    }
+
+    pub fn RecreateSwapchain(allocator: Allocator) !void {
+        const rContext = try RenderContext.GetInstance();
+        try vk.CheckVkSuccess(
+            c.vkDeviceWaitIdle(rContext.m_logicalDevice),
+            RenderContextError.FailedToWait,
+        );
+
+        std.debug.print("Recreating Swapchain...\n", .{});
+        rContext.DestroySwapchain();
+
+        try Swapchain.CreateSwapchain(allocator, rContext);
+        try CreateRenderPass();
+        try swapchain.CreateColorAndDepthResources(
+            rContext.m_logicalDevice,
+            rContext.m_msaaSamples,
+        );
+        try swapchain.CreateFrameBuffers(
+            allocator,
+            rContext.m_logicalDevice,
+            renderPass,
+        );
+        try CreateCommandBuffers(allocator);
+    }
+
+    pub fn DestroySwapchain(self: *RenderContext) void {
+        const rContext = RenderContext.GetInstance() catch @panic("!");
+
+        defer {
+            for (uniformBuffers) |*uniformBuffer| {
+                uniformBuffer.DestroyBuffer(rContext.m_logicalDevice);
+            }
+            c.vkDestroyDescriptorPool(
+                rContext.m_logicalDevice,
+                descriptorPool,
+                null,
+            );
+        }
+
+        defer swapchain.FreeSwapchain(rContext.m_logicalDevice);
+
+        defer c.vkDestroyRenderPass(rContext.m_logicalDevice, renderPass, null);
+        defer c.vkDestroyPipelineLayout(
+            rContext.m_logicalDevice,
+            pipelineLayout,
+            null,
+        );
+        defer c.vkDestroyPipeline(rContext.m_logicalDevice, graphicsPipeline, null);
+
+        defer swapchain.CleanupFrameBuffers(rContext.m_logicalDevice);
+
+        defer c.vkFreeCommandBuffers(
+            rContext.m_logicalDevice,
+            commandPool,
+            @intCast(u32, commandBuffers.len),
+            commandBuffers.ptr,
+        );
+
+        defer swapchain.CleanupDepthAndColorImages(rContext.m_logicalDevice);
     }
 };
 
@@ -212,7 +318,7 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
 const requiredExtensions = [_][*]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
-fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, window: *c.SDL_Window, s: c.VkSurfaceKHR) !bool {
+fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, window: *c.SDL_Window, surface: c.VkSurfaceKHR) !bool {
     //TODO should take in surface and check if presentation is supported (vkGetPhysicalDeviceSurfaceSupportKHR())
     var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
     c.vkGetPhysicalDeviceProperties(device, &deviceProperties);
@@ -241,26 +347,46 @@ fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, wi
     var extensionNames = try allocator.alloc([*]const u8, extensionCount);
     _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast([*c][*c]const u8, extensionNames.ptr));
 
-    const swapchainSupport = try vk.QuerySwapchainSupport(allocator, device, s);
-    const swapchainSupported = swapchainSupport.formats.len != 0 and swapchainSupport.presentModes.len != 0;
+    const swapchainSupport = try swapchain.QuerySwapchainSupport(
+        allocator,
+        device,
+        surface,
+    );
+    const swapchainSupported =
+        swapchainSupport.formats.len != 0 and
+        swapchainSupport.presentModes.len != 0;
 
     // We don't need any special features really...
     // For now, just test it supports geometry shaders as a sort of test/placeholder?
-    return swapchainSupported and graphicsSupportExists and deviceFeatures.geometryShader == c.VK_TRUE and deviceFeatures.samplerAnisotropy == c.VK_TRUE;
+    return swapchainSupported and
+        graphicsSupportExists and
+        deviceFeatures.geometryShader == c.VK_TRUE and
+        deviceFeatures.samplerAnisotropy == c.VK_TRUE;
 }
 
 const basicQueuePriority: f32 = 1.0; //TODO real queue priorities
 fn CreateLogicalDevice(allocator: Allocator) !void {
     const rContext = try RenderContext.GetInstance();
-    //TODO just copying device features that we found on the selected physical device,
-    //in the future it should just have features we're actually using
+    //TODO just copying device features that we found on the selected physical
+    //device--in the future it should just have features we're actually using
     var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
     c.vkGetPhysicalDeviceFeatures(rContext.m_physicalDevice, &deviceFeatures);
 
     var queueFamilyCount: u32 = 0;
-    c.vkGetPhysicalDeviceQueueFamilyProperties(rContext.m_physicalDevice, &queueFamilyCount, null);
-    var queueFamilies = try allocator.alloc(c.VkQueueFamilyProperties, queueFamilyCount);
-    c.vkGetPhysicalDeviceQueueFamilyProperties(rContext.m_physicalDevice, &queueFamilyCount, queueFamilies.ptr);
+    c.vkGetPhysicalDeviceQueueFamilyProperties(
+        rContext.m_physicalDevice,
+        &queueFamilyCount,
+        null,
+    );
+    var queueFamilies = try allocator.alloc(
+        c.VkQueueFamilyProperties,
+        queueFamilyCount,
+    );
+    c.vkGetPhysicalDeviceQueueFamilyProperties(
+        rContext.m_physicalDevice,
+        &queueFamilyCount,
+        queueFamilies.ptr,
+    );
 
     var graphicsQueueIndex: ?u32 = null;
     var presentQueueIndex: ?u32 = null;
@@ -274,7 +400,12 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         if (presentQueueIndex == null) {
             var presentationSupport: c.VkBool32 = c.VK_FALSE;
             try vk.CheckVkSuccess(
-                c.vkGetPhysicalDeviceSurfaceSupportKHR(rContext.m_physicalDevice, i, rContext.m_surface, &presentationSupport),
+                c.vkGetPhysicalDeviceSurfaceSupportKHR(
+                    rContext.m_physicalDevice,
+                    i,
+                    rContext.m_surface,
+                    &presentationSupport,
+                ),
                 RenderContextError.FailedToFindPhysicalDevice,
             );
             if (presentationSupport == c.VK_TRUE) {
@@ -296,7 +427,8 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
     // graphics queue
     queueCreateInfos[0] = c.VkDeviceQueueCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = graphicsQueueIndex orelse return RenderContextError.FailedToCreateLogicDevice,
+        .queueFamilyIndex = graphicsQueueIndex orelse
+            return RenderContextError.FailedToCreateLogicDevice,
         .queueCount = 1,
         .pQueuePriorities = &basicQueuePriority,
         .flags = 0,
@@ -306,7 +438,8 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         // presentation queue
         queueCreateInfos[1] = c.VkDeviceQueueCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .queueFamilyIndex = presentQueueIndex orelse return RenderContextError.FailedToCreateLogicDevice,
+            .queueFamilyIndex = presentQueueIndex orelse
+                return RenderContextError.FailedToCreateLogicDevice,
             .queueCount = 1,
             .pQueuePriorities = &basicQueuePriority,
             .flags = 0,
@@ -372,4 +505,123 @@ fn GetMaxUsableSampleCount() !c.VkSampleCountFlagBits {
 
     std.debug.print("MSAA detected: SAMPLE_COUNT_1_BIT\n", .{});
     return c.VK_SAMPLE_COUNT_1_BIT;
+}
+
+fn CreateRenderPass() !void {
+    const rContext = try RenderContext.GetInstance();
+    const colorAttachment = c.VkAttachmentDescription{
+        .format = swapchain.m_format.format,
+        .samples = rContext.m_msaaSamples,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .flags = 0,
+    };
+    const colorAttachmentRef = c.VkAttachmentReference{
+        .attachment = 0,
+        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+    const colorAttachmentResolve = c.VkAttachmentDescription{
+        .format = swapchain.m_format.format,
+        .samples = c.VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .flags = 0,
+    };
+    const colorAttachmentResolveRef = c.VkAttachmentReference{
+        .attachment = 2,
+        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+    const depthAttachment = c.VkAttachmentDescription{
+        .format = try FindDepthFormat(),
+        .samples = rContext.m_msaaSamples,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .flags = 0,
+    };
+    const depthAttachmentRef = c.VkAttachmentReference{
+        .attachment = 1,
+        .layout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
+    const subpass = c.VkSubpassDescription{
+        .flags = 0,
+        .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .inputAttachmentCount = 0,
+        .pInputAttachments = null,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef,
+        .pResolveAttachments = &colorAttachmentResolveRef,
+        .pDepthStencilAttachment = &depthAttachmentRef,
+        .preserveAttachmentCount = 0,
+        .pPreserveAttachments = null,
+    };
+    const dependency = c.VkSubpassDependency{
+        .srcSubpass = c.VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = 0,
+    };
+    const attachments = [_]c.VkAttachmentDescription{ colorAttachment, depthAttachment, colorAttachmentResolve };
+    const renderPassInfo = c.VkRenderPassCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext = null,
+        .flags = 0,
+        .attachmentCount = attachments.len,
+        .pAttachments = &attachments,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = 1,
+        .pDependencies = &dependency,
+    };
+
+    try vk.CheckVkSuccess(
+        c.vkCreateRenderPass(rContext.m_logicalDevice, &renderPassInfo, null, &renderPass),
+        RenderContextError.FailedToCreateRenderPass,
+    );
+}
+
+//TODO shared function; should this live here?
+pub fn FindDepthFormat() !c.VkFormat {
+    return FindSupportedFormat(
+        &[_]c.VkFormat{ c.VK_FORMAT_D32_SFLOAT, c.VK_FORMAT_D32_SFLOAT_S8_UINT, c.VK_FORMAT_D24_UNORM_S8_UINT },
+        c.VK_IMAGE_TILING_OPTIMAL,
+        c.VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    );
+}
+
+//TODO shared function; should this live here?
+pub fn FindSupportedFormat(
+    candidates: []const c.VkFormat,
+    tiling: c.VkImageTiling,
+    features: c.VkFormatFeatureFlags,
+) !c.VkFormat {
+    const rContext = try RenderContext.GetInstance();
+    for (candidates) |format| {
+        var properties: c.VkFormatProperties = undefined;
+        c.vkGetPhysicalDeviceFormatProperties(rContext.m_physicalDevice, format, &properties);
+        if (tiling == c.VK_IMAGE_TILING_LINEAR and
+            (properties.linearTilingFeatures & features) == features)
+        {
+            return format;
+        } else if (tiling == c.VK_IMAGE_TILING_OPTIMAL and
+            (properties.optimalTilingFeatures & features) == features)
+        {
+            return format;
+        }
+    }
+    return VKInitError.VKError;
 }

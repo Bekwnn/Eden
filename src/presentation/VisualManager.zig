@@ -6,6 +6,7 @@
 //  + shader
 //  + textures
 //  + etc
+//  And one visual should be able to be a collection of these things
 
 // Each shader, mesh, and texture needs to be loaded and passed to the gaphics api, so we need another notion of "assets"
 

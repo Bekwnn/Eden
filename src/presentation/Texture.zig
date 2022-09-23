@@ -9,11 +9,13 @@ const Buffer = @import("Buffer.zig").Buffer;
 const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
 
 pub const TextureError = error{
-    FailedToMapMemory,
-    FailedToCreateImage,
+    BadMipmapFormat,
     FailedToAllocateMemory,
     FailedToBindMemory,
-    BadMipmapFormat,
+    FailedToCreateImage,
+    FailedToCreateImageView,
+    FailedToCreateSampler,
+    FailedToMapMemory,
 };
 
 //TODO should it be renamed to something else?
@@ -83,6 +85,13 @@ pub const Texture = struct {
             newTexture.m_mipLevels,
         );
 
+        newTexture.m_imageView = try CreateImageView(
+            newTexture.m_image,
+            c.VK_FORMAT_R8G8B8A8_SRGB,
+            c.VK_IMAGE_ASPECT_COLOR_BIT,
+            newTexture.m_mipLevels,
+        );
+
         return newTexture;
     }
 
@@ -107,7 +116,7 @@ pub const Texture = struct {
             &depthTexture.m_image,
             &depthTexture.m_memory,
         );
-        depthTexture.m_imageView = try vk.CreateImageView(
+        depthTexture.m_imageView = try CreateImageView(
             depthTexture.m_image,
             depthFormat,
             c.VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -145,7 +154,7 @@ pub const Texture = struct {
             &colorTexture.m_image,
             &colorTexture.m_memory,
         );
-        colorTexture.m_imageView = try vk.CreateImageView(
+        colorTexture.m_imageView = try CreateImageView(
             colorTexture.m_image,
             colorFormat,
             c.VK_IMAGE_ASPECT_COLOR_BIT,
@@ -411,4 +420,79 @@ fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u
     );
 
     try vk.EndSingleTimeCommands(commandBuffer);
+}
+
+pub fn CreateImageView(
+    image: c.VkImage,
+    format: c.VkFormat,
+    aspectFlags: c.VkImageAspectFlags,
+    mipLevels: u32,
+) !c.VkImageView {
+    const rContext = try RenderContext.GetInstance();
+    const imageViewInfo = c.VkImageViewCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image,
+        .viewType = c.VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+        .components = c.VkComponentMapping{
+            .r = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .g = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .b = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+            .a = c.VK_COMPONENT_SWIZZLE_IDENTITY,
+        },
+        .subresourceRange = c.VkImageSubresourceRange{
+            .aspectMask = aspectFlags,
+            .baseMipLevel = 0,
+            .levelCount = mipLevels,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .flags = 0,
+        .pNext = null,
+    };
+
+    var imageView: c.VkImageView = undefined;
+    try vk.CheckVkSuccess(
+        c.vkCreateImageView(rContext.m_logicalDevice, &imageViewInfo, null, &imageView),
+        TextureError.FailedToCreateImageView,
+    );
+
+    return imageView;
+}
+
+pub fn CreateTextureSampler(
+    texture: *const Texture,
+    textureSampler: *c.VkSampler,
+) !void {
+    const samplerInfo = c.VkSamplerCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = c.VK_FILTER_LINEAR,
+        .minFilter = c.VK_FILTER_LINEAR,
+        .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .anisotropyEnable = c.VK_TRUE,
+        .maxAnisotropy = 16,
+        .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = c.VK_FALSE,
+        .compareEnable = c.VK_FALSE,
+        .compareOp = c.VK_COMPARE_OP_ALWAYS,
+        .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .mipLodBias = 0.0,
+        .minLod = 0.0,
+        .maxLod = @intToFloat(f32, texture.m_mipLevels),
+        .flags = 0,
+        .pNext = null,
+    };
+
+    const rContext = try RenderContext.GetInstance();
+    try vk.CheckVkSuccess(
+        c.vkCreateSampler(
+            rContext.m_logicalDevice,
+            &samplerInfo,
+            null,
+            &textureSampler,
+        ),
+        TextureError.FailedToCreateSampler,
+    );
 }

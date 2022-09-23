@@ -10,6 +10,7 @@ const Mesh = @import("Mesh.zig").Mesh;
 const assimp = @import("AssImpInterface.zig");
 const Camera = @import("Camera.zig").Camera;
 const vk = @import("VulkanInit.zig");
+const Scene = @import("Scene.zig").Scene;
 
 const mat4x4 = @import("../math/Mat4x4.zig");
 
@@ -20,10 +21,11 @@ const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 
 const c = @import("../c.zig");
 
-var curShader: ?u32 = null;
 var curTime: f32 = 0.0;
 const circleTime: f32 = 1.0 / (2.0 * std.math.pi);
 const circleRadius: f32 = 0.5;
+
+var scene: Scene = .Scene{};
 
 const RenderLoopError = error{
     FailedToSubmitDrawCommandBuffer,
@@ -63,15 +65,11 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
 }
 
 pub fn Initialize() void {
-    const meshPath = filePathUtils.CwdToAbsolute(allocator, "test-assets\\test.obj") catch {
+    // init hardcoded test scene:
+    scene.CreateMesh("monkey", "test-assets\\test.obj") catch |meshErr| {
+        debug.print("Error creating mesh: {}\n", .{meshErr});
         @panic("!");
     };
-    defer allocator.free(meshPath);
-    if (assimp.ImportMesh(meshPath)) |mesh| {
-        vk.curMesh = mesh;
-    } else |meshErr| {
-        debug.print("Error importing mesh: {}\n", .{meshErr});
-    }
 
     //TODO get imgui working again
     //ImguiInit();

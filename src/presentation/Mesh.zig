@@ -4,7 +4,12 @@ const std = @import("std");
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec2 = @import("../math/Vec2.zig").Vec2;
 
+const RenderContext = @import("RenderContext.zig").RenderContext;
+
 const ArrayList = std.ArrayList;
+const allocator = std.heap.page_allocator;
+
+const Buffer = @import("Buffer.zig").Buffer;
 
 const vertexDataDesc = [_]c.VkVertexInputAttributeDescription{
     c.VkVertexInputAttributeDescription{
@@ -38,11 +43,18 @@ pub const VertexData = struct {
     m_uvCoord: Vec2,
 };
 
+pub const MeshBuffers = struct {
+    m_vertexBuffer: Buffer,
+    m_indexBuffer: Buffer,
+};
+
 pub const Mesh = struct {
     m_name: []const u8,
 
     m_vertexData: ArrayList(VertexData),
     m_indices: ArrayList(u32),
+
+    m_bufferData: ?MeshBuffers,
 
     pub fn GetBindingDescription() c.VkVertexInputBindingDescription {
         return vertexInputBindingDesc;
@@ -50,5 +62,24 @@ pub const Mesh = struct {
 
     pub fn GetAttributeDescriptions() []const c.VkVertexInputAttributeDescription {
         return vertexDataDesc[0..];
+    }
+
+    // To be called after the vertex/index arrays are filled
+    // TODO make this all one step and less error prone
+    pub fn InitMesh(self: *Mesh) !void {
+        self.m_meshBuffers = MeshBuffers{
+            .m_vertexBuffer = try Buffer.CreateVertexBuffer(self),
+            .m_indexBuffer = try Buffer.CreateIndexBuffer(self),
+        };
+    }
+
+    pub fn DestroyMesh(self: *Mesh) void {
+        self.m_vertexData.deinit();
+        self.m_indices.deinit();
+
+        var rContext = RenderContext.GetInstance() catch @panic("!");
+
+        self.m_meshBuffers.m_vertexBuffer.DestroyBuffer(rContext.m_logicalDevice);
+        self.m_meshBuffers.m_indexBuffer.DestroyBuffer(rContext.m_logicalDevice);
     }
 };

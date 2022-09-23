@@ -1,16 +1,19 @@
 const c = @import("../c.zig");
 const vk = @import("VulkanInit.zig");
-const Texture = @import("Texture.zig").Texture;
+
+const texture = @import("Texture.zig");
+const Texture = texture.Texture;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-pub const SwapchainError = error{
-    FailedToCreateSwapchain,
-    FailedToGetImages,
-    FailedToCreateFrameBuffers,
-    NoAvailablePresentMode,
-    NoAvailableSwapSurfaceFormat,
+pub const SwapchainError = error{ FailedToCreateSwapchain, FailedToGetImages, FailedToCreateFrameBuffers, NoAvailablePresentMode, NoAvailableSwapSurfaceFormat, Error //TODO replace and delete with more specific
+};
+
+pub const SwapchainSupportDetails = struct {
+    capabilities: c.VkSurfaceCapabilitiesKHR,
+    formats: []c.VkSurfaceFormatKHR,
+    presentModes: []c.VkPresentModeKHR,
 };
 
 //TODO Should the instance of this live somewhere in PresentationInstance?
@@ -34,7 +37,7 @@ pub const Swapchain = struct {
         graphicsQueueIndex: u32,
         presentQueueIndex: u32,
     ) !Swapchain {
-        const swapchainSupport = try vk.QuerySwapchainSupport(
+        const swapchainSupport = try QuerySwapchainSupport(
             allocator,
             physicalDevice,
             surface,
@@ -128,7 +131,7 @@ pub const Swapchain = struct {
         );
         var i: u32 = 0;
         while (i < newSwapchain.m_images.len) : (i += 1) {
-            newSwapchain.m_imageViews[i] = try vk.CreateImageView(
+            newSwapchain.m_imageViews[i] = try texture.CreateImageView(
                 newSwapchain.m_images[i],
                 newSwapchain.m_format.format,
                 c.VK_IMAGE_ASPECT_COLOR_BIT,
@@ -280,4 +283,41 @@ fn ChooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
             ),
         };
     }
+}
+
+pub fn QuerySwapchainSupport(allocator: Allocator, physDevice: c.VkPhysicalDevice, s: c.VkSurfaceKHR) !SwapchainSupportDetails {
+    var details: SwapchainSupportDetails = undefined;
+
+    try vk.CheckVkSuccess(
+        c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDevice, s, &details.capabilities),
+        SwapchainError.Error,
+    );
+
+    {
+        var formatCount: u32 = 0;
+        try vk.CheckVkSuccess(
+            c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, null),
+            SwapchainError.Error,
+        );
+        details.formats = try allocator.alloc(c.VkSurfaceFormatKHR, formatCount);
+        try vk.CheckVkSuccess(
+            c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, details.formats.ptr),
+            SwapchainError.Error,
+        );
+    }
+
+    {
+        var presentModeCount: u32 = 0;
+        try vk.CheckVkSuccess(
+            c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, null),
+            SwapchainError.Error,
+        );
+        details.presentModes = try allocator.alloc(c.VkPresentModeKHR, presentModeCount);
+        try vk.CheckVkSuccess(
+            c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, details.presentModes.ptr),
+            SwapchainError.Error,
+        );
+    }
+
+    return details;
 }

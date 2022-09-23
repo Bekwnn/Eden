@@ -40,6 +40,7 @@ pub fn ImportMesh(filePath: []const u8) !Mesh {
         .m_name = fileName,
         .m_vertexData = try ArrayList(VertexData).initCapacity(allocator, importMesh.mNumVertices),
         .m_indices = ArrayList(u32).init(allocator), //TODO can we make the capacity/resize handling better?
+        .m_bufferData = null,
     };
 
     // Copy data from the imported mesh structure to ours

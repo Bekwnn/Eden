@@ -27,23 +27,10 @@ const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
 const applicationName = "Eden Demo";
 const applicationVersion = c.VK_MAKE_API_VERSION(0, 1, 0, 0);
 
-pub const BUFFER_FRAMES = 2;
-
 // PIPELINE START
-pub var commandPool: c.VkCommandPool = undefined;
-pub var commandBuffers: []c.VkCommandBuffer = undefined;
-
-pub var imageAvailableSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
-pub var renderFinishedSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined;
-pub var inFlightFences: [BUFFER_FRAMES]c.VkFence = undefined;
 //PIPELINE END
 
 const VKInitError = error{
-    FailedToCreateCommandBuffers,
-    FailedToCreateCommandPool,
-    FailedToCreateFences,
-    FailedToCreateImageView,
-    FailedToCreateSemaphores,
     FailedToFindMemoryType,
     FailedToRecordCommandBuffers,
     VKError, // prefer creating new more specific errors
@@ -59,61 +46,18 @@ pub fn CheckVkSuccess(result: c.VkResult, errorToReturn: anyerror) !void {
 pub fn VulkanInit(window: *c.SDL_Window) !void {
     const allocator = std.heap.page_allocator;
 
-    std.debug.print("CreateVKInstance()...\n", .{});
+    std.debug.print("Creating render context...\n", .{});
     try RenderContext.Initialize(
         allocator,
         window,
         applicationName,
         applicationVersion,
     );
-
-    std.debug.print("CreateCommandPool()...\n", .{});
-    try CreateCommandPool();
-
-    std.debug.print("CreateCommandBuffers()...\n", .{});
-    try CreateCommandBuffers(allocator);
-
-    std.debug.print("CreateFencesAndSemaphores()...\n", .{});
-    try CreateFencesAndSemaphores();
 }
 
 //TODO really we don't want this to be able to return an error
 pub fn VulkanCleanup() !void {
-    const rContext = try RenderContext.GetInstance();
-
-    // defer so execution happens in unwinding order--easier to compare with
-    // init order above
-    defer RenderContext.Shutdown();
-
-    defer c.vkDestroyCommandPool(rContext.m_logicalDevice, commandPool, null);
-
-    defer {
-        var i: usize = 0;
-        while (i < BUFFER_FRAMES) : (i += 1) {
-            c.vkDestroySemaphore(rContext.m_logicalDevice, imageAvailableSemaphores[i], null);
-            c.vkDestroySemaphore(rContext.m_logicalDevice, renderFinishedSemaphores[i], null);
-            c.vkDestroyFence(rContext.m_logicalDevice, inFlightFences[i], null);
-        }
-    }
-}
-
-fn CreateCommandPool() !void {
-    const rContext = try RenderContext.GetInstance();
-
-    if (rContext.m_graphicsQueueIdx == null) {
-        return VKInitError.FailedToCreateCommandPool;
-    }
-    const poolInfo = c.VkCommandPoolCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .queueFamilyIndex = rContext.m_graphicsQueueIdx.?,
-        .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .pNext = null,
-    };
-
-    try CheckVkSuccess(
-        c.vkCreateCommandPool(rContext.m_logicalDevice, &poolInfo, null, &commandPool),
-        VKInitError.FailedToCreateCommandPool,
-    );
+    try RenderContext.Shutdown();
 }
 
 fn HasStencilComponent(format: c.VkFormat) bool {
@@ -139,15 +83,16 @@ pub fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32
 
 //TODO shared function; where should it live?
 pub fn BeginSingleTimeCommands() !c.VkCommandBuffer {
+    const rContext = try RenderContext.GetInstance();
+
     const allocInfo = c.VkCommandBufferAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandPool = commandPool,
+        .commandPool = rContext.m_commandPool,
         .commandBufferCount = 1,
         .pNext = null,
     };
 
-    const rContext = try RenderContext.GetInstance();
     var commandBuffer: c.VkCommandBuffer = undefined;
     try CheckVkSuccess(
         c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, &commandBuffer),
@@ -273,108 +218,4 @@ pub fn TransitionImageLayout(
     );
 
     try EndSingleTimeCommands(commandBuffer);
-}
-
-fn CreateCommandBuffers(allocator: Allocator) !void {
-    const rContext = try RenderContext.GetInstance();
-    commandBuffers = try allocator.alloc(
-        c.VkCommandBuffer,
-        rContext.m_swapchain.m_frameBuffers.len,
-    );
-    const allocInfo = c.VkCommandBufferAllocateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = commandPool,
-        .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = @intCast(u32, commandBuffers.len),
-        .pNext = null,
-    };
-
-    try CheckVkSuccess(
-        c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, commandBuffers.ptr),
-        VKInitError.FailedToCreateCommandBuffers,
-    );
-
-    var i: usize = 0;
-    while (i < commandBuffers.len) : (i += 1) {
-        var beginInfo = c.VkCommandBufferBeginInfo{
-            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .pInheritanceInfo = null,
-            .flags = 0,
-            .pNext = null,
-        };
-
-        try CheckVkSuccess(
-            c.vkBeginCommandBuffer(commandBuffers[i], &beginInfo),
-            VKInitError.FailedToCreateCommandBuffers,
-        );
-
-        const clearColor = c.VkClearValue{
-            .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
-        };
-        const clearDepth = c.VkClearValue{
-            .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
-        };
-        const clearValues = [_]c.VkClearValue{ clearColor, clearDepth };
-        const renderPassInfo = c.VkRenderPassBeginInfo{
-            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass = rContext.m_renderPass,
-            .framebuffer = rContext.m_swapchain.m_frameBuffers[i],
-            .renderArea = c.VkRect2D{
-                .offset = c.VkOffset2D{
-                    .x = 0,
-                    .y = 0,
-                },
-                .extent = rContext.m_swapchain.m_extent,
-            },
-            .clearValueCount = 2,
-            .pClearValues = &clearValues,
-            .pNext = null,
-        };
-
-        c.vkCmdBeginRenderPass(
-            commandBuffers[i],
-            &renderPassInfo,
-            c.VK_SUBPASS_CONTENTS_INLINE,
-        );
-        {
-            //TODO scene.RenderObjects(commandBuffers[i], renderObjects);
-        }
-        c.vkCmdEndRenderPass(commandBuffers[i]);
-
-        try CheckVkSuccess(
-            c.vkEndCommandBuffer(commandBuffers[i]),
-            VKInitError.FailedToRecordCommandBuffers,
-        );
-    }
-}
-
-fn CreateFencesAndSemaphores() !void {
-    const semaphoreInfo = c.VkSemaphoreCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .flags = 0,
-        .pNext = null,
-    };
-
-    const fenceInfo = c.VkFenceCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = 0,
-        .pNext = null,
-    };
-
-    const rContext = try RenderContext.GetInstance();
-    var i: usize = 0;
-    while (i < BUFFER_FRAMES) : (i += 1) {
-        try CheckVkSuccess(
-            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]),
-            VKInitError.FailedToCreateSemaphores,
-        );
-        try CheckVkSuccess(
-            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &imageAvailableSemaphores[i]),
-            VKInitError.FailedToCreateSemaphores,
-        );
-        try CheckVkSuccess(
-            c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &inFlightFences[i]),
-            VKInitError.FailedToCreateFences,
-        );
-    }
 }

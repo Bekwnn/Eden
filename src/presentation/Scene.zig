@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig");
+const c = @import("../c.zig");
 const debug = std.debug;
 const allocator = std.heap.page_allocator;
 
@@ -7,6 +7,8 @@ const StringHashMap = std.StringHashMap;
 const ArrayList = std.ArrayList;
 
 const Camera = @import("Camera.zig").Camera;
+const RenderObject = @import("RenderObject.zig").RenderObject;
+const RenderContext = @import("RenderContext.zig").RenderContext;
 
 pub const CameraError = error{
     NoCurrent,
@@ -64,13 +66,13 @@ pub const Scene = struct {
     pub fn DrawScene(
         self: *Scene,
         cmd: c.VkCommandBuffer,
-        renderObjects: []RenderObjects,
+        renderObjects: []RenderObject,
     ) !void {
-        if (m_currentCamera == null) {
+        if (self.m_currentCamera == null) {
             return CameraError.NoCurrent;
         }
 
-        for (renderObjects) |*renderObject| {
+        for (renderObjects) |*renderObject, i| {
             c.vkCmdBindPipeline(
                 cmd,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -90,13 +92,14 @@ pub const Scene = struct {
                 c.VK_INDEX_TYPE_UINT32,
             );
 
+            const rContext = try RenderContext.GetInstance();
             c.vkCmdBindDescriptorSets(
                 cmd,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                renderObject.m_material.m_pipelineLayout,
+                rContext.m_pipelineLayout,
                 0,
                 1,
-                &descriptorSets[i],
+                &rContext.m_descriptorSets[i],
                 0,
                 null,
             );

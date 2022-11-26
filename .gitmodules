@@ -1,3 +1,6 @@
 [submodule "dependency/cimgui"]
 	path = dependency/cimgui
 	url = https://github.com/cimgui/cimgui
+[submodule "dependency/cgltf"]
+	path = dependency/cgltf
+	url = https://github.com/jkuhlmann/cgltf

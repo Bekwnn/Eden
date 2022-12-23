@@ -1,7 +1,17 @@
+const c = @import("../c.zig");
+
+const std = @import("std");
+const allocator = std.heap.page_allocator;
+
 const mat4x4 = @import("../math/Mat4x4.zig");
 const Mat4x4 = mat4x4.Mat4x4;
 
+const vkUtil = @import("VulkanUtil.zig");
 const RenderContext = @import("RenderContext.zig").RenderContext;
+const Mesh = @import("Mesh.zig").Mesh;
+const Material = @import("Material.zig").Material;
+const Buffer = @import("Buffer.zig").Buffer;
+const Camera = @import("Camera.zig").Camera;
 
 const MvpUbo = packed struct {
     model: Mat4x4,
@@ -19,18 +29,18 @@ const RenderObject = struct {
     m_uniformBuffers: []Buffer,
 
     pub fn CreateRenderObject(mesh: *Mesh, material: *Material) !RenderObject {
-        var bufferSize: c.VkDeviceSize = @sizeOf(MvpUbo);
+        const rContext = try RenderContext.GetInstance();
 
         var newRenderObject = RenderObject{
             .m_mesh = &mesh,
             .m_material = &material,
             .transform = mat4x4.identity,
-            .m_uniformBuffers = try allocator.alloc(Buffer, swapchain.m_images.len),
+            .m_uniformBuffers = try allocator.alloc(Buffer, rContext.m_swapchain.m_images.len),
         };
 
         var bufferSize: c.VkDeviceSize = @sizeOf(MvpUbo);
         var i: u32 = 0;
-        while (i < swapchain.m_images.len) : (i += 1) {
+        while (i < rContext.m_swapchain.m_images.len) : (i += 1) {
             newRenderObject.m_uniformBuffers[i] = try Buffer.CreateBuffer(
                 bufferSize,
                 c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -46,7 +56,7 @@ const RenderObject = struct {
     pub fn DestroyRenderObject(self: *RenderObject) void {
         var rContext = RenderContext.GetInstance() catch @panic("!");
 
-        for (m_uniformBuffers) |*uniformBuffer| {
+        for (self.m_uniformBuffers) |*uniformBuffer| {
             uniformBuffer.DestroyBuffer(rContext.m_logicalDevice);
         }
     }
@@ -62,7 +72,7 @@ const RenderObject = struct {
 
         var data: [*]u8 = undefined;
         const rContext = try RenderContext.GetInstance();
-        try CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkMapMemory(
                 rContext.m_logicalDevice,
                 self.m_uniformBuffers[currentFrame].m_memory,
@@ -71,7 +81,7 @@ const RenderObject = struct {
                 0,
                 @ptrCast([*c]?*anyopaque, &data),
             ),
-            VKInitError.FailedToUpdateUniformBuffer,
+            vkUtil.VKError.UnspecifiedError,
         );
         @memcpy(data, @ptrCast([*]u8, &cameraMvp), bufferSize);
         c.vkUnmapMemory(rContext.m_logicalDevice, self.m_uniformBuffers[currentFrame].m_memory);

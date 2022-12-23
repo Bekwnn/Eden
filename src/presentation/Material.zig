@@ -2,6 +2,7 @@ const c = @import("c.zig");
 const std = @import("std");
 const allocator = std.heap.page_allocator;
 
+const vkUtil = @import("VulkanUtil.zig");
 const texture = @import("Texture.zig");
 const Texture = texture.Texture;
 const RenderContext = @import("RenderContext.zig").RenderContext;
@@ -20,6 +21,9 @@ pub const Material = struct {
         fragShaderPath: []const u8,
         texturePath: []const u8,
     ) !Material {
+        _ = vertShaderPath; //TODO UNUSED FIX
+        _ = fragShaderPath; //TODO UNUSED FIX
+
         std.debug.print("Creating Material {}...\n", .{materialName});
         var newMaterial = Material{
             .m_name = materialName,
@@ -38,7 +42,8 @@ pub const Material = struct {
     }
 
     pub fn DestroyMaterial(self: *Material) void {
-        c.vkDestroySampler(rContext.m_logicalDevice, textureSampler, null);
+        const rContext = try RenderContext.GetInstance();
+        c.vkDestroySampler(rContext.m_logicalDevice, self.m_textureSampler, null);
 
         textureImage.FreeTexture(rContext.m_logicalDevice);
 
@@ -51,13 +56,14 @@ pub const Material = struct {
 };
 
 fn CreateDescriptorPool() !void {
+    const rContext = try RenderContext.GetInstance();
     const uboSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = @intCast(u32, swapchain.m_images.len),
+        .descriptorCount = @intCast(u32, rContext.swapchain.m_images.len),
     };
     const imageSamplerSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = @intCast(u32, swapchain.m_images.len),
+        .descriptorCount = @intCast(u32, rContext.swapchain.m_images.len),
     };
 
     const poolSizes = [_]c.VkDescriptorPoolSize{ uboSize, imageSamplerSize };
@@ -65,27 +71,27 @@ fn CreateDescriptorPool() !void {
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .poolSizeCount = poolSizes.len,
         .pPoolSizes = &poolSizes,
-        .maxSets = @intCast(u32, swapchain.m_images.len),
+        .maxSets = @intCast(u32, rContext.swapchain.m_images.len),
         .flags = 0,
         .pNext = null,
     };
 
-    const rContext = try RenderContext.GetInstance();
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateDescriptorPool(
             rContext.m_logicalDevice,
             &poolInfo,
             null,
             &descriptorPool,
         ),
-        VKInitError.FailedToCreateDescriptorPool,
+        vkUtil.VkError.FailedToCreateDescriptorPool,
     );
 }
 
 fn CreateDescriptorSets() !void {
+    const rContext = RenderContext.GetInstance();
     var layouts = try allocator.alloc(
         c.VkDescriptorSetLayout,
-        swapchain.m_images.len,
+        rContext.swapchain.m_images.len,
     );
     for (layouts) |*layout| {
         layout.* = descriptorSetLayout;
@@ -94,20 +100,19 @@ fn CreateDescriptorSets() !void {
     const allocInfo = c.VkDescriptorSetAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = descriptorPool,
-        .descriptorSetCount = @intCast(u32, swapchain.m_images.len),
+        .descriptorSetCount = @intCast(u32, rContext.swapchain.m_images.len),
         .pSetLayouts = layouts.ptr,
         .pNext = null,
     };
 
-    descriptorSets = try allocator.alloc(c.VkDescriptorSet, swapchain.m_images.len);
-    const rContext = try RenderContext.GetInstance();
-    try CheckVkSuccess(
+    descriptorSets = try allocator.alloc(c.VkDescriptorSet, rContext.swapchain.m_images.len);
+    try vkUtil.CheckVkSuccess(
         c.vkAllocateDescriptorSets(
             rContext.m_logicalDevice,
             &allocInfo,
             descriptorSets.ptr,
         ),
-        VKInitError.FailedToCreateDescriptorSets,
+        vkUtil.VkError.FailedToCreateDescriptorSets,
     );
 
     var i: u32 = 0;
@@ -330,9 +335,9 @@ pub fn CreateMaterialPipeline(
         .flags = 0,
     };
 
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreatePipelineLayout(rContext.m_logicalDevice, &pipelineLayoutState, null, &pipelineLayout),
-        VKInitError.FailedToCreateLayout,
+        vkUtil.VkError.FailedToCreateLayout,
     );
 
     const pipelineInfo = c.VkGraphicsPipelineCreateInfo{
@@ -356,8 +361,8 @@ pub fn CreateMaterialPipeline(
         .pNext = null,
         .flags = 0,
     };
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateGraphicsPipelines(rContext.m_logicalDevice, null, 1, &pipelineInfo, null, &graphicsPipeline),
-        VKInitError.FailedToCreatePipeline,
+        vkUtil.VkError.FailedToCreatePipeline,
     );
 }

@@ -1,4 +1,4 @@
-//TODO WIP initial vulkan implementation
+const c = @import("../c.zig");
 
 const std = @import("std");
 const debug = std.debug;
@@ -7,7 +7,6 @@ const allocator = std.heap.page_allocator;
 const RenderContext = @import("RenderContext.zig").RenderContext;
 const Shader = @import("Shader.zig").Shader;
 const Mesh = @import("Mesh.zig").Mesh;
-const assimp = @import("AssImpInterface.zig");
 const Camera = @import("Camera.zig").Camera;
 const vk = @import("VulkanInit.zig");
 const Scene = @import("Scene.zig").Scene;
@@ -18,8 +17,6 @@ const game = @import("../game/GameWorld.zig");
 const GameWorld = @import("../game/GameWorld.zig").GameWorld;
 
 const filePathUtils = @import("../coreutil/FilePathUtils.zig");
-
-const c = @import("../c.zig");
 
 var curTime: f32 = 0.0;
 const circleTime: f32 = 1.0 / (2.0 * std.math.pi);

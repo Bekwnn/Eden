@@ -1,5 +1,5 @@
 const c = @import("../c.zig");
-const vk = @import("VulkanInit.zig");
+const vkUtil = @import("VulkanUtil.zig");
 
 const texture = @import("Texture.zig");
 const Texture = texture.Texture;
@@ -7,7 +7,13 @@ const Texture = texture.Texture;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-pub const SwapchainError = error{ FailedToCreateSwapchain, FailedToGetImages, FailedToCreateFrameBuffers, NoAvailablePresentMode, NoAvailableSwapSurfaceFormat, Error //TODO replace and delete with more specific
+pub const SwapchainError = error{
+    FailedToCreateSwapchain,
+    FailedToGetImages,
+    FailedToCreateFrameBuffers,
+    NoAvailablePresentMode,
+    NoAvailableSwapSurfaceFormat,
+    UnspecifiedError,
 };
 
 pub const SwapchainSupportDetails = struct {
@@ -93,7 +99,7 @@ pub const Swapchain = struct {
             .flags = 0,
         };
 
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkCreateSwapchainKHR(
                 logicalDevice,
                 &createInfo,
@@ -103,7 +109,7 @@ pub const Swapchain = struct {
             SwapchainError.FailedToCreateSwapchain,
         );
 
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkGetSwapchainImagesKHR(
                 logicalDevice,
                 newSwapchain.m_swapchain,
@@ -114,7 +120,7 @@ pub const Swapchain = struct {
         );
 
         newSwapchain.m_images = try allocator.alloc(c.VkImage, newSwapchain.m_imageCount);
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkGetSwapchainImagesKHR(
                 logicalDevice,
                 newSwapchain.m_swapchain,
@@ -159,7 +165,7 @@ pub const Swapchain = struct {
             self.m_extent.width,
             self.m_extent.height,
             msaaSamples,
-            try vk.FindDepthFormat(),
+            try vkUtil.FindDepthFormat(),
         );
     }
 
@@ -194,7 +200,7 @@ pub const Swapchain = struct {
                 .pNext = null,
             };
 
-            try vk.CheckVkSuccess(
+            try vkUtil.CheckVkSuccess(
                 c.vkCreateFramebuffer(
                     logicalDevice,
                     &framebufferInfo,
@@ -288,34 +294,34 @@ fn ChooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {
 pub fn QuerySwapchainSupport(allocator: Allocator, physDevice: c.VkPhysicalDevice, s: c.VkSurfaceKHR) !SwapchainSupportDetails {
     var details: SwapchainSupportDetails = undefined;
 
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDevice, s, &details.capabilities),
-        SwapchainError.Error,
+        SwapchainError.UnspecifiedError,
     );
 
     {
         var formatCount: u32 = 0;
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, null),
-            SwapchainError.Error,
+            SwapchainError.UnspecifiedError,
         );
         details.formats = try allocator.alloc(c.VkSurfaceFormatKHR, formatCount);
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, s, &formatCount, details.formats.ptr),
-            SwapchainError.Error,
+            SwapchainError.UnspecifiedError,
         );
     }
 
     {
         var presentModeCount: u32 = 0;
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, null),
-            SwapchainError.Error,
+            SwapchainError.UnspecifiedError,
         );
         details.presentModes = try allocator.alloc(c.VkPresentModeKHR, presentModeCount);
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, s, &presentModeCount, details.presentModes.ptr),
-            SwapchainError.Error,
+            SwapchainError.UnspecifiedError,
         );
     }
 

@@ -3,8 +3,7 @@ const c = @import("../c.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const vk = @import("VulkanInit.zig");
-
+const vkUtil = @import("VulkanUtil.zig");
 const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
 
@@ -174,7 +173,7 @@ pub const RenderContext = struct {
 
     pub fn RecreateSwapchain(allocator: Allocator) !void {
         const rContext = try RenderContext.GetInstance();
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkDeviceWaitIdle(rContext.m_logicalDevice),
             RenderContextError.FailedToWait,
         );
@@ -238,13 +237,13 @@ const validationLayers = [_][*:0]const u8{
 };
 fn CheckValidationLayerSupport(allocator: Allocator) !void {
     var layerCount: u32 = 0;
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkEnumerateInstanceLayerProperties(&layerCount, null),
         RenderContextError.FailedToCheckInstanceLayerProperties,
     );
 
     var detectedLayerProperties = try allocator.alloc(c.VkLayerProperties, layerCount);
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkEnumerateInstanceLayerProperties(&layerCount, detectedLayerProperties.ptr),
         RenderContextError.FailedToCheckInstanceLayerProperties,
     );
@@ -314,7 +313,7 @@ fn CreateVkInstance(
     };
 
     const rContext = try RenderContext.GetInstance();
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateInstance(&instanceInfo, null, &rContext.m_vkInstance),
         RenderContextError.FailedToCreateInstance,
     );
@@ -323,7 +322,7 @@ fn CreateVkInstance(
 fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
     const rContext = try RenderContext.GetInstance();
     var deviceCount: u32 = 0;
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkEnumeratePhysicalDevices(rContext.m_vkInstance, &deviceCount, null),
         RenderContextError.FailedToFindPhysicalDevice,
     );
@@ -332,7 +331,7 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
     }
 
     var deviceList = try allocator.alloc(c.VkPhysicalDevice, deviceCount);
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkEnumeratePhysicalDevices(rContext.m_vkInstance, &deviceCount, deviceList.ptr),
         RenderContextError.FailedToFindPhysicalDevice,
     );
@@ -435,7 +434,7 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         }
         if (presentQueueIndex == null) {
             var presentationSupport: c.VkBool32 = c.VK_FALSE;
-            try vk.CheckVkSuccess(
+            try vkUtil.CheckVkSuccess(
                 c.vkGetPhysicalDeviceSurfaceSupportKHR(
                     rContext.m_physicalDevice,
                     i,
@@ -497,7 +496,7 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         .pNext = null,
     };
 
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateDevice(rContext.m_physicalDevice, &deviceCreateInfo, null, &rContext.m_logicalDevice),
         RenderContextError.FailedToCreateLogicDevice,
     );
@@ -624,7 +623,7 @@ fn CreateRenderPass() !void {
         .pDependencies = &dependency,
     };
 
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateRenderPass(rContext.m_logicalDevice, &renderPassInfo, null, &rContext.m_renderPass),
         RenderContextError.FailedToCreateRenderPass,
     );
@@ -676,7 +675,7 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         .pNext = null,
     };
 
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, commandBuffers.ptr),
         RenderContextError.FailedToCreateCommandBuffers,
     );
@@ -690,7 +689,7 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
             .pNext = null,
         };
 
-        try CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkBeginCommandBuffer(commandBuffers[i], &beginInfo),
             RenderContextError.FailedToCreateCommandBuffers,
         );
@@ -728,7 +727,7 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         }
         c.vkCmdEndRenderPass(commandBuffers[i]);
 
-        try CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkEndCommandBuffer(commandBuffers[i]),
             RenderContextError.FailedToRecordCommandBuffers,
         );
@@ -748,7 +747,7 @@ fn CreateCommandPool() !void {
         .pNext = null,
     };
 
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateCommandPool(rContext.m_logicalDevice, &poolInfo, null, &commandPool),
         VKInitError.FailedToCreateCommandPool,
     );
@@ -770,15 +769,15 @@ fn CreateFencesAndSemaphores() !void {
     const rContext = try RenderContext.GetInstance();
     var i: usize = 0;
     while (i < BUFFER_FRAMES) : (i += 1) {
-        try CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]),
             VKInitError.FailedToCreateSemaphores,
         );
-        try CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &imageAvailableSemaphores[i]),
             VKInitError.FailedToCreateSemaphores,
         );
-        try CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &inFlightFences[i]),
             VKInitError.FailedToCreateFences,
         );

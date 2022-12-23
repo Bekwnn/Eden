@@ -122,12 +122,12 @@ pub fn build(b: *Builder) !void {
 
     exe.linkSystemLibrary("c");
 
-    exe.addLibPath("C:/VulkanSDK/1.2.182.0/Lib");
+    exe.addLibraryPath("C:/VulkanSDK/1.2.182.0/Lib");
     exe.linkSystemLibrary("vulkan-1");
 
-    exe.addIncludeDir("C:/VulkanSDK/1.2.182.0/Include");
+    exe.addIncludePath("C:/VulkanSDK/1.2.182.0/Include");
 
-    exe.addIncludeDir("src");
+    exe.addIncludePath("src");
 
     //exe.addIncludeDir("dependency/cimgui");
     //exe.addIncludeDir("dependency/cimgui/imgui");
@@ -149,8 +149,8 @@ pub fn build(b: *Builder) !void {
     //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
     //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
 
-    exe.addIncludeDir("dependency/SDL2/include");
-    exe.addLibPath("dependency/SDL2/lib/x64");
+    exe.addIncludePath("dependency/SDL2/include");
+    exe.addLibraryPath("dependency/SDL2/lib/x64");
     exe.linkSystemLibrary("SDL2");
     const sdl2DllPath = &[_][]const u8{ "dependency", "SDL2", "lib", "x64" };
     copyDllToBin(sdl2DllPath, "SDL2") catch |e| {
@@ -158,12 +158,12 @@ pub fn build(b: *Builder) !void {
         @panic("Build failure.");
     };
 
-    exe.addIncludeDir("dependency/assimp/include");
+    exe.addIncludePath("dependency/assimp/include");
     exe.linkSystemLibrary("assimp-vc142-mt");
     if (isDebug) {
-        exe.addLibPath("dependency/assimp/lib/RelWithDebInfo");
+        exe.addLibraryPath("dependency/assimp/lib/RelWithDebInfo");
     } else {
-        exe.addLibPath("dependency/assimp/lib/Release");
+        exe.addLibraryPath("dependency/assimp/lib/Release");
     }
     const assimpDllPath = if (isDebug) &[_][]const u8{ "dependency", "assimp", "bin", "RelWithDebInfo" } else &[_][]const u8{ "dependency", "assimp", "bin", "Release" };
     copyDllToBin(assimpDllPath, "assimp-vc142-mt") catch |e| {
@@ -171,7 +171,7 @@ pub fn build(b: *Builder) !void {
         @panic("Build failure.");
     };
 
-    exe.addIncludeDir("dependency/stb");
+    exe.addIncludePath("dependency/stb");
     const stb_flags = &[_][]const u8{
         "-std=c17",
     };

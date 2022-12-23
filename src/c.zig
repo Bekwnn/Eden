@@ -18,6 +18,10 @@ pub usingnamespace @cImport({
     @cInclude("assimp/scene.h");
     @cInclude("assimp/postprocess.h");
 
+    //Cgltf
+    @cDefine("CGLTF_IMPLEMENTATION", {});
+    @cInclude("cgltf/cgltf.h");
+
     //stb
     @cDefine("STBI_IMAGE_IMPLEMENTATION", {});
     @cDefine("STBI_NO_PNG", {});

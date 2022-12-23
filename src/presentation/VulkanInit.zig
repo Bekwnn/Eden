@@ -6,6 +6,7 @@ const c = @import("../c.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const vkUtil = @import("VulkanUtil.zig");
 const RenderContext = @import("RenderContext.zig").RenderContext;
 const Buffer = @import("Buffer.zig").Buffer;
 const Mesh = @import("Mesh.zig").Mesh;
@@ -30,19 +31,7 @@ const applicationVersion = c.VK_MAKE_API_VERSION(0, 1, 0, 0);
 // PIPELINE START
 //PIPELINE END
 
-const VKInitError = error{
-    FailedToFindMemoryType,
-    FailedToRecordCommandBuffers,
-    VKError, // prefer creating new more specific errors
-};
-
 //TODO used a lot everywhere vulkan is used; could have a better home
-pub fn CheckVkSuccess(result: c.VkResult, errorToReturn: anyerror) !void {
-    if (result != c.VK_SUCCESS) {
-        return errorToReturn;
-    }
-}
-
 pub fn VulkanInit(window: *c.SDL_Window) !void {
     const allocator = std.heap.page_allocator;
 
@@ -78,7 +67,7 @@ pub fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32
             return i;
         }
     }
-    return VKInitError.FailedToFindMemoryType;
+    return vkUtil.VkError.FailedToFindMemoryType;
 }
 
 //TODO shared function; where should it live?
@@ -94,9 +83,9 @@ pub fn BeginSingleTimeCommands() !c.VkCommandBuffer {
     };
 
     var commandBuffer: c.VkCommandBuffer = undefined;
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, &commandBuffer),
-        VKInitError.VKError,
+        vkUtil.VkError.UnspecifiedError,
     );
 
     const beginInfo = c.VkCommandBufferBeginInfo{
@@ -106,18 +95,18 @@ pub fn BeginSingleTimeCommands() !c.VkCommandBuffer {
         .pNext = null,
     };
 
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkBeginCommandBuffer(commandBuffer, &beginInfo),
-        VKInitError.VKError,
+        vkUtil.VkError.UnspecifiedError,
     );
 
     return commandBuffer;
 }
 
 pub fn EndSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void {
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkEndCommandBuffer(commandBuffer),
-        VKInitError.VKError,
+        vkUtil.VkError.UnspecifiedError,
     );
 
     const submitInfo = c.VkSubmitInfo{
@@ -133,13 +122,13 @@ pub fn EndSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void {
     };
 
     const rContext = try RenderContext.GetInstance();
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkQueueSubmit(rContext.m_graphicsQueue, 1, &submitInfo, null),
-        VKInitError.VKError,
+        vkUtil.VkError.UnspecifiedError,
     );
-    try CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkQueueWaitIdle(rContext.m_graphicsQueue),
-        VKInitError.VKError,
+        vkUtil.VkError.UnspecifiedError,
     );
 }
 
@@ -201,7 +190,7 @@ pub fn TransitionImageLayout(
         srcStage = c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dstStage = c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     } else {
-        return VKInitError.VKError;
+        return vkUtil.VkError.UnspecifiedError;
     }
 
     c.vkCmdPipelineBarrier(

@@ -1,7 +1,7 @@
 //manages a texture asset for vulkan
 const c = @import("../c.zig");
 const std = @import("std");
-const vk = @import("VulkanInit.zig");
+const vkUtil = @import("VulkanUtil.zig");
 
 const RenderContext = @import("RenderContext.zig").RenderContext;
 const Buffer = @import("Buffer.zig").Buffer;
@@ -45,7 +45,7 @@ pub const Texture = struct {
         defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
         var data: [*]u8 = undefined;
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkMapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory, 0, imageSize, 0, @ptrCast([*c]?*anyopaque, &data)),
             TextureError.FailedToMapMemory,
         );
@@ -67,7 +67,7 @@ pub const Texture = struct {
             &newTexture.m_memory,
         );
 
-        try vk.TransitionImageLayout(
+        try vkUtil.TransitionImageLayout(
             newTexture.m_image,
             c.VK_FORMAT_R8G8B8A8_SRGB,
             c.VK_IMAGE_LAYOUT_UNDEFINED,
@@ -122,7 +122,7 @@ pub const Texture = struct {
             c.VK_IMAGE_ASPECT_DEPTH_BIT,
             1,
         );
-        try vk.TransitionImageLayout(
+        try vkUtil.TransitionImageLayout(
             depthTexture.m_image,
             depthFormat,
             c.VK_IMAGE_LAYOUT_UNDEFINED,
@@ -204,7 +204,7 @@ pub fn CreateImage(
         .pNext = null,
         .flags = 0,
     };
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateImage(logicalDevice, &imageInfo, null, image),
         TextureError.FailedToCreateImage,
     );
@@ -214,15 +214,15 @@ pub fn CreateImage(
     const allocInfo = c.VkMemoryAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memRequirements.size,
-        .memoryTypeIndex = try vk.FindMemoryType(memRequirements.memoryTypeBits, properties),
+        .memoryTypeIndex = try vkUtil.FindMemoryType(memRequirements.memoryTypeBits, properties),
         .pNext = null,
     };
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkAllocateMemory(logicalDevice, &allocInfo, null, imageMemory),
         TextureError.FailedToAllocateMemory,
     );
 
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkBindImageMemory(logicalDevice, image.*, imageMemory.*, 0),
         TextureError.FailedToBindMemory,
     );
@@ -248,7 +248,7 @@ fn GenerateMipmaps(
         return TextureError.BadMipmapFormat;
     }
 
-    var commandBuffer = try vk.BeginSingleTimeCommands();
+    var commandBuffer = try vkUtil.BeginSingleTimeCommands();
 
     var barrier = c.VkImageMemoryBarrier{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -383,11 +383,11 @@ fn GenerateMipmaps(
         &barrier,
     );
 
-    try vk.EndSingleTimeCommands(commandBuffer);
+    try vkUtil.EndSingleTimeCommands(commandBuffer);
 }
 
 fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u32) !void {
-    var commandBuffer = try vk.BeginSingleTimeCommands();
+    var commandBuffer = try vkUtil.BeginSingleTimeCommands();
 
     const region = c.VkBufferImageCopy{
         .bufferOffset = 0,
@@ -419,7 +419,7 @@ fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u
         &region,
     );
 
-    try vk.EndSingleTimeCommands(commandBuffer);
+    try vkUtil.EndSingleTimeCommands(commandBuffer);
 }
 
 pub fn CreateImageView(
@@ -452,7 +452,7 @@ pub fn CreateImageView(
     };
 
     var imageView: c.VkImageView = undefined;
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateImageView(rContext.m_logicalDevice, &imageViewInfo, null, &imageView),
         TextureError.FailedToCreateImageView,
     );
@@ -486,7 +486,7 @@ pub fn CreateTextureSampler(
     };
 
     const rContext = try RenderContext.GetInstance();
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateSampler(
             rContext.m_logicalDevice,
             &samplerInfo,

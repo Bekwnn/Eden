@@ -29,7 +29,6 @@ pub const Camera = struct {
     m_nearPlane: f32 = 0.1,
     m_farPlane: f32 = 100.0,
 
-    //TODO reference glm lookat
     pub fn GetViewMatrix(self: *const Camera) Mat4x4 {
         const viewDirection = vec3.zAxis.RotatedByQuat(self.m_rotation);
         var lookAtMat = mat4x4.LookDirMat4x4(self.m_pos, viewDirection, vec3.yAxis);
@@ -48,6 +47,7 @@ pub const Camera = struct {
         return returnMat;
     }
 
+    // untested
     pub fn GetOrthoMatrix(self: *const Camera, left: f32, right: f32, bottom: f32, top: f32) Mat4x4 {
         var returnMat = mat4x4.identity;
         returnMat.m[0][0] = 2.0 / (right - left);
@@ -61,7 +61,6 @@ pub const Camera = struct {
 };
 
 // takes radians, gives radians
-// can't be called at comptime because std tan/atan bug??
 pub fn XFoVToYFoV(xFoV: f32, aspectRatio: f32) f32 {
     return 2.0 * stdmath.atan(stdmath.tan(xFoV * 0.5) * aspectRatio);
 }

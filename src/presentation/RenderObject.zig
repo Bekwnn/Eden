@@ -61,6 +61,7 @@ const RenderObject = struct {
         }
     }
 
+    //TODO we don't want to calculate the view and projection matrix per render object
     pub fn UpdateUniformBuffer(self: *RenderObject, camera: *Camera, currentFrame: usize) !void {
         var bufferSize: c.VkDeviceSize = @sizeOf(MvpUbo);
 

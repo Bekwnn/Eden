@@ -4,12 +4,15 @@ const std = @import("std");
 const debug = std.debug;
 const allocator = std.heap.page_allocator;
 
-const RenderContext = @import("RenderContext.zig").RenderContext;
-const Shader = @import("Shader.zig").Shader;
-const Mesh = @import("Mesh.zig").Mesh;
-const Camera = @import("Camera.zig").Camera;
 const vk = @import("VulkanInit.zig");
+const assetInventory = @import("AssetInventory.zig");
+
+const Camera = @import("Camera.zig").Camera;
+const Mesh = @import("Mesh.zig").Mesh;
+const RenderContext = @import("RenderContext.zig").RenderContext;
+const RenderObject = @import("RenderObject.zig").RenderObject;
 const Scene = @import("Scene.zig").Scene;
+const Shader = @import("Shader.zig").Shader;
 
 const mat4x4 = @import("../math/Mat4x4.zig");
 
@@ -63,10 +66,15 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
 
 pub fn Initialize() void {
     // init hardcoded test scene:
-    scene.CreateMesh("monkey", "test-assets\\test.obj") catch |meshErr| {
+    const mesh = assetInventory.CreateMesh("monkey", "test-assets\\test.obj") catch |meshErr| {
         debug.print("Error creating mesh: {}\n", .{meshErr});
-        @panic("!");
+        return;
     };
+    const material = assetInventory.CreateMaterial(
+        "monkey_mat",
+    );
+    const monkeyObj = RenderObject.CreateRenderObject(mesh, material);
+    //TODO create command buffers? where does scene.RenderObjects get called?
 
     //TODO get imgui working again
     //ImguiInit();

@@ -9,41 +9,61 @@ const ArrayList = std.ArrayList;
 const Mesh = @import("Mesh.zig").Mesh;
 const Material = @import("Material.zig").Material;
 
+const assetImport = @import("AssetImport.zig");
+
 const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 
+var instance: ?AssetInventory = null;
+
+const InventoryError = error{
+    AlreadyInitialized,
+    NotInitialized,
+};
+
+//TODO we index by unique string names, but also store the name as part of the data, could we fix that so the field isn't duplicated?
 pub const AssetInventory = struct {
     m_meshes: StringHashMap(Mesh) = StringHashMap(Mesh).init(allocator),
     m_materials: StringHashMap(Material) = StringHashMap(Material).init(allocator),
+
+    pub fn GetInstance() !*RenderContext {
+        return &instance orelse InventoryError.NotInitialized;
+    }
+
+    pub fn Initialize() !void {
+        if (instance != null) return InventoryError.AlreadyInitialized;
+        instance = AssetInventory{};
+    }
 
     pub fn CreateMaterial(
         self: *Scene,
         name: []const u8,
         pipeline: c.VkPipeline,
         pipelineLayout: c.VkPipelineLayout,
-    ) !void {
+    ) !*Material {
         //TODO init pipeline
         try self.m_materials.put(name, Material{
             .m_name = name,
             .m_pipeline = pipeline,
             .m_pipelineLayout = pipelineLayout,
         });
+        const entry = self.m_materials.getPtr(name);
+        return entry orelse @panic("Material just created does not exist in hash map");
     }
 
     pub fn GetMaterial(self: *Scene, name: []const u8) ?*Material {
         return self.m_materials.getPtr(name);
     }
 
-    pub fn CreateMesh(self: *Scene, name: []const u8, filePath: []const u8) !void {
-        const meshPath = filePathUtils.CwdToAbsolute(allocator, "test-assets\\test.obj") catch {
-            @panic("!");
-        };
+    pub fn CreateMesh(self: *Scene, name: []const u8, filePath: []const u8) !*Mesh {
+        const meshPath = try filePathUtils.CwdToAbsolute(allocator, filepath);
         defer allocator.free(meshPath);
-        //TODO calling import mesh and init buffers should be somewhere in mesh or mesh import files
-        if (assimp.ImportMesh(meshPath)) |mesh| {
+        if (assetImport.ImportMesh(meshPath)) |mesh| {
             try mesh.InitBuffers();
             try self.m_meshes.put(name, mesh);
+            const entry = self.m_meshes.getPtr(name);
+            return entry orelse @panic("Mesh just created does not exist in hash map");
         } else |meshErr| {
-            debug.print("Error importing mesh: {}\n", .{meshErr});
+            return meshErr;
         }
     }
 

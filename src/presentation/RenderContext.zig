@@ -72,11 +72,7 @@ pub const RenderContext = struct {
     m_inFlightFences: [BUFFER_FRAMES]c.VkFence,
 
     pub fn GetInstance() !*RenderContext {
-        if (instance != null) {
-            return &instance.?;
-        } else {
-            return RenderContextError.NotInitialized;
-        }
+        return &instance orelse RenderContextError.NotInitialized;
     }
 
     pub fn Initialize(
@@ -171,64 +167,55 @@ pub const RenderContext = struct {
         instance = null;
     }
 
-    pub fn RecreateSwapchain(allocator: Allocator) !void {
-        const rContext = try RenderContext.GetInstance();
+    pub fn RecreateSwapchain(self: *RenderContext, allocator: Allocator) !void {
         try vkUtil.CheckVkSuccess(
-            c.vkDeviceWaitIdle(rContext.m_logicalDevice),
+            c.vkDeviceWaitIdle(self.m_logicalDevice),
             RenderContextError.FailedToWait,
         );
 
         std.debug.print("Recreating Swapchain...\n", .{});
-        rContext.DestroySwapchain();
+        self.DestroySwapchain();
 
-        try Swapchain.CreateSwapchain(allocator, rContext);
+        try Swapchain.CreateSwapchain(allocator, self);
         try CreateRenderPass();
         try swapchain.CreateColorAndDepthResources(
-            rContext.m_logicalDevice,
-            rContext.m_msaaSamples,
+            self.m_logicalDevice,
+            self.m_msaaSamples,
         );
         try swapchain.CreateFrameBuffers(
             allocator,
-            rContext.m_logicalDevice,
-            rContext.m_renderPass,
+            self.m_logicalDevice,
+            self.m_renderPass,
         );
         try CreateCommandBuffers(allocator);
     }
 
     pub fn DestroySwapchain(self: *RenderContext) void {
-        const rContext = RenderContext.GetInstance() catch @panic("!");
-
         defer {
-            for (rContext.m_uniformBuffers) |*uniformBuffer| {
-                uniformBuffer.DestroyBuffer(rContext.m_logicalDevice);
+            for (self.m_uniformBuffers) |*uniformBuffer| {
+                uniformBuffer.DestroyBuffer(self.m_logicalDevice);
             }
             c.vkDestroyDescriptorPool(
-                rContext.m_logicalDevice,
-                rContext.m_descriptorPool,
+                self.m_logicalDevice,
+                self.m_descriptorPool,
                 null,
             );
         }
 
-        defer swapchain.FreeSwapchain(rContext.m_logicalDevice);
+        defer swapchain.FreeSwapchain(self.m_logicalDevice);
 
-        defer c.vkDestroyRenderPass(rContext.m_logicalDevice, rContext.m_renderPass, null);
-        defer c.vkDestroyPipelineLayout(
-            rContext.m_logicalDevice,
-            rContext.m_pipelineLayout,
-            null,
-        );
-        defer c.vkDestroyPipeline(rContext.m_logicalDevice, rContext.m_graphicsPipeline, null);
+        defer c.vkDestroyRenderPass(self.m_logicalDevice, self.m_renderPass, null);
 
-        defer swapchain.CleanupFrameBuffers(rContext.m_logicalDevice);
+        defer swapchain.CleanupFrameBuffers(self.m_logicalDevice);
 
         defer c.vkFreeCommandBuffers(
-            rContext.m_logicalDevice,
-            commandPool,
-            @intCast(u32, commandBuffers.len),
-            commandBuffers.ptr,
+            self.m_logicalDevice,
+            self.m_commandPool,
+            @intCast(u32, self.m_commandBuffers.len),
+            self.m_commandBuffers.ptr,
         );
 
-        defer swapchain.CleanupDepthAndColorImages(rContext.m_logicalDevice);
+        defer swapchain.CleanupDepthAndColorImages(self.m_logicalDevice);
     }
 };
 
@@ -662,26 +649,26 @@ pub fn FindSupportedFormat(
 }
 
 fn CreateCommandBuffers(allocator: Allocator) !void {
-    const rContext = try RenderContext.GetInstance();
-    commandBuffers = try allocator.alloc(
+    var rContext = try RenderContext.GetInstance();
+    rContext.m_commandBuffers = try allocator.alloc(
         c.VkCommandBuffer,
         rContext.m_swapchain.m_frameBuffers.len,
     );
     const allocInfo = c.VkCommandBufferAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = commandPool,
+        .commandPool = rContext.m_commandPool,
         .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = @intCast(u32, commandBuffers.len),
+        .commandBufferCount = @intCast(u32, rContext.m_commandBuffers.len),
         .pNext = null,
     };
 
     try vkUtil.CheckVkSuccess(
-        c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, commandBuffers.ptr),
+        c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, rContext.m_commandBuffers.ptr),
         RenderContextError.FailedToCreateCommandBuffers,
     );
 
     var i: usize = 0;
-    while (i < commandBuffers.len) : (i += 1) {
+    while (i < rContext.m_commandBuffers.len) : (i += 1) {
         var beginInfo = c.VkCommandBufferBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .pInheritanceInfo = null,
@@ -690,7 +677,7 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         };
 
         try vkUtil.CheckVkSuccess(
-            c.vkBeginCommandBuffer(commandBuffers[i], &beginInfo),
+            c.vkBeginCommandBuffer(rContext.m_commandBuffers[i], &beginInfo),
             RenderContextError.FailedToCreateCommandBuffers,
         );
 
@@ -718,17 +705,17 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         };
 
         c.vkCmdBeginRenderPass(
-            commandBuffers[i],
+            rContext.m_commandBuffers[i],
             &renderPassInfo,
             c.VK_SUBPASS_CONTENTS_INLINE,
         );
         {
             //TODO scene.RenderObjects(commandBuffers[i], renderObjects);
         }
-        c.vkCmdEndRenderPass(commandBuffers[i]);
+        c.vkCmdEndRenderPass(rContext.m_commandBuffers[i]);
 
         try vkUtil.CheckVkSuccess(
-            c.vkEndCommandBuffer(commandBuffers[i]),
+            c.vkEndCommandBuffer(rContext.m_commandBuffers[i]),
             RenderContextError.FailedToRecordCommandBuffers,
         );
     }
@@ -738,7 +725,7 @@ fn CreateCommandPool() !void {
     const rContext = try RenderContext.GetInstance();
 
     if (rContext.m_graphicsQueueIdx == null) {
-        return VKInitError.FailedToCreateCommandPool;
+        return RenderContextError.FailedToCreateCommandPool;
     }
     const poolInfo = c.VkCommandPoolCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -748,8 +735,8 @@ fn CreateCommandPool() !void {
     };
 
     try vkUtil.CheckVkSuccess(
-        c.vkCreateCommandPool(rContext.m_logicalDevice, &poolInfo, null, &commandPool),
-        VKInitError.FailedToCreateCommandPool,
+        c.vkCreateCommandPool(rContext.m_logicalDevice, &poolInfo, null, &rContext.m_commandPool),
+        RenderContextError.FailedToCreateCommandPool,
     );
 }
 
@@ -766,20 +753,20 @@ fn CreateFencesAndSemaphores() !void {
         .pNext = null,
     };
 
-    const rContext = try RenderContext.GetInstance();
+    var rContext = try RenderContext.GetInstance();
     var i: usize = 0;
     while (i < BUFFER_FRAMES) : (i += 1) {
         try vkUtil.CheckVkSuccess(
-            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &renderFinishedSemaphores[i]),
-            VKInitError.FailedToCreateSemaphores,
+            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_renderFinishedSemaphores[i]),
+            RenderContextError.FailedToCreateSemaphores,
         );
         try vkUtil.CheckVkSuccess(
-            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &imageAvailableSemaphores[i]),
-            VKInitError.FailedToCreateSemaphores,
+            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_imageAvailableSemaphores[i]),
+            RenderContextError.FailedToCreateSemaphores,
         );
         try vkUtil.CheckVkSuccess(
-            c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &inFlightFences[i]),
-            VKInitError.FailedToCreateFences,
+            c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &rContext.m_inFlightFences[i]),
+            RenderContextError.FailedToCreateFences,
         );
     }
 }

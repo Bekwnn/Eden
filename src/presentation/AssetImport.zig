@@ -111,15 +111,17 @@ fn AssImp_ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
 }
 
 fn Cgltf_ImportMesh(filePath: []const u8) !Mesh {
-    var options: c.cgltf_options = .{0};
-    var data: *?c.cgltf_data = null;
-    const result = c.cgltf_parse_file(&options, filePath.ptr, &data);
-    if (result != c.cgltf_result_success) {
-        return ImportError.CgltfImportError;
-    }
-    defer cgltf_free(data);
+    //TODO cgltf disabled
+    //var options: c.cgltf_options = .{0};
+    //var data: *?c.cgltf_data = null;
+    //const result = c.cgltf_parse_file(&options, filePath.ptr, &data);
+    //if (result != c.cgltf_result_success) {
+    //    return ImportError.CgltfImportError;
+    //}
+    //defer cgltf_free(data);
 
-    const meshName = GetMeshNameFromFile(filePath);
+    //const meshName = GetMeshNameFromFile(filePath);
 
     //TODO create a mesh from data and return it
+    return ImportError.CgltfImportError;
 }

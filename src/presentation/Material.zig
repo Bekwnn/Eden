@@ -15,6 +15,9 @@ pub const Material = struct {
     m_textureImage: Texture, //TODO move to material instance data
     m_textureSampler: c.VkSampler,
 
+    m_pipeline: c.VkPipeline,
+    m_pipelineLayout: c.VkPipelineLayout,
+
     pub fn CreateMaterial(
         materialName: []const u8,
         vertShaderPath: []const u8,
@@ -43,15 +46,24 @@ pub const Material = struct {
 
     pub fn DestroyMaterial(self: *Material) void {
         const rContext = try RenderContext.GetInstance();
-        c.vkDestroySampler(rContext.m_logicalDevice, self.m_textureSampler, null);
 
-        textureImage.FreeTexture(rContext.m_logicalDevice);
-
-        c.vkDestroyDescriptorSetLayout(
+        defer c.vkDestroyDescriptorSetLayout(
             rContext.m_logicalDevice,
             descriptorSetLayout,
             null,
         );
+
+        defer textureImage.FreeTexture(rContext.m_logicalDevice);
+
+        defer c.vkDestroySampler(rContext.m_logicalDevice, self.m_textureSampler, null);
+
+        defer c.vkDestroyPipelineLayout(
+            rContext.m_logicalDevice,
+            rContext.m_pipelineLayout,
+            null,
+        );
+
+        defer c.vkDestroyPipeline(rContext.m_logicalDevice, rContext.m_graphicsPipeline, null);
     }
 };
 

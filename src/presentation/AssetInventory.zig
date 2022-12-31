@@ -6,8 +6,10 @@ const allocator = std.heap.page_allocator;
 const StringHashMap = std.StringHashMap;
 const ArrayList = std.ArrayList;
 
-const Mesh = @import("Mesh.zig").Mesh;
 const Material = @import("Material.zig").Material;
+const Mesh = @import("Mesh.zig").Mesh;
+const RenderContext = @import("RenderContext.zig").RenderContext;
+const Scene = @import("Scene.zig").Scene;
 
 const assetImport = @import("AssetImport.zig");
 
@@ -21,12 +23,17 @@ const InventoryError = error{
 };
 
 //TODO we index by unique string names, but also store the name as part of the data, could we fix that so the field isn't duplicated?
+// ie key set based on m_name value instead of a map?
 pub const AssetInventory = struct {
     m_meshes: StringHashMap(Mesh) = StringHashMap(Mesh).init(allocator),
     m_materials: StringHashMap(Material) = StringHashMap(Material).init(allocator),
 
     pub fn GetInstance() !*RenderContext {
-        return &instance orelse InventoryError.NotInitialized;
+        if (instance) |*inst| {
+            return inst;
+        } else {
+            return InventoryError.NotInitialized;
+        }
     }
 
     pub fn Initialize() !void {
@@ -55,7 +62,7 @@ pub const AssetInventory = struct {
     }
 
     pub fn CreateMesh(self: *Scene, name: []const u8, filePath: []const u8) !*Mesh {
-        const meshPath = try filePathUtils.CwdToAbsolute(allocator, filepath);
+        const meshPath = try filePathUtils.CwdToAbsolute(allocator, filePath);
         defer allocator.free(meshPath);
         if (assetImport.ImportMesh(meshPath)) |mesh| {
             try mesh.InitBuffers();

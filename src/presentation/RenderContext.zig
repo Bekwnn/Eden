@@ -42,37 +42,42 @@ pub const RenderContextError = error{
 pub const BUFFER_FRAMES = 2;
 
 pub const RenderContext = struct {
-    m_vkInstance: c.VkInstance,
-    m_surface: c.VkSurfaceKHR,
-    m_physicalDevice: c.VkPhysicalDevice,
-    m_logicalDevice: c.VkDevice,
+    m_vkInstance: c.VkInstance = undefined,
+    m_surface: c.VkSurfaceKHR = undefined,
+    m_physicalDevice: c.VkPhysicalDevice = undefined,
+    m_logicalDevice: c.VkDevice = undefined,
     //m_debugCallback: c.VkDebugReportCallbackEXT,
 
-    m_swapchain: Swapchain,
-    m_renderPass: c.VkRenderPass,
+    m_swapchain: Swapchain = undefined,
+    m_renderPass: c.VkRenderPass = undefined,
 
-    m_graphicsQueueIdx: ?u32,
-    m_graphicsQueue: c.VkQueue,
-    m_presentQueueIdx: ?u32,
-    m_presentQueue: c.VkQueue,
+    m_graphicsQueueIdx: ?u32 = null,
+    m_graphicsQueue: c.VkQueue = undefined,
+    m_presentQueueIdx: ?u32 = null,
+    m_presentQueue: c.VkQueue = undefined,
 
-    m_commandPool: c.VkCommandPool,
-    m_commandBuffers: []c.VkCommandBuffer,
+    m_commandPool: c.VkCommandPool = undefined,
+    m_commandBuffers: []c.VkCommandBuffer = undefined,
 
-    m_descriptorPool: c.VkDescriptorPool,
-    m_descriptorSets: []c.VkDescriptorSet,
+    m_descriptorPool: c.VkDescriptorPool = undefined,
+    m_descriptorSets: []c.VkDescriptorSet = undefined,
 
-    m_pipelineLayout: c.VkPipelineLayout,
-    m_graphicsPipeline: c.VkPipeline,
+    //TODO should we have both of these here?
+    m_pipelineLayout: c.VkPipelineLayout = undefined,
+    m_graphicsPipeline: c.VkPipeline = undefined,
 
     m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
 
-    m_imageAvailableSemaphores: [BUFFER_FRAMES]c.VkSemaphore,
-    m_renderFinishedSemaphores: [BUFFER_FRAMES]c.VkSemaphore,
-    m_inFlightFences: [BUFFER_FRAMES]c.VkFence,
+    m_imageAvailableSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined,
+    m_renderFinishedSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined,
+    m_inFlightFences: [BUFFER_FRAMES]c.VkFence = undefined,
 
     pub fn GetInstance() !*RenderContext {
-        return &instance orelse RenderContextError.NotInitialized;
+        if (instance) |*inst| {
+            return inst;
+        } else {
+            return RenderContextError.NotInitialized;
+        }
     }
 
     pub fn Initialize(
@@ -98,6 +103,8 @@ pub const RenderContext = struct {
             .m_presentQueue = undefined,
         };
 
+        var newInstance = try RenderContext.GetInstance();
+
         try CreateVkInstance(
             allocator,
             window,
@@ -112,29 +119,29 @@ pub const RenderContext = struct {
         try CreateLogicalDevice(allocator);
 
         //TODO move all swapchain initialization to Swapchain.zig
-        if (instance.m_graphicsQueueIdx == null or
-            instance.m_presentQueueIdx == null)
+        if (newInstance.m_graphicsQueueIdx == null or
+            newInstance.m_presentQueueIdx == null)
         {
             return RenderContextError.NotInitialized;
         }
-        instance.m_swapchain = try Swapchain.CreateSwapchain(
+        newInstance.m_swapchain = try Swapchain.CreateSwapchain(
             allocator,
-            instance.m_logicalDevice,
-            instance.m_physicalDevice,
-            instance.m_surface,
-            instance.m_graphicsQueueIdx.?,
-            instance.m_presentQueueIdx.?,
+            newInstance.m_logicalDevice,
+            newInstance.m_physicalDevice,
+            newInstance.m_surface,
+            newInstance.m_graphicsQueueIdx.?,
+            newInstance.m_presentQueueIdx.?,
         );
 
-        try instance.m_swapchain.CreateColorAndDepthResources(
-            instance.m_logicalDevice,
-            instance.m_msaaSamples,
+        try newInstance.m_swapchain.CreateColorAndDepthResources(
+            newInstance.m_logicalDevice,
+            newInstance.m_msaaSamples,
         );
 
-        try instance.m_swapchain.CreateFrameBuffers(
+        try newInstance.m_swapchain.CreateFrameBuffers(
             allocator,
-            instance.m_logicalDevice,
-            instance.m_renderPass,
+            newInstance.m_logicalDevice,
+            newInstance.m_renderPass,
         );
 
         try CreateCommandPool();

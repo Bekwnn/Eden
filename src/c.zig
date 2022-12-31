@@ -19,8 +19,8 @@ pub usingnamespace @cImport({
     @cInclude("assimp/postprocess.h");
 
     //Cgltf
-    //@cDefine("CGLTF_IMPLEMENTATION", {});
-    //@cInclude("cgltf/cgltf.h");
+    @cDefine("CGLTF_IMPLEMENTATION", {});
+    @cInclude("cgltf/cgltf.h");
 
     //stb
     @cDefine("STBI_IMAGE_IMPLEMENTATION", {});

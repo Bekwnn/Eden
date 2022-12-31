@@ -120,6 +120,8 @@ pub fn build(b: *Builder) !void {
     //exe.setVerboseLink(true);
     //exe.setVerboseCC(true);
 
+    exe.addIncludePath("dependency");
+
     exe.linkSystemLibrary("c");
 
     exe.addLibraryPath("C:/VulkanSDK/1.2.182.0/Lib");

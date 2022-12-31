@@ -84,7 +84,7 @@ pub const Quat = packed struct {
     }
 
     //TODO
-    //pub  fn AngleBetween(lhs: *const Quat, rhs: *const Quat) f32 {}
+    //pub fn AngleBetween(lhs: *const Quat, rhs: *const Quat) f32 {}
 
     //TODO lerp
 

@@ -1,6 +1,5 @@
 // TODO rename to EdenMath.zig
-// Public imports of common vector math
-usingnamespace @import("std").math;
+// Public imports of common utils/types
 
 pub const vec3 = @import("Vec3.zig");
 pub const Vec3 = vec3.Vec3;
@@ -15,4 +14,4 @@ pub const Mat4x4 = mat4x4.Mat4x4;
 pub const transform = @import("Transform.zig");
 pub const Transform = transform.Transform;
 
-usingnamespace @import("MathUtil.zig");
+pub const util = @import("MathUtil.zig");

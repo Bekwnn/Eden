@@ -94,7 +94,7 @@ pub fn TranslationMat4x4(translation: Vec3) Mat4x4 {
     return returnMat;
 }
 
-//TODO proper fmt usage
+//TODO proper fmt usage, line breaks? etc
 pub fn DebugLogMat4x4(mat: *const Mat4x4) void {
     for (mat.m) |row| {
         debug.print("{{", .{});

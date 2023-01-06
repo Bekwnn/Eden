@@ -3,7 +3,7 @@ const c = @import("../c.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const vk = @import("VulkanInit.zig");
+const vkUtil = @import("VulkanUtil.zig");
 const RenderContext = @import("RenderContext.zig").RenderContext;
 
 pub const ShaderError = error{
@@ -93,7 +93,7 @@ fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.V
 
     const rContext = try RenderContext.GetInstance();
     var shaderModule: c.VkShaderModule = undefined;
-    try vk.CheckVkSuccess(
+    try vkUtil.CheckVkSuccess(
         c.vkCreateShaderModule(rContext.m_logicalDevice, &createInfo, null, &shaderModule),
         ShaderError.FailedToCreateShader,
     );

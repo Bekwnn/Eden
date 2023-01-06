@@ -1,7 +1,7 @@
 const c = @import("../c.zig");
-const vk = @import("VulkanInit.zig");
-const RenderContext = @import("RenderContext.zig").RenderContext;
 
+const vkUtil = @import("VulkanUtil.zig");
+const RenderContext = @import("RenderContext.zig").RenderContext;
 const VertexData = @import("Mesh.zig").VertexData;
 const Mesh = @import("Mesh.zig").Mesh;
 
@@ -29,7 +29,7 @@ pub const Buffer = struct {
         defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
         var data: [*]u8 = undefined;
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkMapMemory(
                 rContext.m_logicalDevice,
                 stagingBuffer.m_memory,
@@ -71,7 +71,7 @@ pub const Buffer = struct {
         defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
         var data: [*]u8 = undefined;
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkMapMemory(
                 rContext.m_logicalDevice,
                 stagingBuffer.m_memory,
@@ -114,7 +114,7 @@ pub const Buffer = struct {
             .pNext = null,
         };
 
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkCreateBuffer(
                 rContext.m_logicalDevice,
                 &bufferInfo,
@@ -133,11 +133,11 @@ pub const Buffer = struct {
         const allocInfo = c.VkMemoryAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
             .allocationSize = memRequirements.size,
-            .memoryTypeIndex = try vk.FindMemoryType(memRequirements.memoryTypeBits, properties),
+            .memoryTypeIndex = try vkUtil.FindMemoryType(memRequirements.memoryTypeBits, properties),
             .pNext = null,
         };
 
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkAllocateMemory(
                 rContext.m_logicalDevice,
                 &allocInfo,
@@ -146,7 +146,7 @@ pub const Buffer = struct {
             ),
             BufferError.FailedToCreateBuffer,
         );
-        try vk.CheckVkSuccess(
+        try vkUtil.CheckVkSuccess(
             c.vkBindBufferMemory(
                 rContext.m_logicalDevice,
                 newBuffer.m_buffer,
@@ -168,7 +168,7 @@ pub const Buffer = struct {
 };
 
 fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize) !void {
-    var commandBuffer = try vk.BeginSingleTimeCommands();
+    var commandBuffer = try vkUtil.BeginSingleTimeCommands();
 
     const copyRegion = c.VkBufferCopy{
         .srcOffset = 0,
@@ -177,5 +177,5 @@ fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize
     };
     c.vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-    try vk.EndSingleTimeCommands(commandBuffer);
+    try vkUtil.EndSingleTimeCommands(commandBuffer);
 }

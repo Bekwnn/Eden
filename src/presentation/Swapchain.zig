@@ -1,5 +1,6 @@
 const c = @import("../c.zig");
 const vkUtil = @import("VulkanUtil.zig");
+const renderContext = @import("RenderContext.zig");
 
 const texture = @import("Texture.zig");
 const Texture = texture.Texture;
@@ -165,7 +166,7 @@ pub const Swapchain = struct {
             self.m_extent.width,
             self.m_extent.height,
             msaaSamples,
-            try vkUtil.FindDepthFormat(),
+            try renderContext.FindDepthFormat(),
         );
     }
 

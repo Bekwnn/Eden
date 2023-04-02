@@ -49,6 +49,8 @@ const RenderLoopError = error{
 //var imguiIO: ?*ImGuiIO = null;
 
 //fn ImguiInit() void {
+//
+//    try imgui.InitImgui(window);
 //    imguiIO = igGetIO();
 //    if (imguiIO) |io| {
 //        var text_pixels: [*c]u8 = undefined;
@@ -77,11 +79,23 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
     try rContext.RecreateSwapchain(allocator);
 }
 
-pub fn Initialize() void {
+pub fn Initialize() !void {
+    try RenderContext.Initialize();
+
     //TODO get imgui working again
     //ImguiInit();
 
     InitializeScene();
+}
+
+pub fn Shutdown() void {
+    //defer imgui.CleanupImgui();
+
+    const rContext = RenderContext.GetInstance() catch {
+        return;
+    };
+    _ = c.vkDeviceWaitIdle(rContext.m_logicalDevice);
+    rContext.Shutdown();
 }
 
 fn InitializeScene() void {

@@ -1,4 +1,6 @@
 const c = @import("../c.zig");
+const RenderContext = @import("RenderContext.zig").RenderContext;
+const vkUtil = @import("VulkanUtil.zig");
 
 const VkError = error{
     FailedToFindMemoryType,

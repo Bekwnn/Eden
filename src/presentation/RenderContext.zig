@@ -6,6 +6,8 @@ const Allocator = std.mem.Allocator;
 const vkUtil = @import("VulkanUtil.zig");
 const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
+const PipelineBuilder = @import("PipelineBuilder.zig");
+const Shader = @import("Shader.zig");
 
 var instance: ?RenderContext = null;
 
@@ -26,6 +28,7 @@ pub const RenderContextError = error{
     FailedToCreateSurface,
     FailedToFindPhysicalDevice,
     FailedToFindSupportedFormat,
+    FailedToRecordCommandBuffers,
     FailedToWait,
     MissingValidationLayer,
     UninitializedShutdown,
@@ -59,12 +62,21 @@ pub const RenderContext = struct {
     m_commandPool: c.VkCommandPool = undefined,
     m_commandBuffers: []c.VkCommandBuffer = undefined,
 
+    // We want to stick to 4 descriptor sets due lower end hardware limitations
+    // 0 = bound once per frame
+    // 1 = bound once per pass
+    // 2 = bound once per material (lives in the material)
+    // 3 = bound once per material instance (lives in material instance)
     m_descriptorPool: c.VkDescriptorPool = undefined,
-    m_descriptorSets: []c.VkDescriptorSet = undefined,
 
-    //TODO should we have both of these here?
+    m_perFrameDescriptorSetLayout: c.VkDescriptorSetLayout = undefined,
+    m_perPassDescriptorSetLayout: c.VkDescriptorSetLayout = undefined,
+    m_perFrameDescriptorSet: c.VkDescriptorSet = undefined,
+    m_perPassDescriptorSet: c.VkDescriptorSet = undefined,
+
+    //TODO should we have some material db where we create all necessary pipelines?
     m_pipelineLayout: c.VkPipelineLayout = undefined,
-    m_graphicsPipeline: c.VkPipeline = undefined,
+    m_pipeline: c.VkPipeline = undefined,
 
     m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
 
@@ -149,8 +161,8 @@ pub const RenderContext = struct {
         try CreateCommandBuffers(allocator);
     }
 
-    pub fn Shutdown() !void {
-        if (instance == null) return RenderContextError.UninitializedShutdown;
+    pub fn Shutdown() void {
+        if (instance == null) return;
 
         // if (enableValidationLayers) destroy debug utils messenger
         defer c.vkDestroyInstance(instance.?.m_vkInstance, null);
@@ -534,6 +546,151 @@ fn GetMaxUsableSampleCount() !c.VkSampleCountFlagBits {
 
     std.debug.print("MSAA detected: SAMPLE_COUNT_1_BIT\n", .{});
     return c.VK_SAMPLE_COUNT_1_BIT;
+}
+
+fn CreateDescriptorPool() !void {
+    const rContext = try RenderContext.GetInstance();
+    const uboSize = c.VkDescriptorPoolSize{
+        .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = @intCast(u32, rContext.swapchain.m_images.len),
+    };
+    const imageSamplerSize = c.VkDescriptorPoolSize{
+        .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = @intCast(u32, rContext.swapchain.m_images.len),
+    };
+
+    const poolSizes = [_]c.VkDescriptorPoolSize{ uboSize, imageSamplerSize };
+    const poolInfo = c.VkDescriptorPoolCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .poolSizeCount = poolSizes.len,
+        .pPoolSizes = &poolSizes,
+        .maxSets = @intCast(u32, rContext.swapchain.m_images.len),
+        .flags = 0,
+        .pNext = null,
+    };
+
+    try vkUtil.CheckVkSuccess(
+        c.vkCreateDescriptorPool(
+            rContext.m_logicalDevice,
+            &poolInfo,
+            null,
+            &rContext.m_descriptorPool,
+        ),
+        vkUtil.VkError.FailedToCreateDescriptorPool,
+    );
+}
+
+fn CreateDescriptorSets() !void {
+    const rContext = RenderContext.GetInstance();
+    var layouts = try allocator.alloc(
+        c.VkDescriptorSetLayout,
+        rContext.swapchain.m_images.len,
+    );
+    for (layouts) |*layout| {
+        layout.* = descriptorSetLayout;
+    }
+
+    const allocInfo = c.VkDescriptorSetAllocateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptorPool,
+        .descriptorSetCount = @intCast(u32, rContext.swapchain.m_images.len),
+        .pSetLayouts = layouts.ptr,
+        .pNext = null,
+    };
+
+    descriptorSets = try allocator.alloc(c.VkDescriptorSet, rContext.swapchain.m_images.len);
+    try vkUtil.CheckVkSuccess(
+        c.vkAllocateDescriptorSets(
+            rContext.m_logicalDevice,
+            &allocInfo,
+            descriptorSets.ptr,
+        ),
+        vkUtil.VkError.FailedToCreateDescriptorSets,
+    );
+
+    var i: u32 = 0;
+    while (i < swapchain.m_images.len) : (i += 1) {
+        const bufferInfo = c.VkDescriptorBufferInfo{
+            .buffer = uniformBuffers[i].m_buffer,
+            .offset = 0,
+            .range = @sizeOf(MeshUBO),
+        };
+        const imageInfo = c.VkDescriptorImageInfo{
+            .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .imageView = textureImage.m_imageView,
+            .sampler = textureSampler,
+        };
+        const uboDescriptorWrite = c.VkWriteDescriptorSet{
+            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = descriptorSets[i],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .pBufferInfo = &bufferInfo,
+            .pImageInfo = null,
+            .pTexelBufferView = null,
+            .pNext = null,
+        };
+        const textureSamplerDescriptorWrite = c.VkWriteDescriptorSet{
+            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = descriptorSets[i],
+            .dstBinding = 1,
+            .dstArrayElement = 0,
+            .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .pBufferInfo = null,
+            .pImageInfo = &imageInfo,
+            .pTexelBufferView = null,
+            .pNext = null,
+        };
+        const descriptorWrites = [_]c.VkWriteDescriptorSet{
+            uboDescriptorWrite,
+            textureSamplerDescriptorWrite,
+        };
+        c.vkUpdateDescriptorSets(
+            rContext.m_logicalDevice,
+            descriptorWrites.len,
+            &descriptorWrites,
+            0,
+            null,
+        );
+    }
+}
+
+fn CreatePipeline(
+    vertShaderRelativePath: []const u8,
+    fragShaderRelativePath: []const u8,
+) !void {
+    var shader = try Shader.CreateBasicShader(
+        allocator,
+        vertShaderRelativePath,
+        fragShaderRelativePath,
+    );
+    defer shader.FreeShader();
+
+    var pipelineBuilder: PipelineBuilder;
+
+    const bindingDescription = Mesh.GetBindingDescription();
+    const attribDescriptions = Mesh.GetAttributeDescriptions();
+    pipelineBuilder.InitializeBuilder(
+        c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        c.VK_POLYGON_MODE_FILL,
+        bindingDescription,
+        attribDescriptions,
+    );
+
+    pipelineBuilder.ClearShaderStages();
+    pipelineBuilder.AddShaderStage(
+        c.VK_SHADER_STAGE_VERTEX_BIT,
+        shader.m_vertShader.?,
+    );
+    pipelineBuilder.AddShaderStage(
+        c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        shader.m_fragShader.?,
+    );
+
+    m_pipeline = try pipelineBuilder.BuildPipeline(m_logicalDevice, m_renderPass);
 }
 
 fn CreateRenderPass() !void {

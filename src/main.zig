@@ -8,7 +8,6 @@ const presentation = @import("presentation/Presentation.zig");
 const RenderContext = @import("presentation/RenderContext.zig").RenderContext;
 const imgui = @import("presentation/ImGui.zig");
 const sdlInit = @import("presentation/SDLInit.zig");
-const vk = @import("presentation/VulkanInit.zig");
 
 const imageFileUtil = @import("coreutil/ImageFileUtil.zig");
 
@@ -22,13 +21,8 @@ pub fn main() !void {
     const renderer = try sdlInit.CreateRenderer(window);
     defer c.SDL_DestroyRenderer(renderer);
 
-    presentation.Initialize(); //TODO temp, delete should happen later
-    //TODO this should live in presentation init somewhere
-    try vk.VulkanInit(window);
-
-    // imgui setup
-    //try imgui.InitImgui(window);
-    //defer imgui.CleanupImgui();
+    try presentation.Initialize();
+    defer presentation.Shutdown();
 
     //stb image wip test
     const testImagePath = "test-assets\\test.png";
@@ -46,9 +40,6 @@ pub fn main() !void {
     try MainGameLoop(window);
 
     // teardown
-    const rContext = try RenderContext.GetInstance();
-    _ = c.vkDeviceWaitIdle(rContext.m_logicalDevice);
-    try vk.VulkanCleanup();
 }
 
 pub fn MainGameLoop(window: *c.SDL_Window) !void {

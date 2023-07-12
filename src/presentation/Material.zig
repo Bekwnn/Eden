@@ -1,4 +1,4 @@
-const c = @import("c.zig");
+const c = @import("../c.zig");
 const std = @import("std");
 const allocator = std.heap.page_allocator;
 
@@ -10,11 +10,10 @@ const RenderContext = @import("RenderContext.zig").RenderContext;
 //TODO we want material instancing such that a material is made up of two members: a pointer to instance data (texture, etc) and a pointer to shader constants (descriptor layout, etc)
 // really we might want it to be more flexible than that, and support multiple textures, etc. For now, hardcoded to one texture
 pub const Material = struct {
-    m_name: []u8,
-    m_uboLayoutBinding: c.VkDescriptorSetLayoutBinding,
+    m_name: []const u8,
 
-    m_textureImage: Texture, //TODO move to material instance data
-    m_textureSampler: c.VkSampler,
+    //m_textureImage: ?Texture = null, //TODO move to material instance data
+    //m_textureSampler: ?c.VkSampler = null,
 
     //TODO per material descriptors not yet implemented
     // should potentially live in the RenderContext and be set by materials
@@ -52,7 +51,7 @@ pub const Material = struct {
             rContext.m_descriptorSetLayout,
             null,
         );
-        defer m_textureImage.FreeTexture(rContext.m_logicalDevice);
+        defer self.m_textureImage.FreeTexture(rContext.m_logicalDevice);
         defer c.vkDestroySampler(
             rContext.m_logicalDevice,
             self.m_textureSampler,

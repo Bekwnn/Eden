@@ -67,7 +67,7 @@ pub const Mesh = struct {
     // To be called after the vertex/index arrays are filled
     // TODO make this all one step and less error prone
     pub fn InitMesh(self: *Mesh) !void {
-        self.m_meshBuffers = MeshBuffers{
+        self.m_bufferData = MeshBuffers{
             .m_vertexBuffer = try Buffer.CreateVertexBuffer(self),
             .m_indexBuffer = try Buffer.CreateIndexBuffer(self),
         };

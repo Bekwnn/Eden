@@ -21,7 +21,7 @@ pub fn main() !void {
     const renderer = try sdlInit.CreateRenderer(window);
     defer c.SDL_DestroyRenderer(renderer);
 
-    try presentation.Initialize();
+    try presentation.Initialize(window, "Eden", 0);
     defer presentation.Shutdown();
 
     //stb image wip test

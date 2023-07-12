@@ -79,13 +79,22 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
     try rContext.RecreateSwapchain(allocator);
 }
 
-pub fn Initialize() !void {
-    try RenderContext.Initialize();
+pub fn Initialize(
+    window: *c.SDL_Window,
+    applicationName: []const u8,
+    applicationVersion: u32,
+) !void {
+    try RenderContext.Initialize(
+        allocator,
+        window,
+        applicationName,
+        applicationVersion,
+    );
 
     //TODO get imgui working again
     //ImguiInit();
 
-    InitializeScene();
+    try InitializeScene();
 }
 
 pub fn Shutdown() void {
@@ -98,9 +107,9 @@ pub fn Shutdown() void {
     rContext.Shutdown();
 }
 
-fn InitializeScene() void {
+fn InitializeScene() !void {
     // init hardcoded test scene:
-    var inventory = AssetInventory.GetInstance();
+    var inventory = try AssetInventory.GetInstance();
     const mesh = inventory.CreateMesh("monkey", "test-assets\\test.obj") catch |meshErr| {
         debug.print("Error creating mesh: {}\n", .{meshErr});
         return;
@@ -109,8 +118,8 @@ fn InitializeScene() void {
         "monkey_mat",
     );
 
-    var ix = -1;
-    var iy = -1;
+    var ix: i8 = -1;
+    var iy: i8 = -1;
     while (iy <= 1) : (iy += 1) {
         while (ix <= 1) : (ix += 1) {
             var newRenderable = renderables.addOne() catch @panic("!");

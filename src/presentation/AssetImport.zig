@@ -9,6 +9,13 @@ const VertexData = @import("Mesh.zig").VertexData;
 
 const allocator = std.heap.page_allocator;
 
+const ImporterLib = enum {
+    AssImp,
+    Cgltf,
+};
+
+const meshImportLib = ImporterLib.AssImp;
+
 const ImportError = error{
     AIImportError, //assimp failed to import the scene
     CgltfImportError, //cgltf failed to import the scene
@@ -17,24 +24,19 @@ const ImportError = error{
     MultipleMeshes, //scene contains more than 1 mesh (not supported)
     AssetPath, //issue with path to asset
     BadDataCounts, //issue with mesh data having a mismatched amount of data
+    NotImplemented,
 };
 
-const ImporterLib = enum {
-    AssImp,
-    Cgltf,
-};
-
-const meshImportLib = ImporterLib.AssImp;
-
-pub fn ImportMesh(filePath: []const u8) !Mesh {
+pub fn ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
     _ = try std.fs.openFileAbsolute(filePath, .{}); //sanity check accessing the file before trying to import
 
     switch (meshImportLib) {
         ImporterLib.AssImp => {
-            return AssImp_ImportMesh(filePath);
+            return AssImp_ImportMesh(filePath, meshName);
         },
         ImporterLib.Cgltf => {
-            return Cgltf_ImportMesh(filePath);
+            //return Cgltf_ImportMesh(filePath, meshName);
+            return ImportError.NotImplemented; //TODO
         },
     }
 }
@@ -60,12 +62,14 @@ fn AssImp_ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
     }
 
     const importMesh: *const c.aiMesh = importedScene.mMeshes[0];
-    const meshName = GetMeshNameFromFile(filePath);
-
     var returnMesh = Mesh{
         .m_name = meshName,
-        .m_vertexData = try ArrayList(VertexData).initCapacity(allocator, importMesh.mNumVertices),
-        .m_indices = ArrayList(u32).init(allocator), //TODO can we make the capacity/resize handling better?
+        .m_vertexData = try ArrayList(VertexData).initCapacity(
+            allocator,
+            importMesh.mNumVertices,
+        ),
+        //TODO can we make the capacity/resize handling better?
+        .m_indices = ArrayList(u32).init(allocator),
         .m_bufferData = null,
     };
 
@@ -103,25 +107,25 @@ fn AssImp_ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
     }
 
     debug.print("Imported {s} successfully:\n{} vertexData instances and {} indices\n", .{
-        fileName,
+        meshName,
         returnMesh.m_vertexData.items.len,
         returnMesh.m_indices.items.len,
     });
     return returnMesh;
 }
 
-fn Cgltf_ImportMesh(filePath: []const u8) !Mesh {
-    //TODO cgltf disabled
-    //var options: c.cgltf_options = .{0};
-    //var data: *?c.cgltf_data = null;
-    //const result = c.cgltf_parse_file(&options, filePath.ptr, &data);
-    //if (result != c.cgltf_result_success) {
-    //    return ImportError.CgltfImportError;
-    //}
-    //defer cgltf_free(data);
-
-    //const meshName = GetMeshNameFromFile(filePath);
-
-    //TODO create a mesh from data and return it
-    return ImportError.CgltfImportError;
-}
+//TODO cgltf disabled
+//fn Cgltf_ImportMesh(filePath: []const u8) !Mesh {
+//    var options: c.cgltf_options = .{0};
+//    var data: *?c.cgltf_data = null;
+//    const result = c.cgltf_parse_file(&options, filePath.ptr, &data);
+//    if (result != c.cgltf_result_success) {
+//        return ImportError.CgltfImportError;
+//    }
+//    defer cgltf_free(data);
+//
+//    const meshName = GetMeshNameFromFile(filePath);
+//
+//    //TODO create a mesh from data and return it
+//    return ImportError.CgltfImportError;
+//}

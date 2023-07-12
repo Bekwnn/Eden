@@ -1,10 +1,11 @@
-const c = @import("c.zig");
+const c = @import("../c.zig");
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const builderAllocator = std.heap.page_allocator;
 
 const RenderContext = @import("RenderContext.zig");
+const vkUtil = @import("VulkanUtil.zig");
 
 const PipelineBuildError = error{
     FailedToBuildPipeline,
@@ -16,14 +17,15 @@ const PipelineBuildError = error{
 pub const PipelineBuilder = struct {
     m_shaderStages: ArrayList(c.VkPipelineShaderStageCreateInfo) =
         ArrayList(c.VkPipelineShaderStageCreateInfo).init(builderAllocator),
-    m_vertexInputInfo: c.VkPipelineVertexInputStateCreateInfo,
-    m_inputAssembly: c.VkPipelineInputAssemblyStateCreateInfo,
-    m_viewport: c.VkViewport,
-    m_scissor: c.VkRect2D,
-    m_rasterizerState: c.VkPipelineRasterizationStateCreateInfo,
-    m_colorBlendAttachment: c.VkPipelineColorBlendAttachmentState,
-    m_multisamplingState: c.VkPipelineMultisampleStateCreateInfo,
-    m_pipelineLayout: c.VkPipelineLayout,
+    m_vertexInputInfo: c.VkPipelineVertexInputStateCreateInfo = undefined,
+    m_inputAssembly: c.VkPipelineInputAssemblyStateCreateInfo = undefined,
+    m_viewport: c.VkViewport = undefined,
+    m_scissor: c.VkRect2D = undefined,
+    m_rasterizerState: c.VkPipelineRasterizationStateCreateInfo = undefined,
+    m_colorBlendAttachment: c.VkPipelineColorBlendAttachmentState = undefined,
+    m_multisamplingState: c.VkPipelineMultisampleStateCreateInfo = undefined,
+    m_pipelineLayout: c.VkPipelineLayout = undefined,
+    m_depthStencilState: c.VkDepthStencilState = undefined,
 
     pub fn AddShaderStage(
         self: *PipelineBuilder,
@@ -57,6 +59,7 @@ pub const PipelineBuilder = struct {
         self.InitRasterizationState(polygonMode);
         try self.InitMultisamplingState();
         self.InitColorBlendAttachment();
+        self.InitDepthStencilState();
     }
 
     fn InitVertexInputInfo(
@@ -137,10 +140,20 @@ pub const PipelineBuilder = struct {
         };
     }
 
+    fn InitDepthStencilState(
+        self: *PipelineBuilder,
+    ) void {
+        self.m_depthStencilState = c.VkPipelineDepthStencilStateCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .depthTestEnable = c.VK_TRUE,
+            .depthWriteEnable = c.VK_TRUE,
+            .pNext = null,
+            .flags = 0,
+        };
+    }
+
     pub fn BuildPipeline(
         self: *const PipelineBuilder,
-        device: c.VkDevice,
-        pass: c.VkRenderPass,
     ) !c.VkPipeline {
         const rContext = try RenderContext.GetInstance();
         const extent = &rContext.m_swapchain.m_extent;
@@ -171,7 +184,7 @@ pub const PipelineBuilder = struct {
             .logicOpEnable = c.VK_FALSE,
             .logicOp = c.VK_LOGIC_OP_COPY,
             .attachmentCount = 1,
-            .pAttachments = &m_colorBlending,
+            .pAttachments = &self.m_colorBlendAttachment,
             .blendConstants = [_]f32{ 0.0, 0.0, 0.0, 0.0 },
             .pNext = null,
             .flags = 0,
@@ -179,16 +192,16 @@ pub const PipelineBuilder = struct {
 
         const pipelineInfo = c.VkGraphicsPipelineCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .stageCount = m_shaderStages.len,
-            .pStages = &m_shaderStages,
-            .pVertexInputState = &m_vertexInputState,
-            .pInputAssemblyState = &m_inputAssemblyState,
+            .stageCount = self.m_shaderStages.len,
+            .pStages = &self.m_shaderStages,
+            .pVertexInputState = &self.m_vertexInputState,
+            .pInputAssemblyState = &self.m_inputAssemblyState,
             .pViewportState = &viewportState,
-            .pRasterizationState = &m_rasterizationState,
+            .pRasterizationState = &self.m_rasterizationState,
             .pTessellationState = null,
-            .pMultisampleState = &m_multisamplingState,
-            .pDepthStencilState = &depthStencilState,
-            .pColorBlendState = &m_colorBlendingAttachment,
+            .pMultisampleState = &self.m_multisamplingState,
+            .pDepthStencilState = &self.m_depthStencilState,
+            .pColorBlendState = &colorBlendingState,
             .pDynamicState = null,
             .layout = rContext.m_pipelineLayout,
             .renderPass = rContext.m_renderPass,
@@ -198,6 +211,8 @@ pub const PipelineBuilder = struct {
             .pNext = null,
             .flags = 0,
         };
+
+        var newPipeline: c.VkPipeline = undefined;
         try vkUtil.CheckVkSuccess(
             c.vkCreateGraphicsPipelines(
                 rContext.m_logicalDevice,

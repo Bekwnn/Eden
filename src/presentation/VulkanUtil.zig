@@ -36,11 +36,12 @@ pub fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32
 
 pub fn BeginSingleTimeCommands() !c.VkCommandBuffer {
     const rContext = try RenderContext.GetInstance();
+    const currentFrameData = rContext.GetCurrentFrame();
 
     const allocInfo = c.VkCommandBufferAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandPool = rContext.m_commandPool,
+        .commandPool = currentFrameData.m_commandPool,
         .commandBufferCount = 1,
         .pNext = null,
     };

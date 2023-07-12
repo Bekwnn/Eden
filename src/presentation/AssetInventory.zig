@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig");
+const c = @import("../c.zig");
 const debug = std.debug;
 const allocator = std.heap.page_allocator;
 
@@ -28,7 +28,7 @@ pub const AssetInventory = struct {
     m_meshes: StringHashMap(Mesh) = StringHashMap(Mesh).init(allocator),
     m_materials: StringHashMap(Material) = StringHashMap(Material).init(allocator),
 
-    pub fn GetInstance() !*RenderContext {
+    pub fn GetInstance() !*AssetInventory {
         if (instance) |*inst| {
             return inst;
         } else {
@@ -42,31 +42,32 @@ pub const AssetInventory = struct {
     }
 
     pub fn CreateMaterial(
-        self: *Scene,
+        self: *AssetInventory,
         name: []const u8,
-        pipeline: c.VkPipeline,
-        pipelineLayout: c.VkPipelineLayout,
     ) !*Material {
         //TODO init pipeline
         try self.m_materials.put(name, Material{
             .m_name = name,
-            .m_pipeline = pipeline,
-            .m_pipelineLayout = pipelineLayout,
+            //TODO set:
+            // m_perMaterialSetLayout: c.VkDescriptorSetLayout,
+            // m_perMaterialDescriptorSet: c.VkDescriptorSet,
         });
         const entry = self.m_materials.getPtr(name);
         return entry orelse @panic("Material just created does not exist in hash map");
     }
 
-    pub fn GetMaterial(self: *Scene, name: []const u8) ?*Material {
+    pub fn GetMaterial(self: *AssetInventory, name: []const u8) ?*Material {
         return self.m_materials.getPtr(name);
     }
 
-    pub fn CreateMesh(self: *Scene, name: []const u8, filePath: []const u8) !*Mesh {
+    pub fn CreateMesh(self: *AssetInventory, name: []const u8, filePath: []const u8) !*Mesh {
         const meshPath = try filePathUtils.CwdToAbsolute(allocator, filePath);
         defer allocator.free(meshPath);
-        if (assetImport.ImportMesh(meshPath)) |mesh| {
-            try mesh.InitBuffers();
-            try self.m_meshes.put(name, mesh);
+        //TODO avoid unnecessary copyingo on creation
+        var importResult = assetImport.ImportMesh(meshPath, name);
+        if (importResult) |*mesh| {
+            try mesh.*.InitMesh();
+            try self.m_meshes.put(name, mesh.*);
             const entry = self.m_meshes.getPtr(name);
             return entry orelse @panic("Mesh just created does not exist in hash map");
         } else |meshErr| {
@@ -74,7 +75,7 @@ pub const AssetInventory = struct {
         }
     }
 
-    pub fn GetMesh(self: *Scene, name: []const u8) ?*Mesh {
+    pub fn GetMesh(self: *AssetInventory, name: []const u8) ?*Mesh {
         return self.m_meshes.getPtr(name);
     }
 };

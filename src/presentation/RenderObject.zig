@@ -13,13 +13,13 @@ const Material = @import("Material.zig").Material;
 const Buffer = @import("Buffer.zig").Buffer;
 const Camera = @import("Camera.zig").Camera;
 
-const MvpUbo = packed struct {
-    model: Mat4x4,
-    view: Mat4x4,
-    projection: Mat4x4,
-};
+pub const RenderObject = struct {
+    pub const MvpUbo = packed struct {
+        model: Mat4x4,
+        view: Mat4x4,
+        projection: Mat4x4,
+    };
 
-const RenderObject = struct {
     m_mesh: *Mesh,
     m_material: *Material,
     m_transform: Mat4x4,

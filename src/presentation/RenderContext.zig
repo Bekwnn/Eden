@@ -8,11 +8,19 @@ const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
 const PipelineBuilder = @import("PipelineBuilder.zig");
 const Shader = @import("Shader.zig");
+const frameUBO = @import("FrameUBO.zig");
+const FrameUBO = frameUBO.FrameUBO;
+
+const Mesh = @import("Mesh.zig").Mesh;
 
 var instance: ?RenderContext = null;
 
 const engineName = "Eden";
 const engineVersion = c.VK_MAKE_API_VERSION(0, 0, 1, 0);
+
+//TODO
+// all the functions that are outside of the RenderContext struct but are accessing rContext should
+// really just be moved inside the struct and take a (self: *RenderContext)
 
 pub const RenderContextError = error{
     AlreadyInitialized,
@@ -42,6 +50,30 @@ pub const RenderContextError = error{
     NotInitialized,
 };
 
+pub const DescriptorSetType = enum(u8) {
+    PerFrame = 0,
+    PerPass = 1,
+    PerMaterial = 2,
+    PerInstance = 3,
+    // We do not want to exceed 4 descriptor sets since since some
+    // integrated gpus don't support having more
+};
+const DESCRIPTOR_SET_COUNT = @typeInfo(DescriptorSetType).Enum.fields.len;
+
+// contains data that we store per frame, when double buffering
+pub const FrameData = struct {
+    m_presentSemaphore: c.VkSemaphore,
+    m_renderSemaphore: c.VkSemaphore,
+    m_renderFence: c.VkFence,
+
+    m_commandPool: c.VkCommandPool,
+    m_mainCommandBuffer: c.VkCommandBuffer,
+
+    m_descriptorSets: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSet = undefined,
+    m_uniformBuffers: [DESCRIPTOR_SET_COUNT]c.VkBuffer = undefined,
+    m_uniformBufferMemory: [DESCRIPTOR_SET_COUNT]c.VkDeviceMemory = undefined,
+};
+
 pub const BUFFER_FRAMES = 2;
 
 pub const RenderContext = struct {
@@ -59,8 +91,9 @@ pub const RenderContext = struct {
     m_presentQueueIdx: ?u32 = null,
     m_presentQueue: c.VkQueue = undefined,
 
-    m_commandPool: c.VkCommandPool = undefined,
-    m_commandBuffers: []c.VkCommandBuffer = undefined,
+    m_descriptorSetLayouts: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSetLayout = undefined,
+    m_frameData: [BUFFER_FRAMES]FrameData = undefined,
+    m_currentFrame: u32 = 0,
 
     // We want to stick to 4 descriptor sets due lower end hardware limitations
     // 0 = bound once per frame
@@ -69,20 +102,10 @@ pub const RenderContext = struct {
     // 3 = bound once per material instance (lives in material instance)
     m_descriptorPool: c.VkDescriptorPool = undefined,
 
-    m_perFrameDescriptorSetLayout: c.VkDescriptorSetLayout = undefined,
-    m_perPassDescriptorSetLayout: c.VkDescriptorSetLayout = undefined,
-    m_perFrameDescriptorSet: c.VkDescriptorSet = undefined,
-    m_perPassDescriptorSet: c.VkDescriptorSet = undefined,
-
-    //TODO should we have some material db where we create all necessary pipelines?
     m_pipelineLayout: c.VkPipelineLayout = undefined,
     m_pipeline: c.VkPipeline = undefined,
 
     m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
-
-    m_imageAvailableSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined,
-    m_renderFinishedSemaphores: [BUFFER_FRAMES]c.VkSemaphore = undefined,
-    m_inFlightFences: [BUFFER_FRAMES]c.VkFence = undefined,
 
     pub fn GetInstance() !*RenderContext {
         if (instance) |*inst| {
@@ -158,32 +181,35 @@ pub const RenderContext = struct {
 
         try CreateCommandPool();
 
-        try CreateCommandBuffers(allocator);
+        try CreateCommandBuffers();
     }
 
     pub fn Shutdown() void {
-        if (instance == null) return;
+        var rContext = RenderContext.GetInstance() orelse return;
 
         // if (enableValidationLayers) destroy debug utils messenger
-        defer c.vkDestroyInstance(instance.?.m_vkInstance, null);
+        defer c.vkDestroyInstance(rContext.m_vkInstance, null);
 
-        defer c.vkDestroySurfaceKHR(instance.?.m_vkInstance, instance.?.m_surface, null);
+        defer c.vkDestroySurfaceKHR(rContext.m_vkInstance, rContext.m_surface, null);
 
         defer c.vkDestroyDevice(instance.?.m_logicalDevice, null);
 
         defer instance.DestroySwapchain();
 
-        defer c.vkDestroyCommandPool(instance.?.m_logicalDevice, instance.?.m_commandPool, null);
-
         defer {
-            var i: usize = 0;
-            while (i < BUFFER_FRAMES) : (i += 1) {
-                c.vkDestroySemaphore(instance.?.m_logicalDevice, instance.?.m_imageAvailableSemaphores[i], null);
-                c.vkDestroySemaphore(instance.?.m_logicalDevice, instance.?.m_renderFinishedSemaphores[i], null);
-                c.vkDestroyFence(instance.?.m_logicalDevice, instance.?.m_inFlightFences[i], null);
+            for (rContext.m_frameData) |*frameData| {
+                c.vkDestroySemaphore(rContext.m_logicalDevice, frameData.m_presentSemaphore, null);
+                c.vkDestroySemaphore(rContext.m_logicalDevice, frameData.m_renderSemaphore, null);
+                c.vkDestroyFence(rContext.m_logicalDevice, frameData.m_renderFence, null);
+
+                c.vkDestroyCommandPool(rContext.m_logicalDevice, frameData.m_commandPool, null);
             }
         }
         instance = null;
+    }
+
+    pub fn GetCurrentFrame(self: *RenderContext) *FrameData {
+        return &self.m_frameData[self.m_currentFrame % BUFFER_FRAMES];
     }
 
     pub fn RecreateSwapchain(self: *RenderContext, allocator: Allocator) !void {
@@ -227,12 +253,14 @@ pub const RenderContext = struct {
 
         defer swapchain.CleanupFrameBuffers(self.m_logicalDevice);
 
-        defer c.vkFreeCommandBuffers(
-            self.m_logicalDevice,
-            self.m_commandPool,
-            @intCast(u32, self.m_commandBuffers.len),
-            self.m_commandBuffers.ptr,
-        );
+        for (self.frameData) |*frameData| {
+            defer c.vkFreeCommandBuffers(
+                self.m_logicalDevice,
+                frameData.m_commandPool,
+                1,
+                &frameData.m_mainCommandBuffer,
+            );
+        }
 
         defer swapchain.CleanupDepthAndColorImages(self.m_logicalDevice);
     }
@@ -580,49 +608,54 @@ fn CreateDescriptorPool() !void {
     );
 }
 
-fn CreateDescriptorSets() !void {
+fn CreateDescriptorSets(allocator: Allocator) !void {
     const rContext = RenderContext.GetInstance();
     var layouts = try allocator.alloc(
         c.VkDescriptorSetLayout,
         rContext.swapchain.m_images.len,
     );
     for (layouts) |*layout| {
-        layout.* = descriptorSetLayout;
+        layout.* = rContext.m_descriptorSetLayout;
     }
 
     const allocInfo = c.VkDescriptorSetAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = descriptorPool,
+        .descriptorPool = rContext.m_descriptorPool,
         .descriptorSetCount = @intCast(u32, rContext.swapchain.m_images.len),
         .pSetLayouts = layouts.ptr,
         .pNext = null,
     };
 
-    descriptorSets = try allocator.alloc(c.VkDescriptorSet, rContext.swapchain.m_images.len);
+    rContext.m_descriptorSets = try allocator.alloc(
+        c.VkDescriptorSet,
+        rContext.swapchain.m_images.len,
+    );
+
     try vkUtil.CheckVkSuccess(
         c.vkAllocateDescriptorSets(
             rContext.m_logicalDevice,
             &allocInfo,
-            descriptorSets.ptr,
+            rContext.m_descriptorSets.ptr,
         ),
         vkUtil.VkError.FailedToCreateDescriptorSets,
     );
 
-    var i: u32 = 0;
-    while (i < swapchain.m_images.len) : (i += 1) {
+    // Only initializing global per frame UBO with camera data at the moment
+    for (rContext.m_frameData) |*frameData| {
         const bufferInfo = c.VkDescriptorBufferInfo{
-            .buffer = uniformBuffers[i].m_buffer,
+            .buffer = frameData.m_uniformBuffers[DescriptorSetType.PerFrame].m_buffer,
             .offset = 0,
-            .range = @sizeOf(MeshUBO),
+            .range = @sizeOf(FrameUBO),
         };
-        const imageInfo = c.VkDescriptorImageInfo{
-            .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .imageView = textureImage.m_imageView,
-            .sampler = textureSampler,
-        };
+        //TODO add texture sampler to Material or MaterialInstance UBO
+        //const imageInfo = c.VkDescriptorImageInfo{
+        //    .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        //    .imageView = textureImage.m_imageView,
+        //    .sampler = textureSampler,
+        //};
         const uboDescriptorWrite = c.VkWriteDescriptorSet{
             .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = descriptorSets[i],
+            .dstSet = rContext.m_descriptorSets[DescriptorSetType.PerFrame],
             .dstBinding = 0,
             .dstArrayElement = 0,
             .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -632,21 +665,21 @@ fn CreateDescriptorSets() !void {
             .pTexelBufferView = null,
             .pNext = null,
         };
-        const textureSamplerDescriptorWrite = c.VkWriteDescriptorSet{
-            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = descriptorSets[i],
-            .dstBinding = 1,
-            .dstArrayElement = 0,
-            .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = 1,
-            .pBufferInfo = null,
-            .pImageInfo = &imageInfo,
-            .pTexelBufferView = null,
-            .pNext = null,
-        };
+        //const textureSamplerDescriptorWrite = c.VkWriteDescriptorSet{
+        //    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        //    .dstSet = descriptorSets[DescriptorSetType.PerFrame],
+        //    .dstBinding = 1,
+        //    .dstArrayElement = 0,
+        //    .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        //    .descriptorCount = 1,
+        //    .pBufferInfo = null,
+        //    .pImageInfo = &imageInfo,
+        //    .pTexelBufferView = null,
+        //    .pNext = null,
+        //};
         const descriptorWrites = [_]c.VkWriteDescriptorSet{
             uboDescriptorWrite,
-            textureSamplerDescriptorWrite,
+            //textureSamplerDescriptorWrite,
         };
         c.vkUpdateDescriptorSets(
             rContext.m_logicalDevice,
@@ -659,6 +692,7 @@ fn CreateDescriptorSets() !void {
 }
 
 fn CreatePipeline(
+    allocator: Allocator,
     vertShaderRelativePath: []const u8,
     fragShaderRelativePath: []const u8,
 ) !void {
@@ -669,7 +703,7 @@ fn CreatePipeline(
     );
     defer shader.FreeShader();
 
-    var pipelineBuilder: PipelineBuilder;
+    var pipelineBuilder = PipelineBuilder{};
 
     const bindingDescription = Mesh.GetBindingDescription();
     const attribDescriptions = Mesh.GetAttributeDescriptions();
@@ -690,7 +724,8 @@ fn CreatePipeline(
         shader.m_fragShader.?,
     );
 
-    m_pipeline = try pipelineBuilder.BuildPipeline(m_logicalDevice, m_renderPass);
+    const rContext = try RenderContext.GetInstance();
+    rContext.m_pipeline = try pipelineBuilder.BuildPipeline();
 }
 
 fn CreateRenderPass() !void {
@@ -812,27 +847,25 @@ pub fn FindSupportedFormat(
     return RenderContextError.FailedToFindSupportedFormat;
 }
 
-fn CreateCommandBuffers(allocator: Allocator) !void {
+fn CreateCommandBuffers() !void {
     var rContext = try RenderContext.GetInstance();
-    rContext.m_commandBuffers = try allocator.alloc(
-        c.VkCommandBuffer,
-        rContext.m_swapchain.m_frameBuffers.len,
-    );
-    const allocInfo = c.VkCommandBufferAllocateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = rContext.m_commandPool,
-        .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = @intCast(u32, rContext.m_commandBuffers.len),
-        .pNext = null,
-    };
+    for (rContext.m_frameData) |*frameData| {
+        const allocInfo = c.VkCommandBufferAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = frameData.m_commandPool,
+            .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+            .pNext = null,
+        };
 
-    try vkUtil.CheckVkSuccess(
-        c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, rContext.m_commandBuffers.ptr),
-        RenderContextError.FailedToCreateCommandBuffers,
-    );
+        try vkUtil.CheckVkSuccess(
+            c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, &frameData.m_mainCommandBuffer),
+            RenderContextError.FailedToCreateCommandBuffers,
+        );
+    }
 
     var i: usize = 0;
-    while (i < rContext.m_commandBuffers.len) : (i += 1) {
+    while (i < rContext.m_frameData.len) : (i += 1) {
         var beginInfo = c.VkCommandBufferBeginInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .pInheritanceInfo = null,
@@ -841,7 +874,7 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         };
 
         try vkUtil.CheckVkSuccess(
-            c.vkBeginCommandBuffer(rContext.m_commandBuffers[i], &beginInfo),
+            c.vkBeginCommandBuffer(rContext.m_frameData[i].m_mainCommandBuffer, &beginInfo),
             RenderContextError.FailedToCreateCommandBuffers,
         );
 
@@ -869,17 +902,17 @@ fn CreateCommandBuffers(allocator: Allocator) !void {
         };
 
         c.vkCmdBeginRenderPass(
-            rContext.m_commandBuffers[i],
+            rContext.m_frameData[i].m_mainCommandBuffer,
             &renderPassInfo,
             c.VK_SUBPASS_CONTENTS_INLINE,
         );
         {
             //TODO scene.RenderObjects(commandBuffers[i], renderObjects);
         }
-        c.vkCmdEndRenderPass(rContext.m_commandBuffers[i]);
+        c.vkCmdEndRenderPass(rContext.m_frameData[i].m_mainCommandBuffer);
 
         try vkUtil.CheckVkSuccess(
-            c.vkEndCommandBuffer(rContext.m_commandBuffers[i]),
+            c.vkEndCommandBuffer(rContext.m_frameData[i].m_mainCommandBuffer),
             RenderContextError.FailedToRecordCommandBuffers,
         );
     }
@@ -891,17 +924,19 @@ fn CreateCommandPool() !void {
     if (rContext.m_graphicsQueueIdx == null) {
         return RenderContextError.FailedToCreateCommandPool;
     }
-    const poolInfo = c.VkCommandPoolCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .queueFamilyIndex = rContext.m_graphicsQueueIdx.?,
-        .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .pNext = null,
-    };
+    for (rContext.m_frameData) |*frameData| {
+        const poolInfo = c.VkCommandPoolCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .queueFamilyIndex = rContext.m_graphicsQueueIdx.?,
+            .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            .pNext = null,
+        };
 
-    try vkUtil.CheckVkSuccess(
-        c.vkCreateCommandPool(rContext.m_logicalDevice, &poolInfo, null, &rContext.m_commandPool),
-        RenderContextError.FailedToCreateCommandPool,
-    );
+        try vkUtil.CheckVkSuccess(
+            c.vkCreateCommandPool(rContext.m_logicalDevice, &poolInfo, null, &frameData.m_commandPool),
+            RenderContextError.FailedToCreateCommandPool,
+        );
+    }
 }
 
 fn CreateFencesAndSemaphores() !void {

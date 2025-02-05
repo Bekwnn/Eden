@@ -13,7 +13,7 @@ pub const FilePathError = error{
 pub fn CwdToAbsolute(allocator: mem.Allocator, relativePath: []const u8) ![]u8 {
     const cwdPath = try process.getCwdAlloc(allocator);
     defer allocator.free(cwdPath);
-    var absolutePath = try allocator.alloc(u8, cwdPath.len + relativePath.len + 1);
+    const absolutePath = try allocator.alloc(u8, cwdPath.len + relativePath.len + 1);
     errdefer allocator.free(absolutePath);
     // insert forward slash if it doesn't exist
     if (relativePath.len > 0 and relativePath[0] == '\\') {

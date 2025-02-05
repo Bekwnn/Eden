@@ -4,22 +4,22 @@ pub const EntityBehaviour = @import("BehaviourSystems/EntityBehaviour.zig");
 // rather than having to have a big centralized list with everything
 
 // Variable frame-rate update
-pub const s_update = [_]fn () void{
+pub const s_update = [_]*const fn () void{
     EntityBehaviour.EntityUpdateBehaviour,
 };
 
 // Fixed delta time update
-pub const s_fixedUpdate = [_]fn () void{
+pub const s_fixedUpdate = [_]*const fn () void{
     EntityBehaviour.EntityFixedUpdateBehaviour,
 };
 
 // Entity spawn event
-pub const s_onSpawn = [_]fn (u32) void{
+pub const s_onSpawn = [_]*const fn (u32) void{
     EntityBehaviour.EntityOnSpawnBehaviour,
 };
 
 // Entity destroyed event
-pub const s_onDestroy = [_]fn (u32) void{
+pub const s_onDestroy = [_]*const fn (u32) void{
     EntityBehaviour.EntityOnDestroyBehaviour,
 };
 

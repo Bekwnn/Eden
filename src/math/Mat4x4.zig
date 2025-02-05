@@ -18,7 +18,7 @@ pub const zero = Mat4x4{
     },
 };
 
-pub const Mat4x4 = packed struct {
+pub const Mat4x4 = struct {
     m: [4][4]f32 = [4][4]f32{
         [4]f32{ 1.0, 0.0, 0.0, 0.0 },
         [4]f32{ 0.0, 1.0, 0.0, 0.0 },

@@ -14,7 +14,7 @@ fn ReportSDLError(message: []const u8) void {
 }
 
 fn SetSDLAttribute(attribute: c_int, setVal: c_int) !c_int {
-    const result = c.SDL_GL_SetAttribute(@intToEnum(c.SDL_GLattr, attribute), setVal);
+    const result = c.SDL_GL_SetAttribute(@enumFromInt(attribute), setVal);
     if (result < 0) {
         ReportSDLError("Unable to set attribute");
         return SDLInitError.SDLError;
@@ -38,8 +38,8 @@ pub fn CreateWindow(name: [*c]const u8, width: u32, height: u32) !*c.SDL_Window 
         name,
         c.SDL_WINDOWPOS_UNDEFINED,
         c.SDL_WINDOWPOS_UNDEFINED,
-        @intCast(c_int, width),
-        @intCast(c_int, height),
+        @intCast(width),
+        @intCast(height),
         c.SDL_WINDOW_VULKAN | c.SDL_WINDOW_RESIZABLE,
     ) orelse {
         ReportSDLError("Unable to create window");

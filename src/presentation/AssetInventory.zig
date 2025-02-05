@@ -49,8 +49,8 @@ pub const AssetInventory = struct {
         try self.m_materials.put(name, Material{
             .m_name = name,
             //TODO set:
-            // m_perMaterialSetLayout: c.VkDescriptorSetLayout,
-            // m_perMaterialDescriptorSet: c.VkDescriptorSet,
+            .m_perMaterialSetLayout = undefined,
+            .m_perMaterialDescriptorSet = undefined,
         });
         const entry = self.m_materials.getPtr(name);
         return entry orelse @panic("Material just created does not exist in hash map");

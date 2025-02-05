@@ -96,7 +96,7 @@ fn AssImp_ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
             },
         });
     }
-    for (importMesh.mFaces[0..importMesh.mNumFaces]) |face, j| {
+    for (importMesh.mFaces[0..importMesh.mNumFaces], 0..) |face, j| {
         if (face.mNumIndices != 3) {
             debug.print("Bad face count at face {} with count {}\n", .{ j, face.mNumIndices });
             return ImportError.BadDataCounts;

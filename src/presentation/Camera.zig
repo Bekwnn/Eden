@@ -31,7 +31,7 @@ pub const Camera = struct {
 
     pub fn GetViewMatrix(self: *const Camera) Mat4x4 {
         const viewDirection = vec3.zAxis.RotatedByQuat(self.m_rotation);
-        var lookAtMat = mat4x4.LookDirMat4x4(self.m_pos, viewDirection, vec3.yAxis);
+        const lookAtMat = mat4x4.LookDirMat4x4(self.m_pos, viewDirection, vec3.yAxis);
         return lookAtMat;
     }
 

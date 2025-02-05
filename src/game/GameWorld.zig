@@ -18,10 +18,10 @@ pub var deltaTime: f32 = 1.0 / 60.0;
 pub const GameWorld = struct {
     m_entityManager: EntityManager,
     m_componentManager: ComponentManager,
-    m_updateBehaviours: [behaviourSystems.s_update.len]fn () void = behaviourSystems.s_update,
-    m_fixedUpdateBehaviours: [behaviourSystems.s_fixedUpdate.len]fn () void = behaviourSystems.s_fixedUpdate,
-    m_onSpawnBehaviours: [behaviourSystems.s_onSpawn.len]fn (u32) void = behaviourSystems.s_onSpawn,
-    m_onDestroyBehaviours: [behaviourSystems.s_onDestroy.len]fn (u32) void = behaviourSystems.s_onDestroy,
+    m_updateBehaviours: [behaviourSystems.s_update.len]*const fn () void = behaviourSystems.s_update,
+    m_fixedUpdateBehaviours: [behaviourSystems.s_fixedUpdate.len]*const fn () void = behaviourSystems.s_fixedUpdate,
+    m_onSpawnBehaviours: [behaviourSystems.s_onSpawn.len]*const fn (u32) void = behaviourSystems.s_onSpawn,
+    m_onDestroyBehaviours: [behaviourSystems.s_onDestroy.len]*const fn (u32) void = behaviourSystems.s_onDestroy,
 
     pub fn Update(self: *GameWorld, deltaT: f32) void {
         deltaTime = deltaT;

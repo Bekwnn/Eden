@@ -25,7 +25,7 @@ pub fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32
 
     var i: u5 = 0;
     while (i < memProperties.memoryTypeCount) : (i += 1) {
-        if ((typeFilter & @shlExact(@intCast(u32, 1), i)) != 0 and
+        if ((typeFilter & @shlExact(@as(u32, 1), i)) != 0 and
             (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
         {
             return i;
@@ -103,7 +103,7 @@ pub fn TransitionImageLayout(
     newLayout: c.VkImageLayout,
     mipLevels: u32,
 ) !void {
-    var commandBuffer = try BeginSingleTimeCommands();
+    const commandBuffer = try BeginSingleTimeCommands();
 
     var barrier = c.VkImageMemoryBarrier{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,

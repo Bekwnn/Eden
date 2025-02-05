@@ -56,7 +56,7 @@ fn ComponentDataArray(comptime compType: type) type {
             self.m_compData.append(ComponentDataPair(compType){ .m_ownerEid = owner }) catch {
                 @panic("Could not add new component to array.");
             };
-            const addedCompId = @intCast(u16, self.m_compData.len - 1);
+            const addedCompId = @as(u16, self.m_compData.len - 1);
             //TODO add compId to entity's m_componentIds
             return addedCompId;
         }

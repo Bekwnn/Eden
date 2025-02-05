@@ -46,11 +46,11 @@ pub const Texture = struct {
 
         var data: [*]u8 = undefined;
         try vkUtil.CheckVkSuccess(
-            c.vkMapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory, 0, imageSize, 0, @ptrCast([*c]?*anyopaque, &data)),
+            c.vkMapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory, 0, imageSize, 0, @ptrCast(&data)),
             TextureError.FailedToMapMemory,
         );
 
-        @memcpy(data, image.m_imageData, imageSize);
+        @memcpy(data, image.m_imageData);
         c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
 
         try CreateImage(
@@ -229,7 +229,7 @@ pub fn CreateImage(
 }
 
 fn CalcTextureMipLevels(width: u32, height: u32) u32 {
-    return @floatToInt(u32, std.math.floor(std.math.log2(@intToFloat(f32, std.math.max(width, height))))) + 1;
+    return @as(u32, std.math.floor(std.math.log2(@as(f32, std.math.max(width, height))))) + 1;
 }
 
 //TODO generating mip maps should be done offline; possibly as a build step/function?
@@ -248,7 +248,7 @@ fn GenerateMipmaps(
         return TextureError.BadMipmapFormat;
     }
 
-    var commandBuffer = try vkUtil.BeginSingleTimeCommands();
+    const commandBuffer = try vkUtil.BeginSingleTimeCommands();
 
     var barrier = c.VkImageMemoryBarrier{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -300,8 +300,8 @@ fn GenerateMipmaps(
                     .z = 0,
                 },
                 c.VkOffset3D{
-                    .x = @intCast(i32, mipWidth),
-                    .y = @intCast(i32, mipHeight),
+                    .x = @intCast(mipWidth),
+                    .y = @intCast(mipHeight),
                     .z = 1,
                 },
             },
@@ -312,8 +312,8 @@ fn GenerateMipmaps(
                     .z = 0,
                 },
                 c.VkOffset3D{
-                    .x = @intCast(i32, if (mipWidth > 1) mipWidth / 2 else 1),
-                    .y = @intCast(i32, if (mipHeight > 1) mipHeight / 2 else 1),
+                    .x = @intCast(if (mipWidth > 1) mipWidth / 2 else 1),
+                    .y = @intCast(if (mipHeight > 1) mipHeight / 2 else 1),
                     .z = 1,
                 },
             },
@@ -387,7 +387,7 @@ fn GenerateMipmaps(
 }
 
 fn CopyBufferToImage(buffer: c.VkBuffer, image: c.VkImage, width: u32, height: u32) !void {
-    var commandBuffer = try vkUtil.BeginSingleTimeCommands();
+    const commandBuffer = try vkUtil.BeginSingleTimeCommands();
 
     const region = c.VkBufferImageCopy{
         .bufferOffset = 0,
@@ -480,7 +480,7 @@ pub fn CreateTextureSampler(
         .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
         .mipLodBias = 0.0,
         .minLod = 0.0,
-        .maxLod = @intToFloat(f32, texture.m_mipLevels),
+        .maxLod = @floatFromInt(texture.m_mipLevels),
         .flags = 0,
         .pNext = null,
     };

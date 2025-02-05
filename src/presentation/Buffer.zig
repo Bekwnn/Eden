@@ -28,7 +28,7 @@ pub const Buffer = struct {
         );
         defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
-        var data: [*]u8 = undefined;
+        var data: []VertexData = undefined;
         try vkUtil.CheckVkSuccess(
             c.vkMapMemory(
                 rContext.m_logicalDevice,
@@ -36,18 +36,14 @@ pub const Buffer = struct {
                 0,
                 bufferSize,
                 0,
-                @ptrCast([*c]?*anyopaque, &data),
+                @ptrCast(&data.ptr),
             ),
             BufferError.FailedToCreateVertexBuffer,
         );
-        @memcpy(
-            data,
-            @ptrCast([*]u8, mesh.m_vertexData.items.ptr),
-            bufferSize,
-        );
+        @memcpy(data, mesh.m_vertexData.items);
         c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
 
-        var newVertexBuffer = try CreateBuffer(
+        const newVertexBuffer = try CreateBuffer(
             bufferSize,
             c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -70,7 +66,7 @@ pub const Buffer = struct {
         );
         defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
-        var data: [*]u8 = undefined;
+        var data: []u32 = undefined;
         try vkUtil.CheckVkSuccess(
             c.vkMapMemory(
                 rContext.m_logicalDevice,
@@ -78,14 +74,14 @@ pub const Buffer = struct {
                 0,
                 bufferSize,
                 0,
-                @ptrCast([*c]?*anyopaque, &data),
+                @ptrCast(&data.ptr),
             ),
             BufferError.FailedToCreateIndexBuffer,
         );
-        @memcpy(data, @ptrCast([*]u8, mesh.m_indices.items.ptr), bufferSize);
+        @memcpy(data, mesh.m_indices.items);
         c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
 
-        var newIndexBuffer: Buffer = try CreateBuffer(
+        const newIndexBuffer: Buffer = try CreateBuffer(
             bufferSize,
             c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -168,7 +164,7 @@ pub const Buffer = struct {
 };
 
 fn CopyBuffer(srcBuffer: c.VkBuffer, dstBuffer: c.VkBuffer, size: c.VkDeviceSize) !void {
-    var commandBuffer = try vkUtil.BeginSingleTimeCommands();
+    const commandBuffer = try vkUtil.BeginSingleTimeCommands();
 
     const copyRegion = c.VkBufferCopy{
         .srcOffset = 0,

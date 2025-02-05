@@ -11,7 +11,8 @@ const vkUtil = @import("VulkanUtil.zig");
 const Camera = @import("Camera.zig").Camera;
 const Material = @import("Material.zig").Material;
 const Mesh = @import("Mesh.zig").Mesh;
-const RenderContext = @import("RenderContext.zig").RenderContext;
+const renderContext = @import("RenderContext.zig");
+const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
 const Scene = @import("Scene.zig").Scene;
 const Shader = @import("Shader.zig").Shader;
@@ -28,7 +29,7 @@ var curTime: f32 = 0.0;
 const circleTime: f32 = 1.0 / (2.0 * std.math.pi);
 const circleRadius: f32 = 0.5;
 
-var scene: Scene = .Scene{};
+var scene = Scene{};
 
 // temporary location for this
 var renderables: ArrayList(RenderObject) = ArrayList(RenderObject).init(allocator);
@@ -69,11 +70,9 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
     c.SDL_GetWindowSize(window, &width, &height);
     debug.print("Window resized to {} x {}\n", .{ width, height });
 
-    if (scene.GetCurrentCamera()) |*camera| {
-        camera.m_aspectRatio = @intToFloat(f32, width) / @intToFloat(f32, height);
-    }
-    if (scene.GetDefaultCamera()) |*camera| {
-        camera.m_aspectRatio = @intToFloat(f32, width) / @intToFloat(f32, height);
+    var camera = scene.GetCurrentCamera();
+    if (camera != null) {
+        camera.?.m_aspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
     }
 
     try rContext.RecreateSwapchain(allocator);
@@ -112,19 +111,26 @@ fn InitializeScene() !void {
     var inventory = try AssetInventory.GetInstance();
     const mesh = inventory.CreateMesh("monkey", "test-assets\\test.obj") catch |meshErr| {
         debug.print("Error creating mesh: {}\n", .{meshErr});
-        return;
+        return meshErr;
     };
-    const material = inventory.CreateMaterial(
-        "monkey_mat",
-    );
+    const material = inventory.CreateMaterial("monkey_mat") catch |materialErr| {
+        debug.print("Error creating material: {}\n", .{materialErr});
+        return materialErr;
+    };
 
     var ix: i8 = -1;
     var iy: i8 = -1;
     while (iy <= 1) : (iy += 1) {
         while (ix <= 1) : (ix += 1) {
             var newRenderable = renderables.addOne() catch @panic("!");
-            newRenderable = RenderObject.CreateRenderObject(mesh, material);
-            newRenderable.m_transform = mat4x4.TranslationMat4x4(Vec3{ ix * 2.0, iy * 2.0, 0.0 });
+            newRenderable.* = try RenderObject.CreateRenderObject(mesh, material);
+            const ixf: f32 = @floatFromInt(ix);
+            const iyf: f32 = @floatFromInt(iy);
+            newRenderable.m_transform = mat4x4.TranslationMat4x4(Vec3{
+                .x = ixf * 2.0,
+                .y = iyf * 2.0,
+                .z = 0.0,
+            });
         }
     }
 }
@@ -169,37 +175,40 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
-        c.vkCmdBindPipeline(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, rContext.m_graphicsPipeline);
+        c.vkCmdBindPipeline(commandBuffer, c.VK_PIPELINE_BIND_POINT_GRAPHICS, rContext.m_pipeline);
 
         //TODO the below is just a guess
         var curMesh: ?*Mesh = null;
-        var curMaterial: ?*Material = null;
-        for (renderables) |*renderObj| {
+        const curMaterial: ?*Material = null;
+        for (renderables.items, 0..) |_, i| {
+            const renderObj: *RenderObject = &renderables.items[i];
             // Update Mesh
-            if (!curMesh or curMesh != renderObj.m_mesh) {
+            if (curMesh == null or curMesh != renderObj.m_mesh) {
                 curMesh = renderObj.m_mesh;
-                const vertexBuffers = [_]c.VkBuffer{curMesh.m_bufferData.m_vertexBuffer.m_buffer};
+                //TODO check if buffer data exists
+                const vertexBuffers = [_]c.VkBuffer{curMesh.?.m_bufferData.?.m_vertexBuffer.m_buffer};
                 const offsets = [_]c.VkDeviceSize{0};
                 c.vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffers, &offsets);
 
-                c.vkCmdBindIndexBuffer(commandBuffer, curMesh.m_bufferData.m_indexBuffer.m_buffer, 0, c.VK_INDEX_TYPE_UINT32);
+                c.vkCmdBindIndexBuffer(commandBuffer, curMesh.?.m_bufferData.?.m_indexBuffer.m_buffer, 0, c.VK_INDEX_TYPE_UINT32);
             }
 
             // Update Material
-            if (!curMaterial or curMaterial != renderObj.m_material) {
+            const perMaterialDescriptorIdx: usize = @intFromEnum(renderContext.DescriptorSetType.PerMaterial);
+            if (curMaterial == null or curMaterial != renderObj.m_material) {
                 c.vkCmdBindDescriptorSets(
                     commandBuffer,
                     c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                     rContext.m_pipelineLayout,
                     0,
                     1,
-                    &rContext.m_descriptorSets[currentFrame],
+                    &rContext.m_frameData[currentFrame].m_descriptorSets[perMaterialDescriptorIdx],
                     0,
                     null,
                 );
             }
 
-            c.vkCmdDrawIndexed(commandBuffer, @intCast(u32, curMesh.m_indices.items.len), 1, 0, 0, 0);
+            c.vkCmdDrawIndexed(commandBuffer, @intCast(curMesh.?.m_indices.items.len), 1, 0, 0, 0);
         }
     }
     c.vkCmdEndRenderPass(commandBuffer);
@@ -216,8 +225,8 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 //    var window_h: i32 = undefined;
 //    SDL_GetWindowSize(screen, &window_w, &window_h);
 //    if (imguiIO) |io| {
-//        io.DisplaySize.x = @intToFloat(f32, window_w);
-//        io.DisplaySize.y = @intToFloat(f32, window_h);
+//        io.DisplaySize.x = @floatFromInt(window_w);
+//        io.DisplaySize.y = @floatFromInt(window_h);
 //        io.DeltaTime = 1.0 / 60.0;
 //    } else {
 //        @panic("imguiIO is null");
@@ -271,15 +280,18 @@ pub fn RenderFrame() !void {
 
     //c.igRender();
 
-    // TEMP camera movement test
-    const curCamera: *Camera = scene.GetCurrentCamera();
-    curCamera.m_pos.z = -5.0;
     curTime += game.deltaTime;
-    curCamera.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
-    curCamera.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
+
+    // TEMP camera movement test
+    const curCamera = scene.GetCurrentCamera();
+    if (curCamera != null) {
+        curCamera.?.m_pos.z = -5.0;
+        curCamera.?.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
+        curCamera.?.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
+    }
 
     const rContext = try RenderContext.GetInstance();
-    const fencesResult = c.vkWaitForFences(rContext.m_logicalDevice, 1, &rContext.inFlightFences[currentFrame], c.VK_TRUE, 2000000000);
+    const fencesResult = c.vkWaitForFences(rContext.m_logicalDevice, 1, &rContext.m_frameData[currentFrame].m_renderFence, c.VK_TRUE, 2000000000);
     if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {
         return RenderLoopError.FailedToWaitForInFlightFence;
     }
@@ -289,7 +301,7 @@ pub fn RenderFrame() !void {
         rContext.m_logicalDevice,
         rContext.m_swapchain.m_swapchain,
         std.math.maxInt(u64),
-        rContext.m_imageAvailableSemaphores[currentFrame],
+        rContext.m_frameData[currentFrame].m_renderSemaphore,
         null,
         &imageIndex,
     );
@@ -304,34 +316,35 @@ pub fn RenderFrame() !void {
     //try rContext.UpdateUniformBuffer(&scene.GetCurrentCamera(), currentFrame);
 
     try vkUtil.CheckVkSuccess(
-        c.vkResetFences(rContext.m_logicalDevice, 1, &rContext.m_inFlightFences[currentFrame]),
+        c.vkResetFences(rContext.m_logicalDevice, 1, &rContext.m_frameData[currentFrame].m_renderFence),
         RenderLoopError.FailedToResetFences,
     );
 
     //vkResetCommandBuffer?
     try vkUtil.CheckVkSuccess(
-        c.vkResetCommandBuffer(rContext.m_commandBuffers[imageIndex], 0),
+        c.vkResetCommandBuffer(rContext.m_frameData[imageIndex].m_mainCommandBuffer, 0),
         RenderLoopError.FailedToResetCommandBuffer,
     );
-    try RecordCommandBuffer(rContext.m_commandBuffers[imageIndex], imageIndex);
+    try RecordCommandBuffer(rContext.m_frameData[imageIndex].m_mainCommandBuffer, imageIndex);
 
-    const waitSemaphores = [_]c.VkSemaphore{rContext.m_imageAvailableSemaphores[currentFrame]};
+    //TODO check if this is correct semaphore
+    const waitSemaphores = [_]c.VkSemaphore{rContext.m_frameData[currentFrame].m_presentSemaphore};
     const waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    const signalSemaphores = [_]c.VkSemaphore{rContext.m_renderFinishedSemaphores[currentFrame]};
+    const signalSemaphores = [_]c.VkSemaphore{rContext.m_frameData[currentFrame].m_renderSemaphore};
     const submitInfo = c.VkSubmitInfo{
         .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &waitSemaphores,
         .pWaitDstStageMask = &waitStages,
         .commandBufferCount = 1,
-        .pCommandBuffers = &rContext.m_commandBuffers[imageIndex],
+        .pCommandBuffers = &rContext.m_frameData[imageIndex].m_mainCommandBuffer,
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &signalSemaphores,
         .pNext = null,
     };
 
     try vkUtil.CheckVkSuccess(
-        c.vkQueueSubmit(rContext.m_graphicsQueue, 1, &submitInfo, rContext.m_inFlightFences[currentFrame]),
+        c.vkQueueSubmit(rContext.m_graphicsQueue, 1, &submitInfo, rContext.m_frameData[currentFrame].m_renderFence),
         RenderLoopError.FailedToSubmitDrawCommandBuffer,
     );
 
@@ -351,16 +364,16 @@ pub fn RenderFrame() !void {
     //ImguiUpdate()
 
     //TODO fix up scene drawing
-    scene.DrawScene(rContext.m_commandBuffers[imageIndex], renderables);
+    try scene.DrawScene(rContext.m_frameData[imageIndex].m_mainCommandBuffer, renderables.items);
 
     const queuePresentResult = c.vkQueuePresentKHR(rContext.m_presentQueue, &presentInfo);
 
     if (queuePresentResult == c.VK_ERROR_OUT_OF_DATE_KHR or queuePresentResult == c.VK_SUBOPTIMAL_KHR or framebufferResized) {
         framebufferResized = false;
-        try rContext.m_RecreateSwapchain(swapchainAllocator);
+        try rContext.RecreateSwapchain(swapchainAllocator);
     } else if (queuePresentResult != c.VK_SUCCESS) {
         return RenderLoopError.FailedToQueuePresent;
     }
 
-    currentFrame = (currentFrame + 1) % rContext.BUFFER_FRAMES;
+    currentFrame = (currentFrame + 1) % renderContext.BUFFER_FRAMES;
 }

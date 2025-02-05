@@ -37,7 +37,7 @@ const vertexInputBindingDesc = c.VkVertexInputBindingDescription{
     .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
 };
 
-pub const VertexData = struct {
+pub const VertexData = packed struct {
     m_pos: Vec3,
     m_normal: Vec3,
     m_uvCoord: Vec2,
@@ -77,7 +77,7 @@ pub const Mesh = struct {
         self.m_vertexData.deinit();
         self.m_indices.deinit();
 
-        var rContext = RenderContext.GetInstance() catch @panic("!");
+        const rContext = RenderContext.GetInstance() catch @panic("!");
 
         self.m_meshBuffers.m_vertexBuffer.DestroyBuffer(rContext.m_logicalDevice);
         self.m_meshBuffers.m_indexBuffer.DestroyBuffer(rContext.m_logicalDevice);

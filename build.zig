@@ -1,9 +1,6 @@
 const std = @import("std");
-const buildns = std.build;
 const fs = std.fs;
 const path = fs.path;
-const Builder = buildns.Builder;
-const Version = buildns.Version;
 
 const filePathUtils = @import("src/coreutil/FilePathUtils.zig");
 
@@ -74,7 +71,7 @@ const compiledShaderDirName = "src\\shaders\\compiled";
 //
 // ex usage: buildVKShaders(b, exe, "oceanshader", "vert");
 // will compile "shaders/oceanshader.vert" to "shaders/compiled/oceanshader-vert.spv"
-fn buildVKShaders(b: *Builder, exe: anytype, shaderName: []const u8, shaderExt: []const u8) !void {
+fn buildVKShaders(b: *std.Build, exe: anytype, shaderName: []const u8, shaderExt: []const u8) !void {
 
     //TODO iterate over shaders directory and compile
     // .vert .frag .geom .tesc .tese .comp
@@ -110,26 +107,37 @@ fn buildVKShaders(b: *Builder, exe: anytype, shaderName: []const u8, shaderExt: 
     exe.step.dependOn(&glslc_cmd.step);
 }
 
-pub fn build(b: *Builder) !void {
+pub fn build(b: *std.Build) !void {
     const isDebug = true;
-    const mode = if (isDebug) std.builtin.Mode.Debug else b.standardReleaseOptions();
-    const exe = b.addExecutable("sdl-zig-demo", "src/main.zig");
-    exe.setBuildMode(mode);
+    const optimizationMode = b.standardOptimizeOption(.{});
+    const targetOptions = b.standardTargetOptions(.{});
+    const exe = b.addExecutable(.{
+        .name = "sdl-zig-demo",
+        .root_source_file = b.path("src/main.zig"),
+        .optimize = optimizationMode,
+        .target = targetOptions,
+    });
 
     // for build debugging
     //exe.setVerboseLink(true);
     //exe.setVerboseCC(true);
 
-    exe.addIncludePath("dependency");
+    exe.addIncludePath(b.path("dependency"));
 
     exe.linkSystemLibrary("c");
 
-    exe.addLibraryPath("C:/VulkanSDK/1.2.182.0/Lib");
+    //TODO fix absolute include path
+    exe.addLibraryPath(.{
+        .cwd_relative = "C:/VulkanSDK/1.2.182.0/Lib",
+    });
     exe.linkSystemLibrary("vulkan-1");
 
-    exe.addIncludePath("C:/VulkanSDK/1.2.182.0/Include");
+    //TODO fix absolute include path
+    exe.addIncludePath(.{
+        .cwd_relative = "C:/VulkanSDK/1.2.182.0/Include",
+    });
 
-    exe.addIncludePath("src");
+    exe.addIncludePath(b.path("src"));
 
     //exe.addIncludeDir("dependency/cimgui");
     //exe.addIncludeDir("dependency/cimgui/imgui");
@@ -151,8 +159,8 @@ pub fn build(b: *Builder) !void {
     //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
     //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
 
-    exe.addIncludePath("dependency/SDL2/include");
-    exe.addLibraryPath("dependency/SDL2/lib/x64");
+    exe.addIncludePath(b.path("dependency/SDL2/include"));
+    exe.addLibraryPath(b.path("dependency/SDL2/lib/x64"));
     exe.linkSystemLibrary("SDL2");
     const sdl2DllPath = &[_][]const u8{ "dependency", "SDL2", "lib", "x64" };
     copyDllToBin(sdl2DllPath, "SDL2") catch |e| {
@@ -160,12 +168,12 @@ pub fn build(b: *Builder) !void {
         @panic("Build failure.");
     };
 
-    exe.addIncludePath("dependency/assimp/include");
+    exe.addIncludePath(b.path("dependency/assimp/include"));
     exe.linkSystemLibrary("assimp-vc142-mt");
     if (isDebug) {
-        exe.addLibraryPath("dependency/assimp/lib/RelWithDebInfo");
+        exe.addLibraryPath(b.path("dependency/assimp/lib/RelWithDebInfo"));
     } else {
-        exe.addLibraryPath("dependency/assimp/lib/Release");
+        exe.addLibraryPath(b.path("dependency/assimp/lib/Release"));
     }
     const assimpDllPath = if (isDebug) &[_][]const u8{ "dependency", "assimp", "bin", "RelWithDebInfo" } else &[_][]const u8{ "dependency", "assimp", "bin", "Release" };
     copyDllToBin(assimpDllPath, "assimp-vc142-mt") catch |e| {
@@ -173,18 +181,21 @@ pub fn build(b: *Builder) !void {
         @panic("Build failure.");
     };
 
-    exe.addIncludePath("dependency/stb");
+    exe.addIncludePath(b.path("dependency/stb"));
     const stb_flags = &[_][]const u8{
         "-std=c17",
     };
-    exe.addCSourceFile("dependency/stb/stb_image_impl.c", stb_flags);
+    exe.addCSourceFile(.{
+        .file = b.path("dependency/stb/stb_image_impl.c"),
+        .flags = stb_flags,
+    });
 
     exe.linkSystemLibrary("user32");
     exe.linkSystemLibrary("gdi32");
 
-    exe.install();
+    b.installArtifact(exe);
 
-    const run_exe_cmd = exe.run();
+    const run_exe_cmd = b.addRunArtifact(exe);
     run_exe_cmd.step.dependOn(b.getInstallStep());
 
     const run_exe_step = b.step("run", "Run the demo");

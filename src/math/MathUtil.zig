@@ -1,7 +1,7 @@
 const stdm = @import("std").math;
 
 pub fn EqualWithinTolerance(comptime T: type, a: T, b: T, tolerance: T) bool {
-    return @fabs(a - b) <= tolerance;
+    return @abs(a - b) <= tolerance;
 }
 
 pub const twoPi = stdm.tau;

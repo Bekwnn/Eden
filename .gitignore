@@ -1,8 +1,15 @@
 # Zig ignores
-zig-cache/
+.zig-cache/
 zig-out/
-build/
-build-*/
+/release/
+/debug/
+/build/
+/build-*/
+/docgen_tmp/
+
+# Although this was renamed to .zig-cache, let's leave it here for a few
+# releases to make it less annoying to work with multiple branches.
+zig-cache/
 
 # Ignore test asset folder
 test-assets/

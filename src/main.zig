@@ -26,12 +26,13 @@ pub fn main() !void {
 
     //stb image wip test
     const testImagePath = "test-assets\\test.png";
-    if (imageFileUtil.LoadImage(testImagePath)) |*image| {
-        defer image.FreeImage();
+    var image: ?imageFileUtil.ImageFile = imageFileUtil.LoadImage(testImagePath) catch null;
+    if (image != null) {
         debug.print("Successfully loaded test image {s}\n", .{testImagePath});
         // where you would use the image...
-    } else |err| {
-        debug.print("Failed to load test image {s}, {}\n", .{ testImagePath, err });
+        image.?.FreeImage();
+    } else {
+        debug.print("Failed to load test image {s}\n", .{testImagePath});
     }
 
     //presentation.Initialize(renderer);
@@ -49,7 +50,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
             //_ = c.ImGui_ImplSDL2_ProcessEvent(&event);
-            switch (event.@"type") {
+            switch (event.type) {
                 c.SDL_QUIT => {
                     quit = true;
                 },

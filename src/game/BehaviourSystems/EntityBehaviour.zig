@@ -13,7 +13,7 @@ pub fn EntityUpdateBehaviour() void {
     var i: u32 = 0;
     while (i < entityManager.m_entities.items.len) {
         defer i += 1;
-        var entity = &(entityManager.m_entities.items[i].m_e orelse continue);
+        const entity = &(entityManager.m_entities.items[i].m_e orelse continue);
         EntityUpdate(entity);
     }
 }
@@ -27,7 +27,7 @@ pub fn EntityFixedUpdateBehaviour() void {
     var i: u32 = 0;
     while (i < entityManager.m_entities.items.len) {
         defer i += 1;
-        var entity = &(entityManager.m_entities.items[i].m_e orelse continue);
+        const entity = &(entityManager.m_entities.items[i].m_e orelse continue);
         EntityFixedUpdate(entity);
     }
 }

@@ -3,13 +3,14 @@ const c = @import("../c.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const vkUtil = @import("VulkanUtil.zig");
-const swapchain = @import("Swapchain.zig");
-const Swapchain = swapchain.Swapchain;
-const PipelineBuilder = @import("PipelineBuilder.zig");
-const Shader = @import("Shader.zig");
+const Buffer = @import("Buffer.zig").Buffer;
 const frameUBO = @import("FrameUBO.zig");
 const FrameUBO = frameUBO.FrameUBO;
+const PipelineBuilder = @import("PipelineBuilder.zig");
+const Shader = @import("Shader.zig");
+const swapchain = @import("Swapchain.zig");
+const Swapchain = swapchain.Swapchain;
+const vkUtil = @import("VulkanUtil.zig");
 
 const Mesh = @import("Mesh.zig").Mesh;
 
@@ -70,8 +71,7 @@ pub const FrameData = struct {
     m_mainCommandBuffer: c.VkCommandBuffer,
 
     m_descriptorSets: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSet = undefined,
-    m_uniformBuffers: [DESCRIPTOR_SET_COUNT]c.VkBuffer = undefined,
-    m_uniformBufferMemory: [DESCRIPTOR_SET_COUNT]c.VkDeviceMemory = undefined,
+    m_uniformBuffers: [DESCRIPTOR_SET_COUNT]Buffer = undefined,
 };
 
 pub const BUFFER_FRAMES = 2;
@@ -184,25 +184,23 @@ pub const RenderContext = struct {
         try CreateCommandBuffers();
     }
 
-    pub fn Shutdown() void {
-        var rContext = RenderContext.GetInstance() orelse return;
-
+    pub fn Shutdown(self: *RenderContext) void {
         // if (enableValidationLayers) destroy debug utils messenger
-        defer c.vkDestroyInstance(rContext.m_vkInstance, null);
+        defer c.vkDestroyInstance(self.m_vkInstance, null);
 
-        defer c.vkDestroySurfaceKHR(rContext.m_vkInstance, rContext.m_surface, null);
+        defer c.vkDestroySurfaceKHR(self.m_vkInstance, self.m_surface, null);
 
         defer c.vkDestroyDevice(instance.?.m_logicalDevice, null);
 
-        defer instance.DestroySwapchain();
+        defer self.DestroySwapchain();
 
         defer {
-            for (rContext.m_frameData) |*frameData| {
-                c.vkDestroySemaphore(rContext.m_logicalDevice, frameData.m_presentSemaphore, null);
-                c.vkDestroySemaphore(rContext.m_logicalDevice, frameData.m_renderSemaphore, null);
-                c.vkDestroyFence(rContext.m_logicalDevice, frameData.m_renderFence, null);
+            for (&self.m_frameData) |*frameData| {
+                c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_presentSemaphore, null);
+                c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_renderSemaphore, null);
+                c.vkDestroyFence(self.m_logicalDevice, frameData.m_renderFence, null);
 
-                c.vkDestroyCommandPool(rContext.m_logicalDevice, frameData.m_commandPool, null);
+                c.vkDestroyCommandPool(self.m_logicalDevice, frameData.m_commandPool, null);
             }
         }
         instance = null;
@@ -221,24 +219,33 @@ pub const RenderContext = struct {
         std.debug.print("Recreating Swapchain...\n", .{});
         self.DestroySwapchain();
 
-        try Swapchain.CreateSwapchain(allocator, self);
+        self.m_swapchain = try Swapchain.CreateSwapchain(
+            allocator,
+            self.m_logicalDevice,
+            self.m_physicalDevice,
+            self.m_surface,
+            self.m_graphicsQueueIdx.?,
+            self.m_presentQueueIdx.?,
+        );
         try CreateRenderPass();
-        try swapchain.CreateColorAndDepthResources(
+        try self.m_swapchain.CreateColorAndDepthResources(
             self.m_logicalDevice,
             self.m_msaaSamples,
         );
-        try swapchain.CreateFrameBuffers(
+        try self.m_swapchain.CreateFrameBuffers(
             allocator,
             self.m_logicalDevice,
             self.m_renderPass,
         );
-        try CreateCommandBuffers(allocator);
+        try CreateCommandBuffers();
     }
 
     pub fn DestroySwapchain(self: *RenderContext) void {
         defer {
-            for (self.m_uniformBuffers) |*uniformBuffer| {
-                uniformBuffer.DestroyBuffer(self.m_logicalDevice);
+            for (&self.m_frameData) |*frameData| {
+                for (&frameData.m_uniformBuffers) |*uniformBuffer| {
+                    uniformBuffer.DestroyBuffer(self.m_logicalDevice);
+                }
             }
             c.vkDestroyDescriptorPool(
                 self.m_logicalDevice,
@@ -247,13 +254,13 @@ pub const RenderContext = struct {
             );
         }
 
-        defer swapchain.FreeSwapchain(self.m_logicalDevice);
+        defer self.m_swapchain.FreeSwapchain(self.m_logicalDevice);
 
         defer c.vkDestroyRenderPass(self.m_logicalDevice, self.m_renderPass, null);
 
-        defer swapchain.CleanupFrameBuffers(self.m_logicalDevice);
+        defer self.m_swapchain.CleanupFrameBuffers(self.m_logicalDevice);
 
-        for (self.frameData) |*frameData| {
+        for (&self.m_frameData) |*frameData| {
             defer c.vkFreeCommandBuffers(
                 self.m_logicalDevice,
                 frameData.m_commandPool,
@@ -262,11 +269,11 @@ pub const RenderContext = struct {
             );
         }
 
-        defer swapchain.CleanupDepthAndColorImages(self.m_logicalDevice);
+        defer self.m_swapchain.CleanupDepthAndColorImages(self.m_logicalDevice);
     }
 };
 
-const validationLayers = [_][*:0]const u8{
+const validationLayers = [_][:0]const u8{
     "VK_LAYER_KHRONOS_validation",
 };
 fn CheckValidationLayerSupport(allocator: Allocator) !void {
@@ -276,7 +283,7 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
         RenderContextError.FailedToCheckInstanceLayerProperties,
     );
 
-    var detectedLayerProperties = try allocator.alloc(c.VkLayerProperties, layerCount);
+    const detectedLayerProperties = try allocator.alloc(c.VkLayerProperties, layerCount);
     try vkUtil.CheckVkSuccess(
         c.vkEnumerateInstanceLayerProperties(&layerCount, detectedLayerProperties.ptr),
         RenderContextError.FailedToCheckInstanceLayerProperties,
@@ -286,7 +293,9 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
         var layerFound = false;
 
         for (detectedLayerProperties) |detectedLayer| {
-            if (std.mem.startsWith(u8, std.mem.span(&detectedLayer.layerName), std.mem.span(validationLayer))) {
+            const needle: []const u8 = validationLayer;
+            const haystack: []const u8 = &detectedLayer.layerName;
+            if (std.mem.startsWith(u8, haystack, needle)) {
                 layerFound = true;
                 break;
             }
@@ -296,7 +305,7 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
             std.debug.print("Unable to find validation layer \"{s}\"\n", .{validationLayer});
             std.debug.print("Layers found:\n", .{});
             for (detectedLayerProperties) |detectedLayer| {
-                var trailingWhitespaceStripped = std.mem.tokenize(u8, std.mem.span(&detectedLayer.layerName), " ");
+                var trailingWhitespaceStripped = std.mem.tokenize(u8, &detectedLayer.layerName, " ");
                 std.debug.print("\"{s}\"\n", .{trailingWhitespaceStripped.next().?});
             }
             return RenderContextError.MissingValidationLayer;
@@ -331,16 +340,16 @@ fn CreateVkInstance(
     //TODO handle return values
     var extensionCount: c_uint = 0;
     _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, null);
-    var extensionNames = try allocator.alloc([*]const u8, extensionCount);
-    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast([*c][*c]const u8, extensionNames.ptr));
+    const extensionNames = try allocator.alloc([*]const u8, extensionCount);
+    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast(extensionNames.ptr));
 
     try CheckValidationLayerSupport(allocator);
     const instanceInfo = c.VkInstanceCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &appInfo,
-        .enabledLayerCount = @intCast(u32, validationLayers.len),
-        .ppEnabledLayerNames = &validationLayers,
-        .enabledExtensionCount = @intCast(u32, extensionNames.len),
+        .enabledLayerCount = @intCast(validationLayers.len),
+        .ppEnabledLayerNames = @ptrCast(validationLayers[0..].ptr),
+        .enabledExtensionCount = @intCast(extensionNames.len),
         .ppEnabledExtensionNames = extensionNames.ptr,
         .pNext = null,
         .flags = 0,
@@ -364,7 +373,7 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
         return RenderContextError.NoSupportedDevice; //no vulkan supporting devices
     }
 
-    var deviceList = try allocator.alloc(c.VkPhysicalDevice, deviceCount);
+    const deviceList = try allocator.alloc(c.VkPhysicalDevice, deviceCount);
     try vkUtil.CheckVkSuccess(
         c.vkEnumeratePhysicalDevices(rContext.m_vkInstance, &deviceCount, deviceList.ptr),
         RenderContextError.FailedToFindPhysicalDevice,
@@ -398,7 +407,7 @@ fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, wi
     var queueFamilyCount: u32 = 0;
     c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, null);
 
-    var queueFamilies = try allocator.alloc(c.VkQueueFamilyProperties, queueFamilyCount);
+    const queueFamilies = try allocator.alloc(c.VkQueueFamilyProperties, queueFamilyCount);
     c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.ptr);
 
     var graphicsSupportExists = false;
@@ -413,8 +422,8 @@ fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, wi
     //TODO handle return values
     var extensionCount: c_uint = 0;
     _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, null);
-    var extensionNames = try allocator.alloc([*]const u8, extensionCount);
-    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast([*c][*c]const u8, extensionNames.ptr));
+    const extensionNames = try allocator.alloc([*]const u8, extensionCount);
+    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast(extensionNames.ptr));
 
     const swapchainSupport = try swapchain.QuerySwapchainSupport(
         allocator,
@@ -447,7 +456,7 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         &queueFamilyCount,
         null,
     );
-    var queueFamilies = try allocator.alloc(
+    const queueFamilies = try allocator.alloc(
         c.VkQueueFamilyProperties,
         queueFamilyCount,
     );
@@ -524,8 +533,8 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         .pEnabledFeatures = &deviceFeatures,
         .enabledExtensionCount = requiredExtensions.len,
         .ppEnabledExtensionNames = &requiredExtensions,
-        .enabledLayerCount = validationLayers.len,
-        .ppEnabledLayerNames = &validationLayers,
+        .enabledLayerCount = 0, //depricated, per Khronos
+        .ppEnabledLayerNames = null, //depricated, per Khronos
         .flags = 0,
         .pNext = null,
     };
@@ -580,11 +589,11 @@ fn CreateDescriptorPool() !void {
     const rContext = try RenderContext.GetInstance();
     const uboSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = @intCast(u32, rContext.swapchain.m_images.len),
+        .descriptorCount = @intCast(rContext.swapchain.m_images.len),
     };
     const imageSamplerSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = @intCast(u32, rContext.swapchain.m_images.len),
+        .descriptorCount = @intCast(rContext.swapchain.m_images.len),
     };
 
     const poolSizes = [_]c.VkDescriptorPoolSize{ uboSize, imageSamplerSize };
@@ -592,7 +601,7 @@ fn CreateDescriptorPool() !void {
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .poolSizeCount = poolSizes.len,
         .pPoolSizes = &poolSizes,
-        .maxSets = @intCast(u32, rContext.swapchain.m_images.len),
+        .maxSets = @intCast(rContext.swapchain.m_images.len),
         .flags = 0,
         .pNext = null,
     };
@@ -610,7 +619,7 @@ fn CreateDescriptorPool() !void {
 
 fn CreateDescriptorSets(allocator: Allocator) !void {
     const rContext = RenderContext.GetInstance();
-    var layouts = try allocator.alloc(
+    const layouts = try allocator.alloc(
         c.VkDescriptorSetLayout,
         rContext.swapchain.m_images.len,
     );
@@ -621,7 +630,7 @@ fn CreateDescriptorSets(allocator: Allocator) !void {
     const allocInfo = c.VkDescriptorSetAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = rContext.m_descriptorPool,
-        .descriptorSetCount = @intCast(u32, rContext.swapchain.m_images.len),
+        .descriptorSetCount = @intCast(rContext.swapchain.m_images.len),
         .pSetLayouts = layouts.ptr,
         .pNext = null,
     };
@@ -731,7 +740,7 @@ fn CreatePipeline(
 fn CreateRenderPass() !void {
     const rContext = try RenderContext.GetInstance();
     const colorAttachment = c.VkAttachmentDescription{
-        .format = swapchain.m_format.format,
+        .format = rContext.m_swapchain.m_format.format,
         .samples = rContext.m_msaaSamples,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
@@ -746,7 +755,7 @@ fn CreateRenderPass() !void {
         .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     };
     const colorAttachmentResolve = c.VkAttachmentDescription{
-        .format = swapchain.m_format.format,
+        .format = rContext.m_swapchain.m_format.format,
         .samples = c.VK_SAMPLE_COUNT_1_BIT,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
@@ -848,18 +857,22 @@ pub fn FindSupportedFormat(
 }
 
 fn CreateCommandBuffers() !void {
-    var rContext = try RenderContext.GetInstance();
-    for (rContext.m_frameData) |*frameData| {
+    const rContext = try RenderContext.GetInstance();
+    for (rContext.m_frameData, 0..) |_, i| {
         const allocInfo = c.VkCommandBufferAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .commandPool = frameData.m_commandPool,
+            .commandPool = rContext.m_frameData[i].m_commandPool,
             .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             .commandBufferCount = 1,
             .pNext = null,
         };
 
         try vkUtil.CheckVkSuccess(
-            c.vkAllocateCommandBuffers(rContext.m_logicalDevice, &allocInfo, &frameData.m_mainCommandBuffer),
+            c.vkAllocateCommandBuffers(
+                rContext.m_logicalDevice,
+                &allocInfo,
+                &rContext.m_frameData[i].m_mainCommandBuffer,
+            ),
             RenderContextError.FailedToCreateCommandBuffers,
         );
     }
@@ -924,7 +937,7 @@ fn CreateCommandPool() !void {
     if (rContext.m_graphicsQueueIdx == null) {
         return RenderContextError.FailedToCreateCommandPool;
     }
-    for (rContext.m_frameData) |*frameData| {
+    for (rContext.m_frameData, 0..) |_, i| {
         const poolInfo = c.VkCommandPoolCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .queueFamilyIndex = rContext.m_graphicsQueueIdx.?,
@@ -933,7 +946,12 @@ fn CreateCommandPool() !void {
         };
 
         try vkUtil.CheckVkSuccess(
-            c.vkCreateCommandPool(rContext.m_logicalDevice, &poolInfo, null, &frameData.m_commandPool),
+            c.vkCreateCommandPool(
+                rContext.m_logicalDevice,
+                &poolInfo,
+                null,
+                &rContext.m_frameData[i].m_commandPool,
+            ),
             RenderContextError.FailedToCreateCommandPool,
         );
     }

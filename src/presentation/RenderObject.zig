@@ -14,7 +14,7 @@ const Buffer = @import("Buffer.zig").Buffer;
 const Camera = @import("Camera.zig").Camera;
 
 pub const RenderObject = struct {
-    pub const MvpUbo = packed struct {
+    pub const MvpUbo = struct {
         model: Mat4x4,
         view: Mat4x4,
         projection: Mat4x4,
@@ -32,13 +32,13 @@ pub const RenderObject = struct {
         const rContext = try RenderContext.GetInstance();
 
         var newRenderObject = RenderObject{
-            .m_mesh = &mesh,
-            .m_material = &material,
-            .transform = mat4x4.identity,
+            .m_mesh = mesh,
+            .m_material = material,
+            .m_transform = mat4x4.identity,
             .m_uniformBuffers = try allocator.alloc(Buffer, rContext.m_swapchain.m_images.len),
         };
 
-        var bufferSize: c.VkDeviceSize = @sizeOf(MvpUbo);
+        const bufferSize: c.VkDeviceSize = @sizeOf(MvpUbo);
         var i: u32 = 0;
         while (i < rContext.m_swapchain.m_images.len) : (i += 1) {
             newRenderObject.m_uniformBuffers[i] = try Buffer.CreateBuffer(
@@ -54,7 +54,7 @@ pub const RenderObject = struct {
 
     // does not destroy the mesh or material instance the render object points to
     pub fn DestroyRenderObject(self: *RenderObject) void {
-        var rContext = RenderContext.GetInstance() catch @panic("!");
+        const rContext = RenderContext.GetInstance() catch @panic("!");
 
         for (self.m_uniformBuffers) |*uniformBuffer| {
             uniformBuffer.DestroyBuffer(rContext.m_logicalDevice);
@@ -63,10 +63,10 @@ pub const RenderObject = struct {
 
     //TODO we don't want to calculate the view and projection matrix per render object
     pub fn UpdateUniformBuffer(self: *RenderObject, camera: *Camera, currentFrame: usize) !void {
-        var bufferSize: c.VkDeviceSize = @sizeOf(MvpUbo);
+        const bufferSize: c.VkDeviceSize = @sizeOf(MvpUbo);
 
         var cameraMvp = MvpUbo{
-            .model = self.transform,
+            .model = self.m_transform,
             .view = camera.GetViewMatrix(),
             .projection = camera.GetProjectionMatrix(),
         };
@@ -80,11 +80,11 @@ pub const RenderObject = struct {
                 0,
                 bufferSize,
                 0,
-                @ptrCast([*c]?*anyopaque, &data),
+                @as([*c]?*anyopaque, &data),
             ),
             vkUtil.VKError.UnspecifiedError,
         );
-        @memcpy(data, @ptrCast([*]u8, &cameraMvp), bufferSize);
+        @memcpy(data, @as([*]u8, &cameraMvp));
         c.vkUnmapMemory(rContext.m_logicalDevice, self.m_uniformBuffers[currentFrame].m_memory);
     }
 };

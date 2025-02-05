@@ -31,16 +31,16 @@ pub fn LoadImage(cwdRelativePath: []const u8) !ImageFile {
     var channels: c_int = undefined;
     const imagePath = try filePathUtils.CwdToAbsolute(allocator, cwdRelativePath);
     defer allocator.free(imagePath);
-    var image = c.stbi_load(imagePath.ptr, &width, &height, &channels, c.STBI_rgb_alpha); //TODO adjustable format
+    const image = c.stbi_load(imagePath.ptr, &width, &height, &channels, c.STBI_rgb_alpha); //TODO adjustable format
     if (image == null) {
         // could log stbi_failure_reason...
         return ImageFileError.STBI_LoadFailed;
     } else {
         return ImageFile{
             .m_imageData = image,
-            .m_width = @intCast(u16, width),
-            .m_height = @intCast(u16, height),
-            .m_channels = @intCast(u16, channels),
+            .m_width = @intCast(width),
+            .m_height = @intCast(height),
+            .m_channels = @intCast(channels),
             .m_freed = false,
         };
     }

@@ -8,6 +8,7 @@ const ArrayList = std.ArrayList;
 
 const Camera = @import("Camera.zig").Camera;
 const RenderObject = @import("RenderObject.zig").RenderObject;
+const renderContext = @import("RenderContext.zig");
 const RenderContext = @import("RenderContext.zig").RenderContext;
 
 pub const CameraError = error{
@@ -72,41 +73,50 @@ pub const Scene = struct {
             return CameraError.NoCurrent;
         }
 
-        for (renderObjects) |*renderObject, i| {
+        const rContext = try RenderContext.GetInstance();
+
+        for (renderObjects, 0..) |*renderObject, i| {
+            const meshBufferData = renderObject.m_mesh.m_bufferData orelse
+                {
+                std.debug.print("renderObject[{}] has no mesh buffer data.\n", .{i});
+                continue;
+            };
+
+            const vertexBuffers = [_]c.VkBuffer{
+                meshBufferData.m_vertexBuffer.m_buffer,
+            };
+
             c.vkCmdBindPipeline(
                 cmd,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                renderObject.m_material.m_pipeline,
+                rContext.m_pipeline,
             );
 
-            const vertexBuffers = [_]c.VkBuffer{
-                renderObject.m_mesh.m_vertexBuffer.m_buffer,
-            };
             const offsets = [_]c.VkDeviceSize{0};
             c.vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffers, &offsets);
 
             c.vkCmdBindIndexBuffer(
                 cmd,
-                renderObject.m_mesh.m_indexBuffer.m_buffer,
+                meshBufferData.m_indexBuffer.m_buffer,
                 0,
                 c.VK_INDEX_TYPE_UINT32,
             );
 
-            const rContext = try RenderContext.GetInstance();
+            const currentFrameData = rContext.m_frameData[rContext.m_currentFrame];
             c.vkCmdBindDescriptorSets(
                 cmd,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 rContext.m_pipelineLayout,
                 0,
                 1,
-                &rContext.m_descriptorSets[i],
+                &currentFrameData.m_descriptorSets[@intFromEnum(renderContext.DescriptorSetType.PerInstance)],
                 0,
                 null,
             );
 
             c.vkCmdDrawIndexed(
                 cmd,
-                @intCast(u32, renderObject.m_mesh.m_indices.items.len),
+                @intCast(renderObject.m_mesh.m_indices.items.len),
                 1,
                 0,
                 0,

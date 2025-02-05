@@ -69,7 +69,7 @@ fn ReadShaderFile(comptime alignment: comptime_int, allocator: Allocator, relati
                 const shaderFile = try shaderDir.openFile(path, .{});
                 defer shaderFile.close();
 
-                var shaderCode: []align(alignment) u8 = try allocator.allocAdvanced(u8, alignment, try shaderFile.getEndPos(), .exact);
+                const shaderCode: []align(alignment) u8 = try allocator.allocAdvanced(u8, alignment, try shaderFile.getEndPos(), .exact);
 
                 _ = try shaderFile.read(shaderCode);
                 return shaderCode;

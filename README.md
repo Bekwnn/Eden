@@ -8,7 +8,7 @@ Currently existing or planned components:
 - Some generic utilities for file management (AssImp, stbimage)
 - Basic UI (Dear ImGui)
 
-Currently compiling on windows with zig-0.9.0.
+Currently compiling on windows with zig-0.13.0.
 
 The framework is currently pre-v0.1, but feel free to use it as a reference.
 

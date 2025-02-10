@@ -137,15 +137,17 @@ fn GetVulkanRootPath(b: *std.Build, buildConfig: *const BuildConfig) ![]const u8
         std.debug.print("Vulkan dirs found:\n", .{});
 
         var dirIter = dir.iterate();
-        var newestVulkanDir: ?std.fs.Dir.Entry = null;
+        var newestVulkanDir: ?[]const u8 = null;
         while (try dirIter.next()) |entry| {
             if (entry.kind == .directory) {
                 std.debug.print("{s}\n", .{entry.name});
                 if (newestVulkanDir == null) {
-                    newestVulkanDir = entry;
+                    newestVulkanDir = b.dupe(entry.name);
                 } else {
-                    if (std.mem.order(u8, newestVulkanDir.?.name, entry.name) == .lt) {
-                        newestVulkanDir = entry;
+                    if (std.mem.order(u8, newestVulkanDir.?, entry.name) == .lt) {
+                        // not a great pattern, would be better to alloc a single buffer
+                        b.allocator.free(newestVulkanDir.?);
+                        newestVulkanDir = b.dupe(entry.name);
                     }
                 }
             }
@@ -155,8 +157,7 @@ fn GetVulkanRootPath(b: *std.Build, buildConfig: *const BuildConfig) ![]const u8
             const VulkanPathError = error{DefaultRootPathNotFound};
             return VulkanPathError.DefaultRootPathNotFound;
         } else {
-            std.debug.print("Chosen Vulkan dir: {s}\n", .{newestVulkanDir.?.name});
-            return newestVulkanDir.?.name;
+            return dir.realpathAlloc(b.allocator, newestVulkanDir.?);
         }
     }
 }
@@ -187,6 +188,7 @@ pub fn build(b: *std.Build) !void {
     exe.linkSystemLibrary("c");
 
     const vulkanRootPath = try GetVulkanRootPath(b, &buildConfig);
+    std.debug.print("Chosen Vulkan dir:\n{s}\n", .{vulkanRootPath});
     const vulkanPathLib = try std.fmt.allocPrint(b.allocator, "{s}/Lib", .{vulkanRootPath});
     exe.addLibraryPath(.{
         .cwd_relative = vulkanPathLib,

@@ -1,0 +1,5 @@
+{
+  "VulkanPath": "default",
+  "VerboseBuild": false,
+  "OptimizationMode":"Debug"
+}

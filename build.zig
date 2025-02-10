@@ -66,14 +66,13 @@ fn cleanCompiledShaders() !void {
 }
 
 const shaderDirName = "src\\shaders";
-const compiledShaderDirName = "src\\shaders\\compiled";
-//const compiledShaderDirName = "zig-out\\bin\\shaders"; //TODO: output shaders to build location/bin
-//
+const compiledShaderDirName = "src\\shaders\\compiled"; //TODO: output shaders to build location/bin?
+
 // ex usage: buildVKShaders(b, exe, "oceanshader", "vert");
 // will compile "shaders/oceanshader.vert" to "shaders/compiled/oceanshader-vert.spv"
 fn buildVKShaders(b: *std.Build, exe: anytype, shaderName: []const u8, shaderExt: []const u8) !void {
 
-    //TODO iterate over shaders directory and compile
+    // TODO iterate over shaders directory and compile
     // .vert .frag .geom .tesc .tese .comp
     // to shaders/compiled .spv automatically (shaders/compiled should be skipped)
 
@@ -107,7 +106,69 @@ fn buildVKShaders(b: *std.Build, exe: anytype, shaderName: []const u8, shaderExt
     exe.step.dependOn(&glslc_cmd.step);
 }
 
+const BuildConfig = struct {
+    VulkanPath: []u8,
+    VerboseBuild: bool,
+    OptimizationMode: []u8,
+};
+
+fn LoadBuildConfig(b: *std.Build, configFileName: []const u8) !BuildConfig {
+    const buildConfigFile = try std.fs.cwd().openFile(configFileName, .{});
+    defer buildConfigFile.close();
+
+    const buildConfigContents = try buildConfigFile.readToEndAlloc(b.allocator, 4096); //arbitrary max file size
+    defer b.allocator.free(buildConfigContents);
+
+    const parsedBuildConfig = try std.json.parseFromSlice(BuildConfig, b.allocator, buildConfigContents, .{});
+    return parsedBuildConfig.value;
+}
+
+fn GetVulkanRootPath(b: *std.Build, buildConfig: *const BuildConfig) ![]const u8 {
+    const buffer = try b.allocator.alloc(u8, buildConfig.VulkanPath.len);
+    const configVulkanPathLower = std.ascii.lowerString(buffer, buildConfig.VulkanPath);
+    if (!std.mem.eql(u8, configVulkanPathLower, "default")) {
+        return buildConfig.VulkanPath;
+    } else {
+        // If build config just has "default" instead of a path, we have to dig it up ourselves. Assumes default install location
+        // TODO: non-windows maybe
+        var dir: std.fs.Dir = try std.fs.openDirAbsolute("C:/VulkanSDK", .{ .iterate = true });
+        defer dir.close();
+
+        std.debug.print("Vulkan dirs found:\n", .{});
+
+        var dirIter = dir.iterate();
+        var newestVulkanDir: ?std.fs.Dir.Entry = null;
+        while (try dirIter.next()) |entry| {
+            if (entry.kind == .directory) {
+                std.debug.print("{s}\n", .{entry.name});
+                if (newestVulkanDir == null) {
+                    newestVulkanDir = entry;
+                } else {
+                    if (std.mem.order(u8, newestVulkanDir.?.name, entry.name) == .lt) {
+                        newestVulkanDir = entry;
+                    }
+                }
+            }
+        }
+
+        if (newestVulkanDir == null) {
+            const VulkanPathError = error{DefaultRootPathNotFound};
+            return VulkanPathError.DefaultRootPathNotFound;
+        } else {
+            std.debug.print("Chosen Vulkan dir: {s}\n", .{newestVulkanDir.?.name});
+            return newestVulkanDir.?.name;
+        }
+    }
+}
+
 pub fn build(b: *std.Build) !void {
+    const buildConfigFileName = b.option(
+        []const u8,
+        "configFile",
+        "Specify a build config file. Default searches for \"DefaultBuildConfig.json\". Any build config json files in root will be ignored by git tracking.",
+    ) orelse "DefaultBuildConfig.json";
+    const buildConfig = try LoadBuildConfig(b, buildConfigFileName);
+
     const isDebug = true;
     const optimizationMode = b.standardOptimizeOption(.{});
     const targetOptions = b.standardTargetOptions(.{});
@@ -118,23 +179,23 @@ pub fn build(b: *std.Build) !void {
         .target = targetOptions,
     });
 
-    // for build debugging
-    //exe.setVerboseLink(true);
-    //exe.setVerboseCC(true);
+    exe.setVerboseLink(buildConfig.VerboseBuild);
+    exe.setVerboseCC(buildConfig.VerboseBuild);
 
     exe.addIncludePath(b.path("dependency"));
 
     exe.linkSystemLibrary("c");
 
-    //TODO fix absolute include path
+    const vulkanRootPath = try GetVulkanRootPath(b, &buildConfig);
+    const vulkanPathLib = try std.fmt.allocPrint(b.allocator, "{s}/Lib", .{vulkanRootPath});
     exe.addLibraryPath(.{
-        .cwd_relative = "C:/VulkanSDK/1.2.182.0/Lib",
+        .cwd_relative = vulkanPathLib,
     });
     exe.linkSystemLibrary("vulkan-1");
 
-    //TODO fix absolute include path
+    const vulkanPathInclude = try std.fmt.allocPrint(b.allocator, "{s}/Include", .{vulkanRootPath});
     exe.addIncludePath(.{
-        .cwd_relative = "C:/VulkanSDK/1.2.182.0/Include",
+        .cwd_relative = vulkanPathInclude,
     });
 
     exe.addIncludePath(b.path("src"));
@@ -162,6 +223,8 @@ pub fn build(b: *std.Build) !void {
     exe.addIncludePath(b.path("dependency/SDL2/include"));
     exe.addLibraryPath(b.path("dependency/SDL2/lib/x64"));
     exe.linkSystemLibrary("SDL2");
+
+    //TODO this might be automatic now with newer zig? (0.13.0+)
     const sdl2DllPath = &[_][]const u8{ "dependency", "SDL2", "lib", "x64" };
     copyDllToBin(sdl2DllPath, "SDL2") catch |e| {
         std.debug.print("Could not copy SDL2.dll, {}\n", .{e});

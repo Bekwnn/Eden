@@ -140,6 +140,7 @@ pub const RenderContext = struct {
 
         var newInstance = try RenderContext.GetInstance();
 
+        std.debug.print("Creating Vulkan instance...\n", .{});
         try CreateVkInstance(
             allocator,
             window,
@@ -147,10 +148,13 @@ pub const RenderContext = struct {
             applicationVersion,
         );
 
+        std.debug.print("Creating surface...\n", .{});
         try CreateSurface(window);
 
+        std.debug.print("Creating physical device...\n", .{});
         try PickPhysicalDevice(allocator, window);
 
+        std.debug.print("Creating logical device...\n", .{});
         try CreateLogicalDevice(allocator);
 
         //TODO move all swapchain initialization to Swapchain.zig
@@ -159,6 +163,8 @@ pub const RenderContext = struct {
         {
             return RenderContextError.NotInitialized;
         }
+
+        std.debug.print("Creating swapchain...\n", .{});
         newInstance.m_swapchain = try Swapchain.CreateSwapchain(
             allocator,
             newInstance.m_logicalDevice,
@@ -168,19 +174,26 @@ pub const RenderContext = struct {
             newInstance.m_presentQueueIdx.?,
         );
 
+        std.debug.print("  Creating render pass...\n", .{});
+        try CreateRenderPass();
+
+        std.debug.print("  Creating color depth resources...\n", .{});
         try newInstance.m_swapchain.CreateColorAndDepthResources(
             newInstance.m_logicalDevice,
             newInstance.m_msaaSamples,
         );
 
+        std.debug.print("  Creating frame buffers...\n", .{});
         try newInstance.m_swapchain.CreateFrameBuffers(
             allocator,
             newInstance.m_logicalDevice,
             newInstance.m_renderPass,
         );
 
+        std.debug.print("Creating command pool...\n", .{});
         try CreateCommandPool();
 
+        std.debug.print("Creating command buffers...\n", .{});
         try CreateCommandBuffers();
     }
 

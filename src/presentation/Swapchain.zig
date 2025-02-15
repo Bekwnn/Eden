@@ -154,6 +154,7 @@ pub const Swapchain = struct {
         logicalDevice: c.VkDevice,
         msaaSamples: c.VkSampleCountFlagBits,
     ) !void {
+        std.debug.print("    Creating color image...\n", .{});
         self.m_colorImage = try Texture.CreateColorImage(
             logicalDevice,
             self.m_extent.width,
@@ -161,6 +162,8 @@ pub const Swapchain = struct {
             msaaSamples,
             self.m_format.format,
         );
+
+        std.debug.print("    Creating depth image...\n", .{});
         self.m_depthImage = try Texture.CreateDepthImage(
             logicalDevice,
             self.m_extent.width,

@@ -123,7 +123,7 @@ fn LoadBuildConfig(b: *std.Build, configFileName: []const u8) !BuildConfig {
     return parsedBuildConfig.value;
 }
 
-fn GetVulkanRootPath(b: *std.Build, buildConfig: *const BuildConfig) ![]const u8 {
+fn GetVulkanRootPathAlloc(b: *std.Build, buildConfig: *const BuildConfig) ![]const u8 {
     const buffer = try b.allocator.alloc(u8, buildConfig.VulkanPath.len);
     const configVulkanPathLower = std.ascii.lowerString(buffer, buildConfig.VulkanPath);
     if (!std.mem.eql(u8, configVulkanPathLower, "default")) {
@@ -187,7 +187,8 @@ pub fn build(b: *std.Build) !void {
 
     exe.linkSystemLibrary("c");
 
-    const vulkanRootPath = try GetVulkanRootPath(b, &buildConfig);
+    const vulkanRootPath = try GetVulkanRootPathAlloc(b, &buildConfig);
+    defer b.allocator.free(vulkanRootPath);
     std.debug.print("Chosen Vulkan dir:\n{s}\n", .{vulkanRootPath});
     const vulkanPathLib = try std.fmt.allocPrint(b.allocator, "{s}/Lib", .{vulkanRootPath});
     exe.addLibraryPath(.{

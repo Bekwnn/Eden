@@ -190,6 +190,7 @@ pub fn build(b: *std.Build) !void {
     const vulkanRootPath = try GetVulkanRootPathAlloc(b, &buildConfig);
     defer b.allocator.free(vulkanRootPath);
     std.debug.print("Chosen Vulkan dir:\n{s}\n", .{vulkanRootPath});
+
     const vulkanPathLib = try std.fmt.allocPrint(b.allocator, "{s}/Lib", .{vulkanRootPath});
     exe.addLibraryPath(.{
         .cwd_relative = vulkanPathLib,

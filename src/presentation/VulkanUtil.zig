@@ -1,6 +1,8 @@
 const c = @import("../c.zig");
-const RenderContext = @import("RenderContext.zig").RenderContext;
+const renderContext = @import("RenderContext.zig");
+const RenderContext = renderContext.RenderContext;
 const vkUtil = @import("VulkanUtil.zig");
+const zigUtil = @import("../coreutil/ZigUtil.zig");
 
 const VkError = error{
     FailedToFindMemoryType,
@@ -37,6 +39,7 @@ pub fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32
 pub fn BeginSingleTimeCommands() !c.VkCommandBuffer {
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
+    zigUtil.DebugPrintStruct(renderContext.FrameData, currentFrameData);
 
     const allocInfo = c.VkCommandBufferAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,

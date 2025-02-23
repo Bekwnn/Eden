@@ -93,6 +93,7 @@ pub fn Initialize(
     //TODO get imgui working again
     //ImguiInit();
 
+    try AssetInventory.Initialize();
     try InitializeScene();
 }
 

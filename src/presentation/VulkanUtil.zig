@@ -39,7 +39,6 @@ pub fn FindMemoryType(typeFilter: u32, properties: c.VkMemoryPropertyFlags) !u32
 pub fn BeginSingleTimeCommands() !c.VkCommandBuffer {
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
-    zigUtil.DebugPrintStruct(renderContext.FrameData, currentFrameData);
 
     const allocInfo = c.VkCommandBufferAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,

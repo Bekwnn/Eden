@@ -177,6 +177,9 @@ pub const RenderContext = struct {
         std.debug.print("  Creating render pass...\n", .{});
         try CreateRenderPass();
 
+        std.debug.print("Creating command pool...\n", .{});
+        try CreateCommandPool();
+
         std.debug.print("  Creating color depth resources...\n", .{});
         try newInstance.m_swapchain.CreateColorAndDepthResources(
             newInstance.m_logicalDevice,
@@ -189,9 +192,6 @@ pub const RenderContext = struct {
             newInstance.m_logicalDevice,
             newInstance.m_renderPass,
         );
-
-        std.debug.print("Creating command pool...\n", .{});
-        try CreateCommandPool();
 
         std.debug.print("Creating command buffers...\n", .{});
         try CreateCommandBuffers();

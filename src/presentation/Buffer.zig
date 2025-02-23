@@ -28,7 +28,7 @@ pub const Buffer = struct {
         );
         defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
-        var data: []VertexData = undefined;
+        var data: [*]VertexData = undefined;
         try vkUtil.CheckVkSuccess(
             c.vkMapMemory(
                 rContext.m_logicalDevice,
@@ -36,7 +36,7 @@ pub const Buffer = struct {
                 0,
                 bufferSize,
                 0,
-                @ptrCast(&data.ptr),
+                @ptrCast(&data),
             ),
             BufferError.FailedToCreateVertexBuffer,
         );
@@ -66,7 +66,7 @@ pub const Buffer = struct {
         );
         defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
-        var data: []u32 = undefined;
+        var data: [*]u32 = undefined;
         try vkUtil.CheckVkSuccess(
             c.vkMapMemory(
                 rContext.m_logicalDevice,
@@ -74,7 +74,7 @@ pub const Buffer = struct {
                 0,
                 bufferSize,
                 0,
-                @ptrCast(&data.ptr),
+                @ptrCast(&data),
             ),
             BufferError.FailedToCreateIndexBuffer,
         );

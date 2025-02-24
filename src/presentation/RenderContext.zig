@@ -195,6 +195,9 @@ pub const RenderContext = struct {
 
         std.debug.print("Creating command buffers...\n", .{});
         try CreateCommandBuffers();
+
+        std.debug.print("Creating fences and semaphores...\n", .{});
+        try CreateFencesAndSemaphores();
     }
 
     pub fn Shutdown(self: *RenderContext) void {
@@ -984,18 +987,17 @@ fn CreateFencesAndSemaphores() !void {
     };
 
     var rContext = try RenderContext.GetInstance();
-    var i: usize = 0;
-    while (i < BUFFER_FRAMES) : (i += 1) {
+    for (rContext.m_frameData, 0..) |_, i| {
         try vkUtil.CheckVkSuccess(
-            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_renderFinishedSemaphores[i]),
+            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_frameData[i].m_renderSemaphore),
             RenderContextError.FailedToCreateSemaphores,
         );
         try vkUtil.CheckVkSuccess(
-            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_imageAvailableSemaphores[i]),
+            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_frameData[i].m_presentSemaphore),
             RenderContextError.FailedToCreateSemaphores,
         );
         try vkUtil.CheckVkSuccess(
-            c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &rContext.m_inFlightFences[i]),
+            c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &rContext.m_frameData[i].m_renderFence),
             RenderContextError.FailedToCreateFences,
         );
     }

@@ -269,6 +269,8 @@ pub fn build(b: *std.Build) !void {
     run_exe_step.dependOn(&run_exe_cmd.step);
 
     try cleanCompiledShaders();
+    try buildVKShaders(b, exe, "basic", "vert");
+    try buildVKShaders(b, exe, "basic", "frag");
     try buildVKShaders(b, exe, "basic_mesh", "vert");
     try buildVKShaders(b, exe, "basic_mesh", "frag");
 }

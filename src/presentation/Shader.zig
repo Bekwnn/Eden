@@ -55,7 +55,11 @@ fn CheckAndFreeShaderModule(shader: *?c.VkShaderModule) void {
 }
 
 // returns owned slice; caller needs to free
-fn ReadShaderFile(comptime alignment: comptime_int, allocator: Allocator, relativeShaderPath: []const u8) ![]align(alignment) const u8 {
+fn ReadShaderFileAlloc(
+    comptime alignment: comptime_int,
+    allocator: Allocator,
+    relativeShaderPath: []const u8,
+) ![]align(alignment) const u8 {
     std.debug.print("Reading shader {s}...\n", .{relativeShaderPath});
 
     var shaderDir = std.fs.cwd();
@@ -69,7 +73,12 @@ fn ReadShaderFile(comptime alignment: comptime_int, allocator: Allocator, relati
                 const shaderFile = try shaderDir.openFile(path, .{});
                 defer shaderFile.close();
 
-                const shaderCode: []align(alignment) u8 = try allocator.allocAdvanced(u8, alignment, try shaderFile.getEndPos(), .exact);
+                const shaderCode: []align(alignment) u8 = try allocator.allocAdvancedWithRetAddr(
+                    u8,
+                    alignment,
+                    try shaderFile.getEndPos(),
+                    @returnAddress(),
+                );
 
                 _ = try shaderFile.read(shaderCode);
                 return shaderCode;
@@ -80,7 +89,7 @@ fn ReadShaderFile(comptime alignment: comptime_int, allocator: Allocator, relati
 }
 
 fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.VkShaderModule {
-    const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFile(@alignOf(u32), allocator, relativeShaderPath);
+    const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFileAlloc(@alignOf(u32), allocator, relativeShaderPath);
     defer allocator.free(shaderCode);
 
     const createInfo = c.VkShaderModuleCreateInfo{

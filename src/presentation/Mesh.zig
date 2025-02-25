@@ -56,8 +56,8 @@ pub const Mesh = struct {
 
     m_bufferData: ?MeshBuffers,
 
-    pub fn GetBindingDescription() c.VkVertexInputBindingDescription {
-        return vertexInputBindingDesc;
+    pub fn GetBindingDescription() *const c.VkVertexInputBindingDescription {
+        return &vertexInputBindingDesc;
     }
 
     pub fn GetAttributeDescriptions() []const c.VkVertexInputAttributeDescription {

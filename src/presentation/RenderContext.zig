@@ -6,8 +6,8 @@ const Allocator = std.mem.Allocator;
 const Buffer = @import("Buffer.zig").Buffer;
 const frameUBO = @import("FrameUBO.zig");
 const FrameUBO = frameUBO.FrameUBO;
-const PipelineBuilder = @import("PipelineBuilder.zig");
-const Shader = @import("Shader.zig");
+const PipelineBuilder = @import("PipelineBuilder.zig").PipelineBuilder;
+const Shader = @import("Shader.zig").Shader;
 const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
 const vkUtil = @import("VulkanUtil.zig");
@@ -32,6 +32,7 @@ pub const RenderContextError = error{
     FailedToCreateImageView,
     FailedToCreateInstance,
     FailedToCreateLogicDevice,
+    FailedToCreatePipelineLayout,
     FailedToCreateRenderPass,
     FailedToCreateSemaphores,
     FailedToCreateSurface,
@@ -174,19 +175,26 @@ pub const RenderContext = struct {
             newInstance.m_presentQueueIdx.?,
         );
 
-        std.debug.print("  Creating render pass...\n", .{});
+        std.debug.print("Creating render pass...\n", .{});
         try CreateRenderPass();
+
+        std.debug.print("Creating pipeline...\n", .{});
+        try CreatePipeline(
+            allocator,
+            "src/shaders/compiled/basic_mesh-vert.spv",
+            "src/shaders/compiled/basic_mesh-frag.spv",
+        );
 
         std.debug.print("Creating command pool...\n", .{});
         try CreateCommandPool();
 
-        std.debug.print("  Creating color depth resources...\n", .{});
+        std.debug.print("Creating color depth resources...\n", .{});
         try newInstance.m_swapchain.CreateColorAndDepthResources(
             newInstance.m_logicalDevice,
             newInstance.m_msaaSamples,
         );
 
-        std.debug.print("  Creating frame buffers...\n", .{});
+        std.debug.print("Creating frame buffers...\n", .{});
         try newInstance.m_swapchain.CreateFrameBuffers(
             allocator,
             newInstance.m_logicalDevice,
@@ -721,6 +729,28 @@ fn CreatePipeline(
     vertShaderRelativePath: []const u8,
     fragShaderRelativePath: []const u8,
 ) !void {
+    const rContext = try RenderContext.GetInstance();
+
+    const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 0,
+        .pSetLayouts = null,
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges = null,
+        .flags = 0,
+        .pNext = null,
+    };
+
+    try vkUtil.CheckVkSuccess(
+        c.vkCreatePipelineLayout(
+            rContext.m_logicalDevice,
+            &pipelineLayoutInfo,
+            null,
+            &rContext.m_pipelineLayout,
+        ),
+        RenderContextError.FailedToCreatePipelineLayout,
+    );
+
     var shader = try Shader.CreateBasicShader(
         allocator,
         vertShaderRelativePath,
@@ -732,7 +762,7 @@ fn CreatePipeline(
 
     const bindingDescription = Mesh.GetBindingDescription();
     const attribDescriptions = Mesh.GetAttributeDescriptions();
-    pipelineBuilder.InitializeBuilder(
+    try pipelineBuilder.InitializeBuilder(
         c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         c.VK_POLYGON_MODE_FILL,
         bindingDescription,
@@ -740,16 +770,15 @@ fn CreatePipeline(
     );
 
     pipelineBuilder.ClearShaderStages();
-    pipelineBuilder.AddShaderStage(
+    try pipelineBuilder.AddShaderStage(
         c.VK_SHADER_STAGE_VERTEX_BIT,
         shader.m_vertShader.?,
     );
-    pipelineBuilder.AddShaderStage(
+    try pipelineBuilder.AddShaderStage(
         c.VK_SHADER_STAGE_FRAGMENT_BIT,
         shader.m_fragShader.?,
     );
 
-    const rContext = try RenderContext.GetInstance();
     rContext.m_pipeline = try pipelineBuilder.BuildPipeline();
 }
 

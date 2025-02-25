@@ -4,7 +4,7 @@ const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const builderAllocator = std.heap.page_allocator;
 
-const RenderContext = @import("RenderContext.zig");
+const RenderContext = @import("RenderContext.zig").RenderContext;
 const vkUtil = @import("VulkanUtil.zig");
 
 const PipelineBuildError = error{
@@ -17,22 +17,22 @@ const PipelineBuildError = error{
 pub const PipelineBuilder = struct {
     m_shaderStages: ArrayList(c.VkPipelineShaderStageCreateInfo) =
         ArrayList(c.VkPipelineShaderStageCreateInfo).init(builderAllocator),
-    m_vertexInputInfo: c.VkPipelineVertexInputStateCreateInfo = undefined,
-    m_inputAssembly: c.VkPipelineInputAssemblyStateCreateInfo = undefined,
+    m_vertexInputState: c.VkPipelineVertexInputStateCreateInfo = undefined,
+    m_inputAssemblyState: c.VkPipelineInputAssemblyStateCreateInfo = undefined,
     m_viewport: c.VkViewport = undefined,
     m_scissor: c.VkRect2D = undefined,
-    m_rasterizerState: c.VkPipelineRasterizationStateCreateInfo = undefined,
+    m_rasterizationState: c.VkPipelineRasterizationStateCreateInfo = undefined,
     m_colorBlendAttachment: c.VkPipelineColorBlendAttachmentState = undefined,
     m_multisamplingState: c.VkPipelineMultisampleStateCreateInfo = undefined,
     m_pipelineLayout: c.VkPipelineLayout = undefined,
-    m_depthStencilState: c.VkDepthStencilState = undefined,
+    m_depthStencilState: c.VkPipelineDepthStencilStateCreateInfo = undefined,
 
     pub fn AddShaderStage(
         self: *PipelineBuilder,
         stage: c.VkShaderStageFlagBits,
         shaderModule: c.VkShaderModule,
-    ) void {
-        self.m_shaderStages.append(c.VkPipelineShaderStageCreateInfo{
+    ) !void {
+        try self.m_shaderStages.append(c.VkPipelineShaderStageCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = stage,
             .module = shaderModule,
@@ -50,7 +50,7 @@ pub const PipelineBuilder = struct {
     pub fn InitializeBuilder(
         self: *PipelineBuilder,
         topology: c.VkPrimitiveTopology,
-        polygonMode: *c.VkPolygonMode,
+        polygonMode: c.VkPolygonMode,
         bindingDescription: *const c.VkVertexInputBindingDescription,
         attribDescriptions: []const c.VkVertexInputAttributeDescription,
     ) !void {
@@ -67,7 +67,7 @@ pub const PipelineBuilder = struct {
         bindingDescription: *const c.VkVertexInputBindingDescription,
         attribDescriptions: []const c.VkVertexInputAttributeDescription,
     ) void {
-        self.m_vertexInputInfo = c.VkPipelineVertexInputStateCreateInfo{
+        self.m_vertexInputState = c.VkPipelineVertexInputStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
             .vertexBindingDescriptionCount = 1,
             .pVertexBindingDescriptions = bindingDescription,
@@ -82,7 +82,7 @@ pub const PipelineBuilder = struct {
         self: *PipelineBuilder,
         topology: c.VkPrimitiveTopology,
     ) void {
-        self.m_inputAssembly = c.VkPipelineInputAssemblyStateCreateInfo{
+        self.m_inputAssemblyState = c.VkPipelineInputAssemblyStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .pNext = null,
             .topology = topology,
@@ -92,9 +92,9 @@ pub const PipelineBuilder = struct {
 
     fn InitRasterizationState(
         self: *PipelineBuilder,
-        polygonMode: *c.VkPolygonMode,
+        polygonMode: c.VkPolygonMode,
     ) void {
-        self.m_rasterizer = c.VkPipelineRasterizationStateCreateInfo{
+        self.m_rasterizationState = c.VkPipelineRasterizationStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
             .depthClampEnable = c.VK_FALSE,
             .rasterizerDiscardEnable = c.VK_FALSE,
@@ -115,7 +115,7 @@ pub const PipelineBuilder = struct {
         self: *PipelineBuilder,
     ) !void {
         const rContext = try RenderContext.GetInstance();
-        self.m_multisampling = c.VkPipelineMultisampleStateCreateInfo{
+        self.m_multisamplingState = c.VkPipelineMultisampleStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
             .sampleShadingEnable = c.VK_FALSE,
             .rasterizationSamples = rContext.m_msaaSamples,
@@ -144,7 +144,7 @@ pub const PipelineBuilder = struct {
         self: *PipelineBuilder,
     ) void {
         self.m_depthStencilState = c.VkPipelineDepthStencilStateCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
             .depthTestEnable = c.VK_TRUE,
             .depthWriteEnable = c.VK_TRUE,
             .pNext = null,
@@ -167,7 +167,7 @@ pub const PipelineBuilder = struct {
         };
         const scissor = c.VkRect2D{
             .offset = c.VkOffset2D{ .x = 0, .y = 0 },
-            .extent = extent,
+            .extent = extent.*,
         };
         const viewportState = c.VkPipelineViewportStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -192,8 +192,8 @@ pub const PipelineBuilder = struct {
 
         const pipelineInfo = c.VkGraphicsPipelineCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .stageCount = self.m_shaderStages.len,
-            .pStages = &self.m_shaderStages,
+            .stageCount = @intCast(self.m_shaderStages.items.len),
+            .pStages = self.m_shaderStages.items.ptr,
             .pVertexInputState = &self.m_vertexInputState,
             .pInputAssemblyState = &self.m_inputAssemblyState,
             .pViewportState = &viewportState,

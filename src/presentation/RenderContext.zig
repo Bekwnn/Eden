@@ -178,6 +178,9 @@ pub const RenderContext = struct {
         std.debug.print("Creating render pass...\n", .{});
         try CreateRenderPass();
 
+        std.debug.print("Creating descriptor set layouts...\n", .{});
+        try CreateDescriptorSetLayouts(allocator);
+
         std.debug.print("Creating pipeline...\n", .{});
         try CreatePipeline(
             allocator,
@@ -200,6 +203,9 @@ pub const RenderContext = struct {
             newInstance.m_logicalDevice,
             newInstance.m_renderPass,
         );
+
+        std.debug.print("Creating descriptor pools...\n", .{});
+        try CreateDescriptorPools();
 
         std.debug.print("Creating command buffers...\n", .{});
         try CreateCommandBuffers();
@@ -609,15 +615,15 @@ fn GetMaxUsableSampleCount() !c.VkSampleCountFlagBits {
     return c.VK_SAMPLE_COUNT_1_BIT;
 }
 
-fn CreateDescriptorPool() !void {
+fn CreateDescriptorPools() !void {
     const rContext = try RenderContext.GetInstance();
     const uboSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = @intCast(rContext.swapchain.m_images.len),
+        .descriptorCount = @intCast(rContext.m_swapchain.m_images.len),
     };
     const imageSamplerSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = @intCast(rContext.swapchain.m_images.len),
+        .descriptorCount = @intCast(rContext.m_swapchain.m_images.len),
     };
 
     const poolSizes = [_]c.VkDescriptorPoolSize{ uboSize, imageSamplerSize };
@@ -625,7 +631,7 @@ fn CreateDescriptorPool() !void {
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .poolSizeCount = poolSizes.len,
         .pPoolSizes = &poolSizes,
-        .maxSets = @intCast(rContext.swapchain.m_images.len),
+        .maxSets = @intCast(rContext.m_swapchain.m_images.len),
         .flags = 0,
         .pNext = null,
     };
@@ -641,28 +647,31 @@ fn CreateDescriptorPool() !void {
     );
 }
 
-fn CreateDescriptorSets(allocator: Allocator) !void {
-    const rContext = RenderContext.GetInstance();
+fn CreateDescriptorSetLayouts(allocator: Allocator) !void {
+    const rContext = try RenderContext.GetInstance();
     const layouts = try allocator.alloc(
         c.VkDescriptorSetLayout,
-        rContext.swapchain.m_images.len,
+        rContext.m_swapchain.m_images.len,
     );
-    for (layouts) |*layout| {
-        layout.* = rContext.m_descriptorSetLayout;
+    for (layouts, 0..) |*layout, i| {
+        layout.* = rContext.m_descriptorSetLayouts[i];
     }
 
     const allocInfo = c.VkDescriptorSetAllocateInfo{
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = rContext.m_descriptorPool,
-        .descriptorSetCount = @intCast(rContext.swapchain.m_images.len),
+        .descriptorSetCount = @intCast(rContext.m_swapchain.m_images.len),
         .pSetLayouts = layouts.ptr,
         .pNext = null,
     };
 
-    rContext.m_descriptorSets = try allocator.alloc(
-        c.VkDescriptorSet,
-        rContext.swapchain.m_images.len,
-    );
+    //TODO rethink if fixed size array should be = undefined
+    for (rContext.m_frameData) |*frameData| {
+        frameData.m_descriptorSets = try allocator.alloc(
+            c.VkDescriptorSet,
+            rContext.m_swapchain.m_images.len,
+        );
+    }
 
     try vkUtil.CheckVkSuccess(
         c.vkAllocateDescriptorSets(
@@ -733,8 +742,8 @@ fn CreatePipeline(
 
     const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
-        .pSetLayouts = null,
+        .setLayoutCount = rContext.m_descriptorSetLayouts.len,
+        .pSetLayouts = rContext.m_descriptorSetLayouts.ptr,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = null,
         .flags = 0,

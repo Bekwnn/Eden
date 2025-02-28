@@ -179,7 +179,7 @@ pub const RenderContext = struct {
         try CreateRenderPass();
 
         std.debug.print("Creating descriptor set layouts...\n", .{});
-        try CreateDescriptorSetLayouts(allocator);
+        try CreateDescriptorSetLayouts();
 
         std.debug.print("Creating pipeline...\n", .{});
         try CreatePipeline(
@@ -647,54 +647,40 @@ fn CreateDescriptorPools() !void {
     );
 }
 
-fn CreateDescriptorSetLayouts(allocator: Allocator) !void {
+fn CreateDescriptorSetLayouts() !void {
     const rContext = try RenderContext.GetInstance();
-    const layouts = try allocator.alloc(
-        c.VkDescriptorSetLayout,
-        rContext.m_swapchain.m_images.len,
-    );
-    for (layouts, 0..) |*layout, i| {
-        layout.* = rContext.m_descriptorSetLayouts[i];
-    }
 
-    const allocInfo = c.VkDescriptorSetAllocateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = rContext.m_descriptorPool,
-        .descriptorSetCount = @intCast(rContext.m_swapchain.m_images.len),
-        .pSetLayouts = layouts.ptr,
-        .pNext = null,
-    };
-
-    //TODO rethink if fixed size array should be = undefined
     for (rContext.m_frameData) |*frameData| {
-        frameData.m_descriptorSets = try allocator.alloc(
-            c.VkDescriptorSet,
-            rContext.m_swapchain.m_images.len,
+        const allocInfo = c.VkDescriptorSetAllocateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = rContext.m_descriptorPool,
+            .descriptorSetCount = @intCast(frameData.m_descriptorSets.len),
+            .pSetLayouts = rContext.m_descriptorSetLayouts.ptr,
+            .pNext = null,
+        };
+
+        try vkUtil.CheckVkSuccess(
+            c.vkAllocateDescriptorSets(
+                rContext.m_logicalDevice,
+                &allocInfo,
+                rContext.m_descriptorSets.ptr,
+            ),
+            vkUtil.VkError.FailedToCreateDescriptorSets,
         );
-    }
 
-    try vkUtil.CheckVkSuccess(
-        c.vkAllocateDescriptorSets(
-            rContext.m_logicalDevice,
-            &allocInfo,
-            rContext.m_descriptorSets.ptr,
-        ),
-        vkUtil.VkError.FailedToCreateDescriptorSets,
-    );
-
-    // Only initializing global per frame UBO with camera data at the moment
-    for (rContext.m_frameData) |*frameData| {
         const bufferInfo = c.VkDescriptorBufferInfo{
             .buffer = frameData.m_uniformBuffers[DescriptorSetType.PerFrame].m_buffer,
             .offset = 0,
             .range = @sizeOf(FrameUBO),
         };
+
         //TODO add texture sampler to Material or MaterialInstance UBO
         //const imageInfo = c.VkDescriptorImageInfo{
         //    .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         //    .imageView = textureImage.m_imageView,
         //    .sampler = textureSampler,
         //};
+
         const uboDescriptorWrite = c.VkWriteDescriptorSet{
             .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet = rContext.m_descriptorSets[DescriptorSetType.PerFrame],

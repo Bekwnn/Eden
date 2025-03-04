@@ -11,24 +11,28 @@ pub const ShaderError = error{
     FailedToReadShaderFile,
 };
 
-// This struct holds multiple shader modules to render something with
+// This struct holds all programmable shader modules to render something with and handles putting together shader modules
+// https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/02_Graphics_pipeline_basics/00_Introduction.html
 pub const Shader = struct {
     m_vertShader: ?c.VkShaderModule,
+    m_tessShader: ?c.VkShaderModule,
+    m_geomShader: ?c.VkShaderModule,
     m_fragShader: ?c.VkShaderModule,
-    //TODO support for other shader types/steps
 
+    // caller must CheckAndFree
     pub fn CreateBasicShader(
         allocator: Allocator,
         vertShaderSource: []const u8,
         fragShaderSource: []const u8,
     ) !Shader {
-        //TODO shader paths should be optionals and shaders should be set null if no path is given
         //TODO how do we handle setting up shader stages and binding attribs or input state?
         return Shader{
             .m_vertShader = try CreateShaderModule(
                 allocator,
                 vertShaderSource,
             ),
+            .m_tessShader = null,
+            .m_geomShader = null,
             .m_fragShader = try CreateShaderModule(
                 allocator,
                 fragShaderSource,
@@ -36,9 +40,39 @@ pub const Shader = struct {
         };
     }
 
+    // caller must CheckAndFree
+    pub fn CreateAdvancedShader(
+        allocator: Allocator,
+        vertShaderSource: ?[]const u8,
+        tessShaderSource: ?[]const u8,
+        geomShaderSource: ?[]const u8,
+        fragShaderSource: ?[]const u8,
+    ) !Shader {
+        return Shader{
+            .m_vertShader = if (vertShaderSource) |shaderSrc| try CreateShaderModule(
+                allocator,
+                shaderSrc,
+            ) else null,
+            .m_tessShader = if (tessShaderSource) |shaderSrc| try CreateShaderModule(
+                allocator,
+                shaderSrc,
+            ) else null,
+            .m_geomShader = if (geomShaderSource) |shaderSrc| try CreateShaderModule(
+                allocator,
+                shaderSrc,
+            ) else null,
+            .m_fragShader = if (fragShaderSource) |shaderSrc| try CreateShaderModule(
+                allocator,
+                shaderSrc,
+            ) else null,
+        };
+    }
+
     pub fn FreeShader(self: *Shader) void {
-        defer CheckAndFreeShaderModule(&self.m_vertShader);
-        defer CheckAndFreeShaderModule(&self.m_fragShader);
+        CheckAndFreeShaderModule(&self.m_vertShader);
+        CheckAndFreeShaderModule(&self.m_tessShader);
+        CheckAndFreeShaderModule(&self.m_geomShader);
+        CheckAndFreeShaderModule(&self.m_fragShader);
     }
 };
 

@@ -3,15 +3,18 @@ const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
 const vkUtil = @import("VulkanUtil.zig");
 const zigUtil = @import("../coreutil/ZigUtil.zig");
+const std = @import("std");
 
-const VkError = error{
+pub const VkError = error{
     FailedToFindMemoryType,
     FailedToRecordCommandBuffers,
+    FailedToCreateDescriptorSets,
     UnspecifiedError, // prefer creating new more specific errors
 };
 
 pub fn CheckVkSuccess(result: c.VkResult, errorToReturn: anyerror) !void {
     if (result != c.VK_SUCCESS) {
+        std.debug.print("vk result unsuccessful. Error code: {}\n", .{result});
         return errorToReturn;
     }
 }

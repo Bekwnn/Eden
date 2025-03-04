@@ -28,6 +28,8 @@ pub const RenderContextError = error{
     FailedToCheckInstanceLayerProperties,
     FailedToCreateCommandBuffers,
     FailedToCreateCommandPool,
+    FailedToCreateDescriptorPool,
+    FailedToCreateDescriptorSets,
     FailedToCreateFences,
     FailedToCreateImageView,
     FailedToCreateInstance,
@@ -178,8 +180,14 @@ pub const RenderContext = struct {
         std.debug.print("Creating render pass...\n", .{});
         try CreateRenderPass();
 
+        std.debug.print("Creating descriptor pools...\n", .{});
+        try CreateDescriptorPools();
+
         std.debug.print("Creating descriptor set layouts...\n", .{});
         try CreateDescriptorSetLayouts();
+
+        std.debug.print("Creating descriptor sets and buffers...\n", .{});
+        try CreateDescriptorSetsAndBuffers();
 
         std.debug.print("Creating pipeline...\n", .{});
         try CreatePipeline(
@@ -203,9 +211,6 @@ pub const RenderContext = struct {
             newInstance.m_logicalDevice,
             newInstance.m_renderPass,
         );
-
-        std.debug.print("Creating descriptor pools...\n", .{});
-        try CreateDescriptorPools();
 
         std.debug.print("Creating command buffers...\n", .{});
         try CreateCommandBuffers();
@@ -617,13 +622,15 @@ fn GetMaxUsableSampleCount() !c.VkSampleCountFlagBits {
 
 fn CreateDescriptorPools() !void {
     const rContext = try RenderContext.GetInstance();
+
+    //TODO create a centralized list of uniform objects to handle descriptor set/pool/layout/etc creation
     const uboSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = @intCast(rContext.m_swapchain.m_images.len),
+        .descriptorCount = @intCast(rContext.m_frameData.len),
     };
     const imageSamplerSize = c.VkDescriptorPoolSize{
         .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = @intCast(rContext.m_swapchain.m_images.len),
+        .descriptorCount = @intCast(rContext.m_frameData.len),
     };
 
     const poolSizes = [_]c.VkDescriptorPoolSize{ uboSize, imageSamplerSize };
@@ -631,7 +638,7 @@ fn CreateDescriptorPools() !void {
         .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .poolSizeCount = poolSizes.len,
         .pPoolSizes = &poolSizes,
-        .maxSets = @intCast(rContext.m_swapchain.m_images.len),
+        .maxSets = @intCast(rContext.m_frameData.len * DESCRIPTOR_SET_COUNT),
         .flags = 0,
         .pNext = null,
     };
@@ -643,19 +650,86 @@ fn CreateDescriptorPools() !void {
             null,
             &rContext.m_descriptorPool,
         ),
-        vkUtil.VkError.FailedToCreateDescriptorPool,
+        RenderContextError.FailedToCreateDescriptorPool,
     );
 }
 
 fn CreateDescriptorSetLayouts() !void {
     const rContext = try RenderContext.GetInstance();
 
-    for (rContext.m_frameData) |*frameData| {
+    // create ubo for mvp matrix
+    const uboLayoutBinding = c.VkDescriptorSetLayoutBinding{
+        .binding = 0,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+        .pImmutableSamplers = null,
+    };
+
+    const samplerLayoutBinding = c.VkDescriptorSetLayoutBinding{
+        .binding = 1,
+        .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1,
+        .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        .pImmutableSamplers = null,
+    };
+
+    const descriptorLayoutBindings = [_]c.VkDescriptorSetLayoutBinding{ samplerLayoutBinding, uboLayoutBinding };
+    const perFrameLayoutInfo = c.VkDescriptorSetLayoutCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &descriptorLayoutBindings,
+        .flags = 0,
+        .pNext = null,
+    };
+
+    try vkUtil.CheckVkSuccess(
+        c.vkCreateDescriptorSetLayout(
+            rContext.m_logicalDevice,
+            &perFrameLayoutInfo,
+            null,
+            &rContext.m_descriptorSetLayouts[@intFromEnum(DescriptorSetType.PerFrame)],
+        ),
+        RenderContextError.FailedToCreateDescriptorSets,
+    );
+
+    // init the rest of the descriptors as empty
+    // TODO figure out a cleaner way to handle initializing empty descriptor sets
+    for (&rContext.m_descriptorSetLayouts, 0..) |*descriptorSetLayout, iSetType| {
+
+        // skip the one we created above
+        if (iSetType == @intFromEnum(DescriptorSetType.PerFrame)) continue;
+
+        const layoutInfo = c.VkDescriptorSetLayoutCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = 0,
+            .pBindings = 0,
+            .flags = 0,
+            .pNext = null,
+        };
+
+        try vkUtil.CheckVkSuccess(
+            c.vkCreateDescriptorSetLayout(
+                rContext.m_logicalDevice,
+                &layoutInfo,
+                null,
+                descriptorSetLayout,
+            ),
+            RenderContextError.FailedToCreateDescriptorSets,
+        );
+    }
+}
+
+fn CreateDescriptorSetsAndBuffers() !void {
+    const rContext = try RenderContext.GetInstance();
+
+    // create descriptor sets and buffers per frame in flight
+    for (&rContext.m_frameData) |*frameData| {
         const allocInfo = c.VkDescriptorSetAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
             .descriptorPool = rContext.m_descriptorPool,
             .descriptorSetCount = @intCast(frameData.m_descriptorSets.len),
-            .pSetLayouts = rContext.m_descriptorSetLayouts.ptr,
+            .pSetLayouts = &rContext.m_descriptorSetLayouts,
             .pNext = null,
         };
 
@@ -663,13 +737,13 @@ fn CreateDescriptorSetLayouts() !void {
             c.vkAllocateDescriptorSets(
                 rContext.m_logicalDevice,
                 &allocInfo,
-                rContext.m_descriptorSets.ptr,
+                &frameData.m_descriptorSets,
             ),
-            vkUtil.VkError.FailedToCreateDescriptorSets,
+            RenderContextError.FailedToCreateDescriptorSets,
         );
 
         const bufferInfo = c.VkDescriptorBufferInfo{
-            .buffer = frameData.m_uniformBuffers[DescriptorSetType.PerFrame].m_buffer,
+            .buffer = frameData.m_uniformBuffers[@intFromEnum(DescriptorSetType.PerFrame)].m_buffer,
             .offset = 0,
             .range = @sizeOf(FrameUBO),
         };
@@ -683,7 +757,7 @@ fn CreateDescriptorSetLayouts() !void {
 
         const uboDescriptorWrite = c.VkWriteDescriptorSet{
             .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = rContext.m_descriptorSets[DescriptorSetType.PerFrame],
+            .dstSet = frameData.m_descriptorSets[@intFromEnum(DescriptorSetType.PerFrame)],
             .dstBinding = 0,
             .dstArrayElement = 0,
             .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -729,7 +803,7 @@ fn CreatePipeline(
     const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = rContext.m_descriptorSetLayouts.len,
-        .pSetLayouts = rContext.m_descriptorSetLayouts.ptr,
+        .pSetLayouts = &rContext.m_descriptorSetLayouts,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = null,
         .flags = 0,
@@ -848,14 +922,14 @@ fn CreateRenderPass() !void {
     const attachments = [_]c.VkAttachmentDescription{ colorAttachment, depthAttachment, colorAttachmentResolve };
     const renderPassInfo = c.VkRenderPassCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .pNext = null,
-        .flags = 0,
         .attachmentCount = attachments.len,
         .pAttachments = &attachments,
         .subpassCount = 1,
         .pSubpasses = &subpass,
         .dependencyCount = 1,
         .pDependencies = &dependency,
+        .pNext = null,
+        .flags = 0,
     };
 
     try vkUtil.CheckVkSuccess(

@@ -4,8 +4,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Buffer = @import("Buffer.zig").Buffer;
-const frameUBO = @import("FrameUBO.zig");
-const FrameUBO = frameUBO.FrameUBO;
+const FrameUBO = @import("Camera.zig").FrameUBO;
 const PipelineBuilder = @import("PipelineBuilder.zig").PipelineBuilder;
 const Shader = @import("Shader.zig").Shader;
 const swapchain = @import("Swapchain.zig");
@@ -77,7 +76,7 @@ pub const FrameData = struct {
     m_uniformBuffers: [DESCRIPTOR_SET_COUNT]Buffer = undefined,
 };
 
-pub const BUFFER_FRAMES = 2;
+pub const FRAMES_IN_FLIGHT = 2;
 
 pub const RenderContext = struct {
     m_vkInstance: c.VkInstance = undefined,
@@ -95,7 +94,7 @@ pub const RenderContext = struct {
     m_presentQueue: c.VkQueue = undefined,
 
     m_descriptorSetLayouts: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSetLayout = undefined,
-    m_frameData: [BUFFER_FRAMES]FrameData = undefined,
+    m_frameData: [FRAMES_IN_FLIGHT]FrameData = undefined,
     m_currentFrame: u32 = 0,
 
     // We want to stick to 4 descriptor sets due lower end hardware limitations
@@ -160,7 +159,6 @@ pub const RenderContext = struct {
         std.debug.print("Creating logical device...\n", .{});
         try CreateLogicalDevice(allocator);
 
-        //TODO move all swapchain initialization to Swapchain.zig
         if (newInstance.m_graphicsQueueIdx == null or
             newInstance.m_presentQueueIdx == null)
         {
@@ -179,6 +177,9 @@ pub const RenderContext = struct {
 
         std.debug.print("Creating render pass...\n", .{});
         try CreateRenderPass();
+
+        std.debug.print("Creating uniform buffers...\n", .{});
+        try CreateUniformBuffers();
 
         std.debug.print("Creating descriptor pools...\n", .{});
         try CreateDescriptorPools();
@@ -242,7 +243,7 @@ pub const RenderContext = struct {
     }
 
     pub fn GetCurrentFrame(self: *RenderContext) *FrameData {
-        return &self.m_frameData[self.m_currentFrame % BUFFER_FRAMES];
+        return &self.m_frameData[self.m_currentFrame % FRAMES_IN_FLIGHT];
     }
 
     pub fn RecreateSwapchain(self: *RenderContext, allocator: Allocator) !void {
@@ -620,6 +621,12 @@ fn GetMaxUsableSampleCount() !c.VkSampleCountFlagBits {
     return c.VK_SAMPLE_COUNT_1_BIT;
 }
 
+fn CreateUniformBuffers() !void {
+    const rContext = try RenderContext.GetInstance();
+
+    //TODO handle this all in shader/pipeline land
+}
+
 fn CreateDescriptorPools() !void {
     const rContext = try RenderContext.GetInstance();
 
@@ -825,7 +832,7 @@ fn CreatePipeline(
         vertShaderRelativePath,
         fragShaderRelativePath,
     );
-    defer shader.FreeShader();
+    defer shader.deinit();
 
     var pipelineBuilder = PipelineBuilder{};
 

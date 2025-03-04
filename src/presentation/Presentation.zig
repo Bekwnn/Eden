@@ -376,5 +376,5 @@ pub fn RenderFrame() !void {
         return RenderLoopError.FailedToQueuePresent;
     }
 
-    currentFrame = (currentFrame + 1) % renderContext.BUFFER_FRAMES;
+    currentFrame = (currentFrame + 1) % renderContext.FRAMES_IN_FLIGHT;
 }

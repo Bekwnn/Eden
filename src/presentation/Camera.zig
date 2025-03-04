@@ -3,11 +3,10 @@ const stdmath = @import("std").math;
 const mathutil = @import("../math/MathUtil.zig");
 
 const vec3 = @import("../math/Vec3.zig");
-const mat4x4 = @import("../math/Mat4x4.zig");
-const quat = @import("../math/Quat.zig");
-
 const Vec3 = vec3.Vec3;
+const mat4x4 = @import("../math/Mat4x4.zig");
 const Mat4x4 = mat4x4.Mat4x4;
+const quat = @import("../math/Quat.zig");
 const Quat = quat.Quat;
 
 const defaultAspect: f32 = 16.0 / 9.0; //16:9 //TODO initialize perspective
@@ -59,6 +58,20 @@ pub const Camera = struct {
         return returnMat;
     }
 };
+
+pub const FrameUBO = struct {
+    m_view: Mat4x4,
+    m_projection: Mat4x4,
+    m_viewProjection: Mat4x4,
+};
+
+pub fn CreateFrameUBO(view: Mat4x4, projection: Mat4x4) FrameUBO {
+    return FrameUBO{
+        .m_view = view,
+        .m_projection = projection,
+        .m_viewProjection = view.Mul(projection), //TODO order correct?
+    };
+}
 
 // takes radians, gives radians
 pub fn XFoVToYFoV(xFoV: f32, aspectRatio: f32) f32 {

@@ -2,6 +2,7 @@ const c = @import("../c.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 
 const vkUtil = @import("VulkanUtil.zig");
 const RenderContext = @import("RenderContext.zig").RenderContext;
@@ -11,13 +12,26 @@ pub const ShaderError = error{
     FailedToReadShaderFile,
 };
 
+pub const UniformBufferObject = struct {
+    m_dataType: type,
+    m_binding: u32,
+};
+
+pub const PushConstant = struct {
+    m_dataType: type,
+    m_binding: u32,
+};
+
 // This struct holds all programmable shader modules to render something with and handles putting together shader modules
+// It also holds holds info about the parameters passed into the shader programs
 // https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/02_Graphics_pipeline_basics/00_Introduction.html
 pub const Shader = struct {
     m_vertShader: ?c.VkShaderModule,
     m_tessShader: ?c.VkShaderModule,
     m_geomShader: ?c.VkShaderModule,
     m_fragShader: ?c.VkShaderModule,
+    m_uniformBufferObjects: ArrayList(UniformBufferObject),
+    m_pushConstants: ArrayList(PushConstant),
 
     // caller must CheckAndFree
     pub fn CreateBasicShader(
@@ -37,6 +51,8 @@ pub const Shader = struct {
                 allocator,
                 fragShaderSource,
             ),
+            .m_uniformBufferObjects = ArrayList(UniformBufferObject).init(allocator),
+            .m_pushConstants = ArrayList(PushConstant).init(allocator),
         };
     }
 
@@ -65,14 +81,18 @@ pub const Shader = struct {
                 allocator,
                 shaderSrc,
             ) else null,
+            .m_uniformBufferObjects = ArrayList(UniformBufferObject).init(allocator),
+            .m_pushConstants = ArrayList(PushConstant).init(allocator),
         };
     }
 
-    pub fn FreeShader(self: *Shader) void {
+    pub fn deinit(self: *Shader) void {
         CheckAndFreeShaderModule(&self.m_vertShader);
         CheckAndFreeShaderModule(&self.m_tessShader);
         CheckAndFreeShaderModule(&self.m_geomShader);
         CheckAndFreeShaderModule(&self.m_fragShader);
+        self.m_uniformBufferObjects.deinit();
+        self.m_pushConstants.deinit();
     }
 };
 

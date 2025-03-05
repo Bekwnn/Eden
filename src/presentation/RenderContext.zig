@@ -65,7 +65,7 @@ const DESCRIPTOR_SET_COUNT = @typeInfo(DescriptorSetType).Enum.fields.len;
 
 // contains data that we store per frame, when double buffering
 pub const FrameData = struct {
-    m_presentSemaphore: c.VkSemaphore,
+    m_swapchainSemaphore: c.VkSemaphore,
     m_renderSemaphore: c.VkSemaphore,
     m_renderFence: c.VkFence,
 
@@ -175,43 +175,43 @@ pub const RenderContext = struct {
             newInstance.m_presentQueueIdx.?,
         );
 
-        std.debug.print("Creating render pass...\n", .{});
-        try CreateRenderPass();
+        //std.debug.print("Creating render pass...\n", .{});
+        //try CreateRenderPass();
 
-        std.debug.print("Creating uniform buffers...\n", .{});
-        try CreateUniformBuffers();
+        //std.debug.print("Creating uniform buffers...\n", .{});
+        //try CreateUniformBuffers();
 
-        std.debug.print("Creating descriptor pools...\n", .{});
-        try CreateDescriptorPools();
+        //std.debug.print("Creating descriptor pools...\n", .{});
+        //try CreateDescriptorPools();
 
-        std.debug.print("Creating descriptor set layouts...\n", .{});
-        try CreateDescriptorSetLayouts();
+        //std.debug.print("Creating descriptor set layouts...\n", .{});
+        //try CreateDescriptorSetLayouts();
 
-        std.debug.print("Creating descriptor sets and buffers...\n", .{});
-        try CreateDescriptorSetsAndBuffers();
+        //std.debug.print("Creating descriptor sets and buffers...\n", .{});
+        //try CreateDescriptorSetsAndBuffers();
 
-        std.debug.print("Creating pipeline...\n", .{});
-        try CreatePipeline(
-            allocator,
-            "src/shaders/compiled/basic_mesh-vert.spv",
-            "src/shaders/compiled/basic_mesh-frag.spv",
-        );
+        //std.debug.print("Creating pipeline...\n", .{});
+        //try CreatePipeline(
+        //    allocator,
+        //    "src/shaders/compiled/basic_mesh-vert.spv",
+        //    "src/shaders/compiled/basic_mesh-frag.spv",
+        //);
 
         std.debug.print("Creating command pool...\n", .{});
         try CreateCommandPool();
 
-        std.debug.print("Creating color depth resources...\n", .{});
-        try newInstance.m_swapchain.CreateColorAndDepthResources(
-            newInstance.m_logicalDevice,
-            newInstance.m_msaaSamples,
-        );
+        //std.debug.print("Creating color depth resources...\n", .{});
+        //try newInstance.m_swapchain.CreateColorAndDepthResources(
+        //    newInstance.m_logicalDevice,
+        //    newInstance.m_msaaSamples,
+        //);
 
-        std.debug.print("Creating frame buffers...\n", .{});
-        try newInstance.m_swapchain.CreateFrameBuffers(
-            allocator,
-            newInstance.m_logicalDevice,
-            newInstance.m_renderPass,
-        );
+        //std.debug.print("Creating frame buffers...\n", .{});
+        //try newInstance.m_swapchain.CreateFrameBuffers(
+        //    allocator,
+        //    newInstance.m_logicalDevice,
+        //    newInstance.m_renderPass,
+        //);
 
         std.debug.print("Creating command buffers...\n", .{});
         try CreateCommandBuffers();
@@ -232,7 +232,7 @@ pub const RenderContext = struct {
 
         defer {
             for (&self.m_frameData) |*frameData| {
-                c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_presentSemaphore, null);
+                c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_swapchainSemaphore, null);
                 c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_renderSemaphore, null);
                 c.vkDestroyFence(self.m_logicalDevice, frameData.m_renderFence, null);
 
@@ -622,7 +622,7 @@ fn GetMaxUsableSampleCount() !c.VkSampleCountFlagBits {
 }
 
 fn CreateUniformBuffers() !void {
-    const rContext = try RenderContext.GetInstance();
+    //const rContext = try RenderContext.GetInstance();
 
     //TODO handle this all in shader/pipeline land
 }
@@ -1098,7 +1098,7 @@ fn CreateFencesAndSemaphores() !void {
             RenderContextError.FailedToCreateSemaphores,
         );
         try vkUtil.CheckVkSuccess(
-            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_frameData[i].m_presentSemaphore),
+            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_frameData[i].m_swapchainSemaphore),
             RenderContextError.FailedToCreateSemaphores,
         );
         try vkUtil.CheckVkSuccess(

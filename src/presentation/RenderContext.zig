@@ -72,6 +72,7 @@ pub const FrameData = struct {
     m_commandPool: c.VkCommandPool,
     m_mainCommandBuffer: c.VkCommandBuffer,
 
+    //TODO move these out to pipeline?
     m_descriptorSets: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSet = undefined,
     m_uniformBuffers: [DESCRIPTOR_SET_COUNT]Buffer = undefined,
 };
@@ -93,7 +94,6 @@ pub const RenderContext = struct {
     m_presentQueueIdx: ?u32 = null,
     m_presentQueue: c.VkQueue = undefined,
 
-    m_descriptorSetLayouts: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSetLayout = undefined,
     m_frameData: [FRAMES_IN_FLIGHT]FrameData = undefined,
     m_currentFrame: u32 = 0,
 
@@ -104,10 +104,11 @@ pub const RenderContext = struct {
     // 3 = bound once per material instance (lives in material instance)
     m_descriptorPool: c.VkDescriptorPool = undefined,
 
+    m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
+
+    m_descriptorSetLayouts: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSetLayout = undefined,
     m_pipelineLayout: c.VkPipelineLayout = undefined,
     m_pipeline: c.VkPipeline = undefined,
-
-    m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
 
     pub fn GetInstance() !*RenderContext {
         if (instance) |*inst| {
@@ -175,6 +176,15 @@ pub const RenderContext = struct {
             newInstance.m_presentQueueIdx.?,
         );
 
+        std.debug.print("Creating command pool...\n", .{});
+        try CreateCommandPool();
+
+        std.debug.print("Creating command buffers...\n", .{});
+        try CreateCommandBuffers();
+
+        std.debug.print("Creating fences and semaphores...\n", .{});
+        try CreateFencesAndSemaphores();
+
         //std.debug.print("Creating render pass...\n", .{});
         //try CreateRenderPass();
 
@@ -197,9 +207,6 @@ pub const RenderContext = struct {
         //    "src/shaders/compiled/basic_mesh-frag.spv",
         //);
 
-        std.debug.print("Creating command pool...\n", .{});
-        try CreateCommandPool();
-
         //std.debug.print("Creating color depth resources...\n", .{});
         //try newInstance.m_swapchain.CreateColorAndDepthResources(
         //    newInstance.m_logicalDevice,
@@ -212,12 +219,6 @@ pub const RenderContext = struct {
         //    newInstance.m_logicalDevice,
         //    newInstance.m_renderPass,
         //);
-
-        std.debug.print("Creating command buffers...\n", .{});
-        try CreateCommandBuffers();
-
-        std.debug.print("Creating fences and semaphores...\n", .{});
-        try CreateFencesAndSemaphores();
     }
 
     pub fn Shutdown(self: *RenderContext) void {
@@ -236,6 +237,7 @@ pub const RenderContext = struct {
                 c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_renderSemaphore, null);
                 c.vkDestroyFence(self.m_logicalDevice, frameData.m_renderFence, null);
 
+                // destroying the parent pool frees all command buffers allocated with it
                 c.vkDestroyCommandPool(self.m_logicalDevice, frameData.m_commandPool, null);
             }
         }
@@ -1058,14 +1060,15 @@ fn CreateCommandPool() !void {
     if (rContext.m_graphicsQueueIdx == null) {
         return RenderContextError.FailedToCreateCommandPool;
     }
-    for (rContext.m_frameData, 0..) |_, i| {
-        const poolInfo = c.VkCommandPoolCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            .queueFamilyIndex = rContext.m_graphicsQueueIdx.?,
-            .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            .pNext = null,
-        };
 
+    const poolInfo = c.VkCommandPoolCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex = rContext.m_graphicsQueueIdx.?,
+        .flags = c.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .pNext = null,
+    };
+
+    for (rContext.m_frameData, 0..) |_, i| {
         try vkUtil.CheckVkSuccess(
             c.vkCreateCommandPool(
                 rContext.m_logicalDevice,

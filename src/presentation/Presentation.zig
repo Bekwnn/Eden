@@ -292,22 +292,30 @@ pub fn RenderFrame() !void {
     }
 
     const rContext = try RenderContext.GetInstance();
+
+    // sync stage
     const fencesResult = c.vkWaitForFences(rContext.m_logicalDevice, 1, &rContext.m_frameData[currentFrame].m_renderFence, c.VK_TRUE, 2000000000);
     if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {
         return RenderLoopError.FailedToWaitForInFlightFence;
     }
 
+    try vkUtil.CheckVkSuccess(
+        c.vkResetFences(rContext.m_logicalDevice, 1, &rContext.m_frameData[currentFrame].m_renderFence),
+        RenderLoopError.FailedToResetFences,
+    );
+
     var imageIndex: u32 = 0;
+    const timeoutns = 1000000000; // 1sec = 1e9 nanoseconds
     const acquireImageResult = c.vkAcquireNextImageKHR(
         rContext.m_logicalDevice,
         rContext.m_swapchain.m_swapchain,
-        std.math.maxInt(u64),
-        rContext.m_frameData[currentFrame].m_renderSemaphore,
+        timeoutns,
+        rContext.m_frameData[currentFrame].m_swapchainSemaphore,
         null,
         &imageIndex,
     );
     if (acquireImageResult == c.VK_ERROR_OUT_OF_DATE_KHR) {
-        try rContext.RecreateSwapchain(swapchainAllocator);
+        try rContext.RecreateSwapchain(swapchainAllocator); // recreate swapchain and skip this frame
         return;
     } else if (acquireImageResult != c.VK_SUCCESS and acquireImageResult != c.VK_SUBOPTIMAL_KHR) {
         return RenderLoopError.FailedToAcquireNextImage;
@@ -317,19 +325,15 @@ pub fn RenderFrame() !void {
     //try rContext.UpdateUniformBuffer(&scene.GetCurrentCamera(), currentFrame);
 
     try vkUtil.CheckVkSuccess(
-        c.vkResetFences(rContext.m_logicalDevice, 1, &rContext.m_frameData[currentFrame].m_renderFence),
-        RenderLoopError.FailedToResetFences,
-    );
-
-    //vkResetCommandBuffer?
-    try vkUtil.CheckVkSuccess(
         c.vkResetCommandBuffer(rContext.m_frameData[imageIndex].m_mainCommandBuffer, 0),
         RenderLoopError.FailedToResetCommandBuffer,
     );
+
+    // begin and run commands
     try RecordCommandBuffer(rContext.m_frameData[imageIndex].m_mainCommandBuffer, imageIndex);
 
     //TODO check if this is correct semaphore
-    const waitSemaphores = [_]c.VkSemaphore{rContext.m_frameData[currentFrame].m_presentSemaphore};
+    const waitSemaphores = [_]c.VkSemaphore{rContext.m_frameData[currentFrame].m_swapchainSemaphore};
     const waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     const signalSemaphores = [_]c.VkSemaphore{rContext.m_frameData[currentFrame].m_renderSemaphore};
     const submitInfo = c.VkSubmitInfo{

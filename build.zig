@@ -257,8 +257,17 @@ pub fn build(b: *std.Build) !void {
         .flags = stb_flags,
     });
 
+    exe.addIncludePath(b.path("dependency/vma"));
+    const vma_flags = &[_][]const u8{};
+    exe.addCSourceFile(.{
+        .file = b.path("dependency/vma/vk_mem_alloc.cpp"),
+        .flags = vma_flags,
+    });
+
     exe.linkSystemLibrary("user32");
     exe.linkSystemLibrary("gdi32");
+
+    exe.linkLibCpp();
 
     b.installArtifact(exe);
 

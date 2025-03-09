@@ -23,6 +23,9 @@ pub usingnamespace @cImport({
     //@cDefine("CGLTF_IMPLEMENTATION", {});
     //@cInclude("cgltf/cgltf.h");
 
+    //vma
+    @cInclude("vma/vk_mem_alloc.h");
+
     //stb
     @cDefine("STBI_IMAGE_IMPLEMENTATION", {});
     @cDefine("STBI_NO_PNG", {});

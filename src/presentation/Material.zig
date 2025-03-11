@@ -17,7 +17,7 @@ pub const Material = struct {
 
     //TODO per material descriptors not yet implemented
     // should potentially live in the RenderContext and be set by materials
-    m_perMaterialSetLayout: c.VkDescriptorSetLayout,
+    m_descriptorSetLayout: c.VkDescriptorSetLayout,
     m_perMaterialDescriptorSet: c.VkDescriptorSet,
 
     m_pipelineLayout: c.VkPipelineLayout,

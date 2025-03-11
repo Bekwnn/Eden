@@ -11,6 +11,7 @@ const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocat
 const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
 const vkUtil = @import("VulkanUtil.zig");
+const GPUSceneData = @import("Scene.zig").GPUSceneData;
 
 const Mesh = @import("Mesh.zig").Mesh;
 
@@ -95,6 +96,10 @@ pub const RenderContext = struct {
     m_graphicsQueue: c.VkQueue = undefined,
     m_presentQueueIdx: ?u32 = null,
     m_presentQueue: c.VkQueue = undefined,
+
+    //TODO move?
+    m_gpuSceneData: GPUSceneData,
+    m_gpuSceneDescriptorLayout: c.VkDescriptorLayout,
 
     m_frameData: [FRAMES_IN_FLIGHT]FrameData = undefined,
     m_currentFrame: u32 = 0,
@@ -641,6 +646,7 @@ fn CreateDescriptorAllocators(allocator: Allocator) !void {
         .{ .m_descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .m_ratio = 4 },
     };
 
+    // Creates a descriptor pool that will hold as much as in frame sizes times 1000
     for (rContext.m_frameData) |*frameData| {
         frameData.m_descriptorAllocator = DescriptorAllocator.init(allocator, rContext.m_logicalDevice, 1000, frameSizes);
     }

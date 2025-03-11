@@ -7,6 +7,7 @@ const Buffer = @import("Buffer.zig").Buffer;
 const FrameUBO = @import("Camera.zig").FrameUBO;
 const PipelineBuilder = @import("PipelineBuilder.zig").PipelineBuilder;
 const Shader = @import("Shader.zig").Shader;
+const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
 const vkUtil = @import("VulkanUtil.zig");
@@ -73,6 +74,7 @@ pub const FrameData = struct {
     m_mainCommandBuffer: c.VkCommandBuffer,
 
     //TODO move these out to pipeline?
+    m_descriptorAllocator: DescriptorAllocator,
     m_descriptorSets: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSet = undefined,
     m_uniformBuffers: [DESCRIPTOR_SET_COUNT]Buffer = undefined,
 };
@@ -185,14 +187,14 @@ pub const RenderContext = struct {
         std.debug.print("Creating fences and semaphores...\n", .{});
         try CreateFencesAndSemaphores();
 
-        //std.debug.print("Creating render pass...\n", .{});
-        //try CreateRenderPass();
+        std.debug.print("Creating render pass...\n", .{});
+        try CreateRenderPass();
+
+        std.debug.print("Creating descriptor allocators...\n", .{});
+        try CreateDescriptorAllocators();
 
         //std.debug.print("Creating uniform buffers...\n", .{});
         //try CreateUniformBuffers();
-
-        //std.debug.print("Creating descriptor pools...\n", .{});
-        //try CreateDescriptorPools();
 
         //std.debug.print("Creating descriptor set layouts...\n", .{});
         //try CreateDescriptorSetLayouts();
@@ -629,38 +631,19 @@ fn CreateUniformBuffers() !void {
     //TODO handle this all in shader/pipeline land
 }
 
-fn CreateDescriptorPools() !void {
+fn CreateDescriptorAllocators(allocator: Allocator) !void {
     const rContext = try RenderContext.GetInstance();
 
-    //TODO create a centralized list of uniform objects to handle descriptor set/pool/layout/etc creation
-    const uboSize = c.VkDescriptorPoolSize{
-        .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = @intCast(rContext.m_frameData.len),
-    };
-    const imageSamplerSize = c.VkDescriptorPoolSize{
-        .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = @intCast(rContext.m_frameData.len),
+    const frameSizes = [_]DescriptorAllocator.PoolSizeRatio{
+        .{ .m_descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .m_ratio = 3 },
+        .{ .m_descriptorType = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .m_ratio = 3 },
+        .{ .m_descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .m_ratio = 3 },
+        .{ .m_descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .m_ratio = 4 },
     };
 
-    const poolSizes = [_]c.VkDescriptorPoolSize{ uboSize, imageSamplerSize };
-    const poolInfo = c.VkDescriptorPoolCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .poolSizeCount = poolSizes.len,
-        .pPoolSizes = &poolSizes,
-        .maxSets = @intCast(rContext.m_frameData.len * DESCRIPTOR_SET_COUNT),
-        .flags = 0,
-        .pNext = null,
-    };
-
-    try vkUtil.CheckVkSuccess(
-        c.vkCreateDescriptorPool(
-            rContext.m_logicalDevice,
-            &poolInfo,
-            null,
-            &rContext.m_descriptorPool,
-        ),
-        RenderContextError.FailedToCreateDescriptorPool,
-    );
+    for (rContext.m_frameData) |*frameData| {
+        frameData.m_descriptorAllocator = DescriptorAllocator.init(allocator, rContext.m_logicalDevice, 1000, frameSizes);
+    }
 }
 
 fn CreateDescriptorSetLayouts() !void {

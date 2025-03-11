@@ -19,19 +19,27 @@ pub const UniformBufferObject = struct {
 
 pub const PushConstant = struct {
     m_dataType: type,
-    m_binding: u32,
 };
 
 // This struct holds all programmable shader modules to render something with and handles putting together shader modules
 // It also holds holds info about the parameters passed into the shader programs
 // https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/02_Graphics_pipeline_basics/00_Introduction.html
 pub const Shader = struct {
-    m_vertShader: ?c.VkShaderModule,
-    m_tessShader: ?c.VkShaderModule,
-    m_geomShader: ?c.VkShaderModule,
-    m_fragShader: ?c.VkShaderModule,
-    m_uniformBufferObjects: ArrayList(UniformBufferObject),
-    m_pushConstants: ArrayList(PushConstant),
+    m_shaderStages: ArrayList(ShaderStage),
+    m_descriptorSetLayouts: ArrayList(c.VkDescriptorSetLayouts),
+
+    pub const ShaderStage = struct {
+        m_shader: c.VkShaderModule,
+        m_flags: c.VkShaderStageFlagBits,
+    };
+
+    pub fn CreateEmptyShader(allocator: Allocator) Shader {
+        return Shader{
+            .m_shaderStages = ArrayList(ShaderStage).init(allocator),
+            .m_descriptorSetLayouts = ArrayList(c.VkDescriptorSetLayouts).init(allocator),
+            .m_uniformBufferObjects = ArrayList(UniformBufferObject).init(allocator),
+        };
+    }
 
     // caller must CheckAndFree
     pub fn CreateBasicShader(
@@ -39,60 +47,30 @@ pub const Shader = struct {
         vertShaderSource: []const u8,
         fragShaderSource: []const u8,
     ) !Shader {
-        //TODO how do we handle setting up shader stages and binding attribs or input state?
-        return Shader{
-            .m_vertShader = try CreateShaderModule(
-                allocator,
-                vertShaderSource,
-            ),
-            .m_tessShader = null,
-            .m_geomShader = null,
-            .m_fragShader = try CreateShaderModule(
-                allocator,
-                fragShaderSource,
-            ),
+        var newShader = Shader{
+            .m_shaderStages = ArrayList(ShaderStage).init(allocator),
             .m_uniformBufferObjects = ArrayList(UniformBufferObject).init(allocator),
-            .m_pushConstants = ArrayList(PushConstant).init(allocator),
         };
-    }
 
-    // caller must CheckAndFree
-    pub fn CreateAdvancedShader(
-        allocator: Allocator,
-        vertShaderSource: ?[]const u8,
-        tessShaderSource: ?[]const u8,
-        geomShaderSource: ?[]const u8,
-        fragShaderSource: ?[]const u8,
-    ) !Shader {
-        return Shader{
-            .m_vertShader = if (vertShaderSource) |shaderSrc| try CreateShaderModule(
-                allocator,
-                shaderSrc,
-            ) else null,
-            .m_tessShader = if (tessShaderSource) |shaderSrc| try CreateShaderModule(
-                allocator,
-                shaderSrc,
-            ) else null,
-            .m_geomShader = if (geomShaderSource) |shaderSrc| try CreateShaderModule(
-                allocator,
-                shaderSrc,
-            ) else null,
-            .m_fragShader = if (fragShaderSource) |shaderSrc| try CreateShaderModule(
-                allocator,
-                shaderSrc,
-            ) else null,
-            .m_uniformBufferObjects = ArrayList(UniformBufferObject).init(allocator),
-            .m_pushConstants = ArrayList(PushConstant).init(allocator),
-        };
+        try newShader.AddShaderStage(allocator, vertShaderSource, c.VK_SHADER_STAGE_VERTEX_BIT);
+        try newShader.AddShaderStage(allocator, fragShaderSource, c.VK_SHADER_STAGE_FRAGMENT_BIT);
+
+        return newShader;
     }
 
     pub fn deinit(self: *Shader) void {
-        CheckAndFreeShaderModule(&self.m_vertShader);
-        CheckAndFreeShaderModule(&self.m_tessShader);
-        CheckAndFreeShaderModule(&self.m_geomShader);
-        CheckAndFreeShaderModule(&self.m_fragShader);
+        for (self.m_shaderStages) |*stage| {
+            CheckAndFreeShaderModule(stage);
+        }
+        self.m_shaderStages.deinit();
         self.m_uniformBufferObjects.deinit();
-        self.m_pushConstants.deinit();
+    }
+
+    pub fn AddShaderStage(self: *Shader, allocator: Allocator, shaderSource: []const u8, flags: c.VkShaderStageFlagBits) !void {
+        try self.m_shaderStages.add(ShaderStage{
+            .m_shader = try CreateShaderModule(allocator, shaderSource),
+            .m_flags = flags,
+        });
     }
 };
 

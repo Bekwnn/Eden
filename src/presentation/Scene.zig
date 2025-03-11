@@ -11,9 +11,23 @@ const RenderObject = @import("RenderObject.zig").RenderObject;
 const renderContext = @import("RenderContext.zig");
 const RenderContext = @import("RenderContext.zig").RenderContext;
 
+const mat4x4 = @import("../math/Mat4x4.zig");
+const Mat4x4 = mat4x4.Mat4x4;
+const Vec4 = @import("../math/Vec4.zig").Vec4;
+
 pub const CameraError = error{
     NoCurrent,
     FailedToSet,
+};
+
+//TODO move probably
+pub const GPUSceneData = struct {
+    m_view: Mat4x4,
+    m_projection: Mat4x4,
+    m_viewProj: Mat4x4,
+    m_ambientColor: Vec4,
+    m_sunDirection: Vec4, // .w is sun power
+    m_sunColor: Vec4,
 };
 
 pub const Scene = struct {

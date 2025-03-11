@@ -20,6 +20,9 @@ pub const Material = struct {
     m_perMaterialSetLayout: c.VkDescriptorSetLayout,
     m_perMaterialDescriptorSet: c.VkDescriptorSet,
 
+    m_pipelineLayout: c.VkPipelineLayout,
+    m_pipeline: c.VkPipeline,
+
     pub fn CreateMaterial(
         materialName: []const u8,
         vertShaderPath: []const u8,

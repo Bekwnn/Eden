@@ -204,9 +204,9 @@ pub fn build(b: *std.Build) !void {
 
     exe.addIncludePath(b.path("src"));
 
-    //exe.addIncludeDir("dependency/cimgui");
-    //exe.addIncludeDir("dependency/cimgui/imgui");
-    //exe.addIncludeDir("dependency/cimgui/imgui/examples");
+    //exe.addIncludePath(b.path("dependency/cimgui"));
+    //exe.addIncludePath(b.path("dependency/cimgui/imgui"));
+    //exe.addIncludePath(b.path("dependency/cimgui/imgui/examples"));
     //const imgui_flags = &[_][]const u8{
     //    "-std=c++17",
     //    "-Wno-return-type-c-linkage",
@@ -216,13 +216,18 @@ pub fn build(b: *std.Build) !void {
     //    "-fno-rtti",
     //    "-Wno-pragma-pack",
     //};
-    //exe.addCSourceFile("dependency/cimgui/cimgui.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/imgui.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_demo.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_draw.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/imgui_widgets.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp", imgui_flags);
-    //exe.addCSourceFile("dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp", imgui_flags);
+    //exe.addCSourceFiles(.{
+    //    .files = &[_][]const u8{
+    //        "dependency/cimgui/cimgui.cpp",
+    //        "dependency/cimgui/imgui/imgui.cpp",
+    //        "dependency/cimgui/imgui/imgui_demo.cpp",
+    //        "dependency/cimgui/imgui/imgui_draw.cpp",
+    //        "dependency/cimgui/imgui/imgui_widgets.cpp",
+    //        "dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp",
+    //        "dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp",
+    //    },
+    //    .flags = imgui_flags,
+    //});
 
     exe.addIncludePath(b.path("dependency/SDL2/include"));
     exe.addLibraryPath(b.path("dependency/SDL2/lib/x64"));

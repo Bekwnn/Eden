@@ -47,17 +47,15 @@ const RenderLoopError = error{
     FailedToEndCommandBuffer,
 };
 
-//var imguiIO: ?*ImGuiIO = null;
-
-//fn ImguiInit() void {
+//var imguiIO: ?*c.ImGuiIO = null;
 //
-//    try imgui.InitImgui(window);
-//    imguiIO = igGetIO();
+//fn ImguiInit() void {
+//    imguiIO = c.igGetIO();
 //    if (imguiIO) |io| {
 //        var text_pixels: [*c]u8 = undefined;
 //        var text_w: i32 = undefined;
 //        var text_h: i32 = undefined;
-//        ImFontAtlas_GetTexDataAsRGBA32(io.Fonts, &text_pixels, &text_w, &text_h, null);
+//        c.ImFontAtlas_GetTexDataAsRGBA32(io.Fonts, &text_pixels, &text_w, &text_h, null);
 //    } else {
 //        @panic("imguiIO is null");
 //    }
@@ -304,6 +302,10 @@ pub fn RenderFrame() !void {
         RenderLoopError.FailedToResetFences,
     );
 
+    //TODO create deletion queue? flush it?
+    const currentFrameData = rContext.GetCurrentFrame();
+    currentFrameData.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
+
     var imageIndex: u32 = 0;
     const timeoutns = 1000000000; // 1sec = 1e9 nanoseconds
     const acquireImageResult = c.vkAcquireNextImageKHR(
@@ -382,3 +384,11 @@ pub fn RenderFrame() !void {
 
     currentFrame = (currentFrame + 1) % renderContext.FRAMES_IN_FLIGHT;
 }
+
+//fn DrawBackground(cmd: c.VkCommandBuffer) void {
+//
+//}
+//
+//fn DrawMeshes(cmd: c.VkCommandBuffer) void {
+//
+//}

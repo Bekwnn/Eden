@@ -4,14 +4,15 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Buffer = @import("Buffer.zig").Buffer;
+const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
+const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
 const FrameUBO = @import("Camera.zig").FrameUBO;
+const GPUSceneData = @import("Scene.zig").GPUSceneData;
 const PipelineBuilder = @import("PipelineBuilder.zig").PipelineBuilder;
 const Shader = @import("Shader.zig").Shader;
-const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
 const vkUtil = @import("VulkanUtil.zig");
-const GPUSceneData = @import("Scene.zig").GPUSceneData;
 
 const Mesh = @import("Mesh.zig").Mesh;
 
@@ -197,6 +198,9 @@ pub const RenderContext = struct {
 
         std.debug.print("Creating descriptor allocators...\n", .{});
         try CreateDescriptorAllocators();
+
+        std.debug.print("Creating gpu scene data...\n", .{});
+        try InitGPUSceneData(allocator);
 
         //std.debug.print("Creating uniform buffers...\n", .{});
         //try CreateUniformBuffers();
@@ -650,6 +654,16 @@ fn CreateDescriptorAllocators(allocator: Allocator) !void {
     for (rContext.m_frameData) |*frameData| {
         frameData.m_descriptorAllocator = DescriptorAllocator.init(allocator, rContext.m_logicalDevice, 1000, frameSizes);
     }
+}
+
+fn InitGPUSceneData(allocator: Allocator) void {
+    var rContext = try RenderContext.GetInstance();
+    var builder = DescriptorLayoutBuilder.init(allocator);
+    builder.AddBinding(0, c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    rContext.m_gpuSceneDescriptorLayout = builder.Build(
+        rContext.m_logicalDevice,
+        c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    );
 }
 
 fn CreateDescriptorSetLayouts() !void {

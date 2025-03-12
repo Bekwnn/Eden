@@ -70,14 +70,6 @@ pub const Scene = struct {
         }
     }
 
-    pub fn GetCurrentCamera(self: *Scene) ?*Camera {
-        return self.m_currentCamera;
-    }
-
-    pub fn GetDefaultCamera(self: *Scene) ?*Camera {
-        return self.m_defaultCamera;
-    }
-
     pub fn DrawScene(
         self: *Scene,
         cmd: c.VkCommandBuffer,

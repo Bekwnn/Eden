@@ -14,11 +14,13 @@ const Mesh = @import("Mesh.zig").Mesh;
 const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
-const Scene = @import("Scene.zig").Scene;
+const scene = @import("Scene.zig");
+const Scene = currentScene.Scene;
 const Shader = @import("Shader.zig").Shader;
 
 const mat4x4 = @import("../math/Mat4x4.zig");
 const Vec3 = @import("../math/Vec3.zig").Vec3;
+const Vec4 = @import("../math/Vec4.zig").Vec4;
 
 const game = @import("../game/GameWorld.zig");
 const GameWorld = @import("../game/GameWorld.zig").GameWorld;
@@ -29,7 +31,7 @@ var curTime: f32 = 0.0;
 const circleTime: f32 = 1.0 / (2.0 * std.math.pi);
 const circleRadius: f32 = 0.5;
 
-var scene = Scene{};
+var currentScene = Scene{};
 
 // temporary location for this
 var renderables: ArrayList(RenderObject) = ArrayList(RenderObject).init(allocator);
@@ -68,7 +70,7 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
     c.SDL_GetWindowSize(window, &width, &height);
     debug.print("Window resized to {} x {}\n", .{ width, height });
 
-    var camera = scene.GetCurrentCamera();
+    var camera = currentScene.GetCurrentCamera();
     if (camera != null) {
         camera.?.m_aspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
     }
@@ -106,7 +108,7 @@ pub fn Shutdown() void {
 }
 
 fn InitializeScene() !void {
-    // init hardcoded test scene:
+    // init hardcoded test currentScene:
     var inventory = try AssetInventory.GetInstance();
     const mesh = inventory.CreateMesh("monkey", "test-assets\\test.obj") catch |meshErr| {
         debug.print("Error creating mesh: {}\n", .{meshErr});
@@ -117,6 +119,34 @@ fn InitializeScene() !void {
         return materialErr;
     };
 
+    const currentCamera = currentScene.m_currentCamera orelse return scene.CameraError.NoCurrent;
+    const cameraViewMat = currentCamera.GetViewMatrix();
+    const cameraProjMat = currentCamera.GetProjectionMatrix();
+
+    const rContext = try RenderContext.GetInstance();
+    rContext.m_gpuSceneData = scene.GPUSceneData{
+        .m_view = cameraViewMat,
+        .m_projection = cameraProjMat,
+        .m_viewProj = cameraViewMat.Mul(cameraProjMat),
+        .m_ambientColor = Vec4{
+            .x = 0.5,
+            .y = 0.5,
+            .z = 0.5,
+            .w = 1.0,
+        },
+        .m_sunDirection = Vec4{
+            .x = 0.0,
+            .y = 0.0,
+            .z = -1.0,
+            .w = 0.0,
+        },
+        .m_sunColor = Vec4{
+            .x = 1.0,
+            .y = 1.0,
+            .z = 1.0,
+            .w = 1.0,
+        },
+    };
     var ix: i8 = -1;
     var iy: i8 = -1;
     while (iy <= 1) : (iy += 1) {
@@ -255,34 +285,10 @@ var currentFrame: usize = 0;
 pub fn RenderFrame() !void {
     const swapchainAllocator = std.heap.page_allocator;
 
-    //c.ImGui_ImplVulkan_NewFrame();
-    //c.ImGui_ImplSDL2_NewFrame(window);
-    //c.igNewFrame();
-    //c.igShowDemoWindow(&showDemoWindow);
-    //c.igBegin("Hello, world!");
-    //{
-    //    c.igText("This is some useful text.");
-    //    c.igCheckbox("Demo Window", &showDemoWindow);
-
-    //    c.igSliderFloat("float", &f, 0.0, 1.0);
-
-    //    if (c.igButton("Button")) {
-    //        counter += 1;
-    //    }
-
-    //    c.igSameLine();
-    //    c.igText("counter = %d", counter);
-
-    //    c.igText("Application average {} ms/frame ({} FPS)", 1000.0 / c.igGetIO().Framerate, c.igGetIO().Framerate);
-    //}
-    //c.igEnd();
-
-    //c.igRender();
-
     curTime += game.deltaTime;
 
     // TEMP camera movement test
-    const curCamera = scene.GetCurrentCamera();
+    const curCamera = currentScene.GetCurrentCamera();
     if (curCamera != null) {
         curCamera.?.m_pos.z = -5.0;
         curCamera.?.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
@@ -292,7 +298,13 @@ pub fn RenderFrame() !void {
     const rContext = try RenderContext.GetInstance();
 
     // sync stage
-    const fencesResult = c.vkWaitForFences(rContext.m_logicalDevice, 1, &rContext.m_frameData[currentFrame].m_renderFence, c.VK_TRUE, 2000000000);
+    const fencesResult = c.vkWaitForFences(
+        rContext.m_logicalDevice,
+        1,
+        &rContext.m_frameData[currentFrame].m_renderFence,
+        c.VK_TRUE,
+        2000000000,
+    );
     if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {
         return RenderLoopError.FailedToWaitForInFlightFence;
     }
@@ -324,7 +336,7 @@ pub fn RenderFrame() !void {
     }
 
     //TODO update the uniform buffers
-    //try rContext.UpdateUniformBuffer(&scene.GetCurrentCamera(), currentFrame);
+    //try rContext.UpdateUniformBuffer(&currentScene.GetCurrentCamera(), currentFrame);
 
     try vkUtil.CheckVkSuccess(
         c.vkResetCommandBuffer(rContext.m_frameData[imageIndex].m_mainCommandBuffer, 0),
@@ -370,8 +382,8 @@ pub fn RenderFrame() !void {
     //TODO get imgui working again
     //ImguiUpdate()
 
-    //TODO fix up scene drawing
-    try scene.DrawScene(rContext.m_frameData[imageIndex].m_mainCommandBuffer, renderables.items);
+    //TODO fix up currentScene drawing
+    try currentScene.DrawScene(rContext.m_frameData[imageIndex].m_mainCommandBuffer, renderables.items);
 
     const queuePresentResult = c.vkQueuePresentKHR(rContext.m_presentQueue, &presentInfo);
 
@@ -384,6 +396,32 @@ pub fn RenderFrame() !void {
 
     currentFrame = (currentFrame + 1) % renderContext.FRAMES_IN_FLIGHT;
 }
+
+//fn RenderFrameImgui() void {
+//    c.ImGui_ImplVulkan_NewFrame();
+//    c.ImGui_ImplSDL2_NewFrame(window);
+//    c.igNewFrame();
+//    c.igShowDemoWindow(&showDemoWindow);
+//    c.igBegin("Hello, world!");
+//    {
+//        c.igText("This is some useful text.");
+//        c.igCheckbox("Demo Window", &showDemoWindow);
+//
+//        c.igSliderFloat("float", &f, 0.0, 1.0);
+//
+//        if (c.igButton("Button")) {
+//            counter += 1;
+//        }
+//
+//        c.igSameLine();
+//        c.igText("counter = %d", counter);
+//
+//        c.igText("Application average {} ms/frame ({} FPS)", 1000.0 / c.igGetIO().Framerate, c.igGetIO().Framerate);
+//    }
+//    c.igEnd();
+//
+//    c.igRender();
+//}
 
 //fn DrawBackground(cmd: c.VkCommandBuffer) void {
 //

@@ -3,25 +3,15 @@ const std = @import("std");
 const allocator = std.heap.page_allocator;
 
 const vkUtil = @import("VulkanUtil.zig");
-const texture = @import("Texture.zig");
-const Texture = texture.Texture;
 const RenderContext = @import("RenderContext.zig").RenderContext;
 
 //TODO we want material instancing such that a material is made up of two members: a pointer to instance data (texture, etc) and a pointer to shader constants (descriptor layout, etc)
 // really we might want it to be more flexible than that, and support multiple textures, etc. For now, hardcoded to one texture
 pub const Material = struct {
     m_name: []const u8,
-
-    //m_textureImage: ?Texture = null, //TODO move to material instance data
-    //m_textureSampler: ?c.VkSampler = null,
-
-    //TODO per material descriptors not yet implemented
-    // should potentially live in the RenderContext and be set by materials
-    m_descriptorSetLayout: c.VkDescriptorSetLayout,
-    m_perMaterialDescriptorSet: c.VkDescriptorSet,
-
-    m_pipelineLayout: c.VkPipelineLayout,
+    
     m_pipeline: c.VkPipeline,
+    m_pipelineLayout: c.VkPipelineLayout,
 
     pub fn CreateMaterial(
         materialName: []const u8,

@@ -21,7 +21,7 @@ pub const DescriptorLayoutBuilder = struct {
         };
     }
 
-    pub fn AddBinding(self: *Self, binding: u32, descriptorType: c.VkDescriptorType) void {
+    pub fn AddBinding(self: *Self, binding: u32, descriptorType: c.VkDescriptorType) !void {
         const newBind = c.VkDescriptorSetLayoutBinding{
             .binding = binding,
             .descriptorCount = 1,
@@ -30,7 +30,7 @@ pub const DescriptorLayoutBuilder = struct {
             .stageFlags = 0,
         };
 
-        self.m_bindings.append(newBind);
+        try self.m_bindings.append(newBind);
     }
 
     pub fn Clear(self: *Self) void {
@@ -40,14 +40,14 @@ pub const DescriptorLayoutBuilder = struct {
     //TODO add pNext and DescriptorSetLayoutCreateFlags?
     pub fn Build(self: *Self, device: c.VkDevice, shaderStages: c.VkShaderStageFlags) !c.VkDescriptorSetLayout {
         // set the shader stage flags all at once
-        for (self.m_bindings) |binding| {
+        for (self.m_bindings.items) |*binding| {
             binding.stageFlags |= shaderStages;
         }
 
         const layoutInfo = c.VkDescriptorSetLayoutCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .bindingCount = @intCast(self.m_bindings.items.len),
-            .pBindings = &self.m_bindings.items,
+            .pBindings = @ptrCast(&self.m_bindings.items),
             .flags = 0,
             .pNext = null,
         };

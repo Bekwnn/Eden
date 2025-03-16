@@ -21,12 +21,14 @@ pub const PushConstant = struct {
     m_dataType: type,
 };
 
+pub const MAX_DESCRIPTORS = 4;
+
 // This struct holds all programmable shader modules to render something with and handles putting together shader modules
 // It also holds holds info about the parameters passed into the shader programs
 // https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/02_Graphics_pipeline_basics/00_Introduction.html
 pub const Shader = struct {
     m_shaderStages: ArrayList(ShaderStage),
-    m_descriptorSetLayouts: ArrayList(c.VkDescriptorSetLayouts),
+    m_descriptorSetLayouts: [MAX_DESCRIPTORS]c.VkDescriptorSetLayouts,
 
     pub const ShaderStage = struct {
         m_shader: c.VkShaderModule,

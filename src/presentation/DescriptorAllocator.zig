@@ -9,6 +9,7 @@ const vkUtil = @import("VulkanUtil.zig");
 pub const DescriptorAllocatorError = error{
     FailedToAllocateDescriptorSets,
     FailedToCreateDescriptorPool,
+    FailedToResetDescriptorPool,
 };
 
 // Manages descriptor pools
@@ -31,7 +32,7 @@ pub const DescriptorAllocator = struct {
             .m_poolRatios = ArrayList(PoolSizeRatio).init(allocator),
             .m_fullPools = ArrayList(c.VkDescriptorPool).init(allocator),
             .m_readyPools = ArrayList(c.VkDescriptorPool).init(allocator),
-            .m_setsPerPool = initialSets * 1.5,
+            .m_setsPerPool = @intFromFloat(@as(f32, @floatFromInt(initialSets)) * 1.5),
             .m_allocator = allocator,
         };
 
@@ -42,23 +43,29 @@ pub const DescriptorAllocator = struct {
         return newDescriptorAllocator;
     }
 
-    pub fn ClearPools(self: *Self, device: c.VkDevice) void {
-        for (self.m_readyPools) |pool| {
-            c.VkResetDescriptorPool(device, pool, 0);
+    pub fn ClearPools(self: *Self, device: c.VkDevice) !void {
+        for (self.m_readyPools.items) |pool| {
+            try vkUtil.CheckVkSuccess(
+                c.vkResetDescriptorPool(device, pool, 0),
+                DescriptorAllocatorError.FailedToResetDescriptorPool,
+            );
         }
-        for (self.m_fullPools) |pool| {
-            c.VkResetDescriptorPool(device, pool, 0);
+        for (self.m_fullPools.items) |pool| {
+            try vkUtil.CheckVkSuccess(
+                c.vkResetDescriptorPool(device, pool, 0),
+                DescriptorAllocatorError.FailedToResetDescriptorPool,
+            );
             try self.m_readyPools.append(pool);
         }
         self.m_fullPools.clearRetainingCapacity();
     }
 
     pub fn deinit(self: *Self, device: c.VkDevice) void {
-        for (self.m_readyPools) |pool| {
-            c.VkDestroyDescriptorPool(device, pool, null);
+        for (self.m_readyPools.items) |pool| {
+            c.vkDestroyDescriptorPool(device, pool, null);
         }
-        for (self.m_fullPools) |pool| {
-            c.VkDestroyDescriptorPool(device, pool, null);
+        for (self.m_fullPools.items) |pool| {
+            c.vkDestroyDescriptorPool(device, pool, null);
         }
         self.m_poolRatios.deinit();
         self.m_fullPools.deinit();
@@ -120,7 +127,7 @@ pub const DescriptorAllocator = struct {
         for (poolRatios) |poolRatio| {
             try poolSizes.append(c.VkDescriptorPoolSize{
                 .type = poolRatio.m_descriptorType,
-                .descriptorCount = @intCast(poolRatio.m_ratio * setCount),
+                .descriptorCount = @intFromFloat(poolRatio.m_ratio * @as(f32, @floatFromInt(setCount))),
             });
         }
 
@@ -128,7 +135,7 @@ pub const DescriptorAllocator = struct {
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .maxSets = setCount,
             .poolSizeCount = @intCast(poolSizes.items.len),
-            .pPoolSizes = &poolSizes.items,
+            .pPoolSizes = @ptrCast(&poolSizes.items),
             .flags = 0,
             .pNext = null,
         };

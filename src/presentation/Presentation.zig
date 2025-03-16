@@ -15,7 +15,7 @@ const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
 const scene = @import("Scene.zig");
-const Scene = currentScene.Scene;
+const Scene = scene.Scene;
 const Shader = @import("Shader.zig").Shader;
 
 const mat4x4 = @import("../math/Mat4x4.zig");
@@ -70,10 +70,8 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
     c.SDL_GetWindowSize(window, &width, &height);
     debug.print("Window resized to {} x {}\n", .{ width, height });
 
-    var camera = currentScene.GetCurrentCamera();
-    if (camera != null) {
-        camera.?.m_aspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
-    }
+    const camera = try currentScene.GetCurrentCamera();
+    camera.*.m_aspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
 
     try rContext.RecreateSwapchain(allocator);
 }
@@ -119,7 +117,7 @@ fn InitializeScene() !void {
         return materialErr;
     };
 
-    const currentCamera = currentScene.m_currentCamera orelse return scene.CameraError.NoCurrent;
+    const currentCamera = try currentScene.GetCurrentCamera();
     const cameraViewMat = currentCamera.GetViewMatrix();
     const cameraProjMat = currentCamera.GetProjectionMatrix();
 
@@ -127,7 +125,7 @@ fn InitializeScene() !void {
     rContext.m_gpuSceneData = scene.GPUSceneData{
         .m_view = cameraViewMat,
         .m_projection = cameraProjMat,
-        .m_viewProj = cameraViewMat.Mul(cameraProjMat),
+        .m_viewProj = cameraViewMat.Mul(&cameraProjMat),
         .m_ambientColor = Vec4{
             .x = 0.5,
             .y = 0.5,
@@ -288,12 +286,10 @@ pub fn RenderFrame() !void {
     curTime += game.deltaTime;
 
     // TEMP camera movement test
-    const curCamera = currentScene.GetCurrentCamera();
-    if (curCamera != null) {
-        curCamera.?.m_pos.z = -5.0;
-        curCamera.?.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
-        curCamera.?.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
-    }
+    const curCamera = try currentScene.GetCurrentCamera();
+    curCamera.*.m_pos.z = -5.0;
+    curCamera.*.m_pos.x = circleRadius * std.math.cos(curTime / (std.math.tau * circleTime));
+    curCamera.*.m_pos.y = circleRadius * std.math.sin(curTime / (std.math.tau * circleTime));
 
     const rContext = try RenderContext.GetInstance();
 
@@ -316,7 +312,7 @@ pub fn RenderFrame() !void {
 
     //TODO create deletion queue? flush it?
     const currentFrameData = rContext.GetCurrentFrame();
-    currentFrameData.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
+    try currentFrameData.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
 
     var imageIndex: u32 = 0;
     const timeoutns = 1000000000; // 1sec = 1e9 nanoseconds

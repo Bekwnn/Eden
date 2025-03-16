@@ -31,12 +31,14 @@ pub const GPUSceneData = struct {
 };
 
 pub const Scene = struct {
+    const Self = @This();
+
     m_cameras: StringHashMap(Camera) = StringHashMap(Camera).init(allocator),
 
     m_currentCamera: ?*Camera = null,
     m_defaultCamera: ?*Camera = null,
 
-    pub fn CreateCamera(self: *Scene, name: []const u8) !void {
+    pub fn CreateCamera(self: *Self, name: []const u8) !void {
         try self.m_cameras.put(name, Camera{
             .m_name = name,
         });
@@ -48,11 +50,15 @@ pub const Scene = struct {
         }
     }
 
-    pub fn GetCamera(self: *Scene, name: []const u8) ?*Camera {
+    pub fn GetCurrentCamera(self: *Self) !*Camera {
+        return self.m_currentCamera orelse CameraError.NoCurrent;
+    }
+
+    pub fn GetCamera(self: *Self, name: []const u8) ?*Camera {
         return self.m_cameras.get(name);
     }
 
-    pub fn SetDefaultCamera(self: *Scene, name: []const u8) !void {
+    pub fn SetDefaultCamera(self: *Self, name: []const u8) !void {
         var newDefault = self.m_cameras.getPtr(name);
         if (newDefault == null) {
             return CameraError.FailedToSet;
@@ -61,7 +67,7 @@ pub const Scene = struct {
         }
     }
 
-    pub fn SetCurrentCamera(self: *Scene, name: []const u8) !void {
+    pub fn SetCurrentCamera(self: *Self, name: []const u8) !void {
         var newCurrent = self.m_cameras.getPtr(name);
         if (newCurrent == null) {
             return CameraError.FailedToSet;
@@ -71,7 +77,7 @@ pub const Scene = struct {
     }
 
     pub fn DrawScene(
-        self: *Scene,
+        self: *Self,
         cmd: c.VkCommandBuffer,
         renderObjects: []RenderObject,
     ) !void {

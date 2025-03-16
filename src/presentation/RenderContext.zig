@@ -99,18 +99,11 @@ pub const RenderContext = struct {
     m_presentQueue: c.VkQueue = undefined,
 
     //TODO move?
-    m_gpuSceneData: GPUSceneData,
-    m_gpuSceneDescriptorLayout: c.VkDescriptorLayout,
+    m_gpuSceneData: GPUSceneData = undefined,
+    m_gpuSceneDescriptorLayout: c.VkDescriptorSetLayout = undefined,
 
     m_frameData: [FRAMES_IN_FLIGHT]FrameData = undefined,
     m_currentFrame: u32 = 0,
-
-    // We want to stick to 4 descriptor sets due lower end hardware limitations
-    // 0 = bound once per frame
-    // 1 = bound once per pass
-    // 2 = bound once per material (lives in the material)
-    // 3 = bound once per material instance (lives in material instance)
-    m_descriptorPool: c.VkDescriptorPool = undefined,
 
     m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
 
@@ -197,7 +190,7 @@ pub const RenderContext = struct {
         try CreateRenderPass();
 
         std.debug.print("Creating descriptor allocators...\n", .{});
-        try CreateDescriptorAllocators();
+        try CreateDescriptorAllocators(allocator);
 
         std.debug.print("Creating gpu scene data...\n", .{});
         try InitGPUSceneData(allocator);
@@ -259,6 +252,7 @@ pub const RenderContext = struct {
         return &self.m_frameData[self.m_currentFrame % FRAMES_IN_FLIGHT];
     }
 
+    //TODO move to swapchain
     pub fn RecreateSwapchain(self: *RenderContext, allocator: Allocator) !void {
         try vkUtil.CheckVkSuccess(
             c.vkDeviceWaitIdle(self.m_logicalDevice),
@@ -289,18 +283,12 @@ pub const RenderContext = struct {
         try CreateCommandBuffers();
     }
 
+    //TODO redo + move to swapchain
     pub fn DestroySwapchain(self: *RenderContext) void {
         defer {
             for (&self.m_frameData) |*frameData| {
-                for (&frameData.m_uniformBuffers) |*uniformBuffer| {
-                    uniformBuffer.DestroyBuffer(self.m_logicalDevice);
-                }
+                frameData.m_descriptorAllocator.deinit(self.m_logicalDevice);
             }
-            c.vkDestroyDescriptorPool(
-                self.m_logicalDevice,
-                self.m_descriptorPool,
-                null,
-            );
         }
 
         defer self.m_swapchain.FreeSwapchain(self.m_logicalDevice);
@@ -651,16 +639,16 @@ fn CreateDescriptorAllocators(allocator: Allocator) !void {
     };
 
     // Creates a descriptor pool that will hold as much as in frame sizes times 1000
-    for (rContext.m_frameData) |*frameData| {
-        frameData.m_descriptorAllocator = DescriptorAllocator.init(allocator, rContext.m_logicalDevice, 1000, frameSizes);
+    for (&rContext.m_frameData) |*frameData| {
+        frameData.m_descriptorAllocator = try DescriptorAllocator.init(allocator, rContext.m_logicalDevice, 1000, &frameSizes);
     }
 }
 
-fn InitGPUSceneData(allocator: Allocator) void {
+fn InitGPUSceneData(allocator: Allocator) !void {
     var rContext = try RenderContext.GetInstance();
     var builder = DescriptorLayoutBuilder.init(allocator);
-    builder.AddBinding(0, c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    rContext.m_gpuSceneDescriptorLayout = builder.Build(
+    try builder.AddBinding(0, c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    rContext.m_gpuSceneDescriptorLayout = try builder.Build(
         rContext.m_logicalDevice,
         c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
     );

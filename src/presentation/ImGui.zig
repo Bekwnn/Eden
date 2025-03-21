@@ -127,3 +127,52 @@
 //    defer c.ImGui_ImplSDL2_Shutdown();
 //    defer c.ImGui_ImplVulkan_Shutdown();
 //}
+//
+//fn RenderFrameImgui() void {
+//    c.ImGui_ImplVulkan_NewFrame();
+//    c.ImGui_ImplSDL2_NewFrame(window);
+//    c.igNewFrame();
+//    c.igShowDemoWindow(&showDemoWindow);
+//    c.igBegin("Hello, world!");
+//    {
+//        c.igText("This is some useful text.");
+//        c.igCheckbox("Demo Window", &showDemoWindow);
+//
+//        c.igSliderFloat("float", &f, 0.0, 1.0);
+//
+//        if (c.igButton("Button")) {
+//            counter += 1;
+//        }
+//
+//        c.igSameLine();
+//        c.igText("counter = %d", counter);
+//
+//        c.igText("Application average {} ms/frame ({} FPS)", 1000.0 / c.igGetIO().Framerate, c.igGetIO().Framerate);
+//    }
+//    c.igEnd();
+//
+//    c.igRender();
+//}
+//
+//fn ImguiUpdate() void {
+//    //imgui update
+//    var window_w: i32 = undefined;
+//    var window_h: i32 = undefined;
+//    SDL_GetWindowSize(screen, &window_w, &window_h);
+//    if (imguiIO) |io| {
+//        io.DisplaySize.x = @floatFromInt(window_w);
+//        io.DisplaySize.y = @floatFromInt(window_h);
+//        io.DeltaTime = 1.0 / 60.0;
+//    } else {
+//        @panic("imguiIO is null");
+//    }
+//
+//    ImGui_ImplOpenGL3_NewFrame();
+//    ImGui_ImplSDL2_NewFrame(screen);
+//    igNewFrame();
+//
+//    igShowDemoWindow(null);
+//
+//    igRender();
+//    ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
+//}

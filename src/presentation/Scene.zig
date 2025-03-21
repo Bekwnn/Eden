@@ -33,7 +33,9 @@ pub const GPUSceneData = struct {
 pub const Scene = struct {
     const Self = @This();
 
+    //TODO init and take an allocator instead?
     m_cameras: StringHashMap(Camera) = StringHashMap(Camera).init(allocator),
+    m_renderables: StringHashMap(RenderObject) = StringHashMap(RenderObject).init(allocator),
 
     m_currentCamera: ?*Camera = null,
     m_defaultCamera: ?*Camera = null,

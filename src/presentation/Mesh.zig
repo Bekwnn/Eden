@@ -49,8 +49,6 @@ pub const MeshBuffers = struct {
 };
 
 pub const Mesh = struct {
-    m_name: []const u8,
-
     m_vertexData: ArrayList(VertexData),
     m_indices: ArrayList(u32),
 

@@ -26,20 +26,21 @@ pub const MAX_DESCRIPTORS = 4;
 // This struct holds all programmable shader modules to render something with and handles putting together shader modules
 // It also holds holds info about the parameters passed into the shader programs
 // https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/02_Graphics_pipeline_basics/00_Introduction.html
-pub const Shader = struct {
+pub const ShaderEffect = struct {
+    const Self = @This();
+
     m_shaderStages: ArrayList(ShaderStage),
-    m_descriptorSetLayouts: [MAX_DESCRIPTORS]c.VkDescriptorSetLayouts,
+    m_descriptorSetLayouts: [MAX_DESCRIPTORS]c.VkDescriptorSetLayout,
 
     pub const ShaderStage = struct {
         m_shader: c.VkShaderModule,
         m_flags: c.VkShaderStageFlagBits,
     };
 
-    pub fn CreateEmptyShader(allocator: Allocator) Shader {
-        return Shader{
+    pub fn CreateEmptyShader(allocator: Allocator) ShaderEffect {
+        return ShaderEffect{
             .m_shaderStages = ArrayList(ShaderStage).init(allocator),
-            .m_descriptorSetLayouts = ArrayList(c.VkDescriptorSetLayouts).init(allocator),
-            .m_uniformBufferObjects = ArrayList(UniformBufferObject).init(allocator),
+            .m_descriptorSetLayouts = ArrayList(c.VkDescriptorSetLayout).init(allocator),
         };
     }
 
@@ -48,10 +49,9 @@ pub const Shader = struct {
         allocator: Allocator,
         vertShaderSource: []const u8,
         fragShaderSource: []const u8,
-    ) !Shader {
-        var newShader = Shader{
+    ) !ShaderEffect {
+        var newShader = ShaderEffect{
             .m_shaderStages = ArrayList(ShaderStage).init(allocator),
-            .m_uniformBufferObjects = ArrayList(UniformBufferObject).init(allocator),
         };
 
         try newShader.AddShaderStage(allocator, vertShaderSource, c.VK_SHADER_STAGE_VERTEX_BIT);
@@ -60,15 +60,14 @@ pub const Shader = struct {
         return newShader;
     }
 
-    pub fn deinit(self: *Shader) void {
-        for (self.m_shaderStages) |*stage| {
+    pub fn deinit(self: *Self) void {
+        for (self.m_shaderStages) |stage| {
             CheckAndFreeShaderModule(stage);
         }
         self.m_shaderStages.deinit();
-        self.m_uniformBufferObjects.deinit();
     }
 
-    pub fn AddShaderStage(self: *Shader, allocator: Allocator, shaderSource: []const u8, flags: c.VkShaderStageFlagBits) !void {
+    pub fn AddShaderStage(self: *Self, allocator: Allocator, shaderSource: []const u8, flags: c.VkShaderStageFlagBits) !void {
         try self.m_shaderStages.add(ShaderStage{
             .m_shader = try CreateShaderModule(allocator, shaderSource),
             .m_flags = flags,
@@ -76,16 +75,13 @@ pub const Shader = struct {
     }
 };
 
-fn CheckAndFreeShaderModule(shader: *?c.VkShaderModule) void {
-    if (shader.* != null) {
-        const rContext = RenderContext.GetInstance() catch return;
-        c.vkDestroyShaderModule(
-            rContext.m_logicalDevice,
-            shader.*.?,
-            null,
-        );
-        shader.* = null;
-    }
+fn CheckAndFreeShaderModule(shader: c.VkShaderModule) void {
+    const rContext = RenderContext.GetInstance() catch return;
+    c.vkDestroyShaderModule(
+        rContext.m_logicalDevice,
+        shader,
+        null,
+    );
 }
 
 // returns owned slice; caller needs to free

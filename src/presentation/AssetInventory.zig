@@ -46,9 +46,7 @@ pub const AssetInventory = struct {
         name: []const u8,
     ) !*Material {
         //TODO init pipeline
-        try self.m_materials.put(name, Material{
-            .m_name = name,
-        });
+        try self.m_materials.put(name, Material{});
         const entry = self.m_materials.getPtr(name);
         return entry orelse @panic("Material just created does not exist in hash map");
     }

@@ -23,7 +23,7 @@ pub const PushConstant = struct {
 
 pub const MAX_DESCRIPTORS = 4;
 
-// This struct holds all programmable shader modules to render something with and handles putting together shader modules
+// This struct holds multiple shader modules to be used with a single pipeline
 // It also holds holds info about the parameters passed into the shader programs
 // https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/02_Graphics_pipeline_basics/00_Introduction.html
 pub const ShaderEffect = struct {

@@ -16,7 +16,8 @@ const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
 const scene = @import("Scene.zig");
 const Scene = scene.Scene;
-const Shader = @import("Shader.zig").Shader;
+const ShaderEffect = @import("Shader.zig").ShaderEffect;
+const ShaderPass = @import("ShaderPass.zig").ShaderPass;
 
 const mat4x4 = @import("../math/Mat4x4.zig");
 const Vec3 = @import("../math/Vec3.zig").Vec3;

@@ -11,12 +11,12 @@ pub const ShaderPassError = error{
 
 // The built version of a ShaderEffect
 pub const ShaderPass = struct {
-    m_shaderEffect: *ShaderEffect,
-    m_pipelineLayout: c.VkPipelineLayout = c.VK_NULL_HANDLE,
-    m_pipeline: c.VkPipeline = c.VK_NULL_HANDLE,
+    m_shaderEffect: *const ShaderEffect,
+    m_pipelineLayout: c.VkPipelineLayout,
+    m_pipeline: c.VkPipeline,
 
     pub fn BuildShaderPass(
-        shaderEffect: *ShaderEffect,
+        shaderEffect: *const ShaderEffect,
         topology: c.VkPrimitiveTopology,
         polygonMode: c.VkPolygonMode,
         bindingDescription: *const c.VkVertexInputBindingDescription,
@@ -128,7 +128,7 @@ pub const ShaderPass = struct {
         const pipelineInfo = c.VkGraphicsPipelineCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .stageCount = @intCast(shaderEffect.m_shaderStages.items.len),
-            .pStages = &shaderEffect.m_shaderStages,
+            .pStages = @ptrCast(&shaderEffect.m_shaderStages),
             .pVertexInputState = &vertexInputState,
             .pInputAssemblyState = &inputAssemblyState,
             .pViewportState = &viewportState,
@@ -163,7 +163,7 @@ pub const ShaderPass = struct {
     }
 };
 
-fn CreatePipelineLayout() !c.VkPipeline {
+fn CreatePipelineLayout() !c.VkPipelineLayout {
     const rContext = try RenderContext.GetInstance();
 
     const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{

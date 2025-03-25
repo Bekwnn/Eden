@@ -16,7 +16,7 @@ const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
 const scene = @import("Scene.zig");
 const Scene = scene.Scene;
-const ShaderEffect = @import("Shader.zig").ShaderEffect;
+const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
 
 const mat4x4 = @import("../math/Mat4x4.zig");
@@ -146,6 +146,18 @@ fn InitializeScene() !void {
             .w = 1.0,
         },
     };
+
+    const testShaderEffect = try ShaderEffect.CreateBasicShader(allocator, "basic.vert", "basic.frag");
+    const testShaderPass = try ShaderPass.BuildShaderPass(
+        &testShaderEffect,
+        c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        c.VK_POLYGON_MODE_FILL,
+        Mesh.GetBindingDescription(),
+        Mesh.GetAttributeDescriptions(),
+    );
+    _ = testShaderPass;
+
+    // set up meshes
     var ix: i8 = -1;
     var iy: i8 = -1;
     while (iy <= 1) : (iy += 1) {

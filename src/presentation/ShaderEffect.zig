@@ -52,6 +52,7 @@ pub const ShaderEffect = struct {
     ) !ShaderEffect {
         var newShader = ShaderEffect{
             .m_shaderStages = ArrayList(ShaderStage).init(allocator),
+            .m_descriptorSetLayouts = undefined,
         };
 
         try newShader.AddShaderStage(allocator, vertShaderSource, c.VK_SHADER_STAGE_VERTEX_BIT);
@@ -68,7 +69,7 @@ pub const ShaderEffect = struct {
     }
 
     pub fn AddShaderStage(self: *Self, allocator: Allocator, shaderSource: []const u8, flags: c.VkShaderStageFlagBits) !void {
-        try self.m_shaderStages.add(ShaderStage{
+        try self.m_shaderStages.append(ShaderStage{
             .m_shader = try CreateShaderModule(allocator, shaderSource),
             .m_flags = flags,
         });

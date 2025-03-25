@@ -9,7 +9,7 @@ const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").Descripto
 const FrameUBO = @import("Camera.zig").FrameUBO;
 const GPUSceneData = @import("Scene.zig").GPUSceneData;
 const PipelineBuilder = @import("PipelineBuilder.zig").PipelineBuilder;
-const Shader = @import("Shader.zig").ShaderEffect;
+const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
 const vkUtil = @import("VulkanUtil.zig");
@@ -820,7 +820,7 @@ fn CreatePipeline(
         RenderContextError.FailedToCreatePipelineLayout,
     );
 
-    var shader = try Shader.CreateBasicShader(
+    var shader = try ShaderEffect.CreateBasicShader(
         allocator,
         vertShaderRelativePath,
         fragShaderRelativePath,
@@ -972,10 +972,12 @@ pub fn FindSupportedFormat(
 
 fn CreateCommandBuffers() !void {
     const rContext = try RenderContext.GetInstance();
-    for (rContext.m_frameData, 0..) |_, i| {
+
+    for (&rContext.m_frameData) |*frameData| {
+        // Create main command buffers
         const allocInfo = c.VkCommandBufferAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .commandPool = rContext.m_frameData[i].m_commandPool,
+            .commandPool = frameData.m_commandPool,
             .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             .commandBufferCount = 1,
             .pNext = null,
@@ -985,63 +987,61 @@ fn CreateCommandBuffers() !void {
             c.vkAllocateCommandBuffers(
                 rContext.m_logicalDevice,
                 &allocInfo,
-                &rContext.m_frameData[i].m_mainCommandBuffer,
+                &frameData.m_mainCommandBuffer,
             ),
             RenderContextError.FailedToCreateCommandBuffers,
         );
-    }
 
-    var i: usize = 0;
-    while (i < rContext.m_frameData.len) : (i += 1) {
-        var beginInfo = c.VkCommandBufferBeginInfo{
-            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .pInheritanceInfo = null,
-            .flags = 0,
-            .pNext = null,
-        };
-
-        try vkUtil.CheckVkSuccess(
-            c.vkBeginCommandBuffer(rContext.m_frameData[i].m_mainCommandBuffer, &beginInfo),
-            RenderContextError.FailedToCreateCommandBuffers,
-        );
-
-        const clearColor = c.VkClearValue{
-            .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
-        };
-        const clearDepth = c.VkClearValue{
-            .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
-        };
-        const clearValues = [_]c.VkClearValue{ clearColor, clearDepth };
-        const renderPassInfo = c.VkRenderPassBeginInfo{
-            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass = rContext.m_renderPass,
-            .framebuffer = rContext.m_swapchain.m_frameBuffers[i],
-            .renderArea = c.VkRect2D{
-                .offset = c.VkOffset2D{
-                    .x = 0,
-                    .y = 0,
-                },
-                .extent = rContext.m_swapchain.m_extent,
-            },
-            .clearValueCount = 2,
-            .pClearValues = &clearValues,
-            .pNext = null,
-        };
-
-        c.vkCmdBeginRenderPass(
-            rContext.m_frameData[i].m_mainCommandBuffer,
-            &renderPassInfo,
-            c.VK_SUBPASS_CONTENTS_INLINE,
-        );
-        {
-            //TODO scene.RenderObjects(commandBuffers[i], renderObjects);
-        }
-        c.vkCmdEndRenderPass(rContext.m_frameData[i].m_mainCommandBuffer);
-
-        try vkUtil.CheckVkSuccess(
-            c.vkEndCommandBuffer(rContext.m_frameData[i].m_mainCommandBuffer),
-            RenderContextError.FailedToRecordCommandBuffers,
-        );
+        //TODO ??? this code seems like it got lost
+        //        var beginInfo = c.VkCommandBufferBeginInfo{
+        //            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        //            .pInheritanceInfo = null,
+        //            .flags = 0,
+        //            .pNext = null,
+        //        };
+        //
+        //        try vkUtil.CheckVkSuccess(
+        //            c.vkBeginCommandBuffer(frameData.m_mainCommandBuffer, &beginInfo),
+        //            RenderContextError.FailedToCreateCommandBuffers,
+        //        );
+        //
+        //        const clearColor = c.VkClearValue{
+        //            .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
+        //        };
+        //        const clearDepth = c.VkClearValue{
+        //            .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
+        //        };
+        //        const clearValues = [_]c.VkClearValue{ clearColor, clearDepth };
+        //        const renderPassInfo = c.VkRenderPassBeginInfo{
+        //            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        //            .renderPass = rContext.m_renderPass,
+        //            .framebuffer = rContext.m_swapchain.m_frameBuffers[i],
+        //            .renderArea = c.VkRect2D{
+        //                .offset = c.VkOffset2D{
+        //                    .x = 0,
+        //                    .y = 0,
+        //                },
+        //                .extent = rContext.m_swapchain.m_extent,
+        //            },
+        //            .clearValueCount = 2,
+        //            .pClearValues = &clearValues,
+        //            .pNext = null,
+        //        };
+        //
+        //        c.vkCmdBeginRenderPass(
+        //            rContext.m_frameData[i].m_mainCommandBuffer,
+        //            &renderPassInfo,
+        //            c.VK_SUBPASS_CONTENTS_INLINE,
+        //        );
+        //        {
+        //            //TODO scene.RenderObjects(commandBuffers[i], renderObjects);
+        //        }
+        //        c.vkCmdEndRenderPass(rContext.m_frameData[i].m_mainCommandBuffer);
+        //
+        //        try vkUtil.CheckVkSuccess(
+        //            c.vkEndCommandBuffer(rContext.m_frameData[i].m_mainCommandBuffer),
+        //            RenderContextError.FailedToRecordCommandBuffers,
+        //        );
     }
 }
 

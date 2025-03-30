@@ -1,5 +1,9 @@
 const c = @import("../c.zig");
 
+const std = @import("std");
+const ArrayList = std.ArrayList;
+const Allocator = std.mem.Allocator;
+
 const vkUtil = @import("VulkanUtil.zig");
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const RenderContext = @import("RenderContext.zig").RenderContext;
@@ -11,6 +15,8 @@ pub const ShaderPassError = error{
 
 // The built version of a ShaderEffect
 pub const ShaderPass = struct {
+    const Self = @This();
+
     m_shaderEffect: *const ShaderEffect,
     m_pipelineLayout: c.VkPipelineLayout,
     m_pipeline: c.VkPipeline,
@@ -21,7 +27,7 @@ pub const ShaderPass = struct {
         polygonMode: c.VkPolygonMode,
         bindingDescription: *const c.VkVertexInputBindingDescription,
         attribDescriptions: []const c.VkVertexInputAttributeDescription,
-    ) !ShaderPass {
+    ) !Self {
         var newShaderPass = ShaderPass{
             .m_shaderEffect = shaderEffect,
             .m_pipelineLayout = try CreatePipelineLayout(),
@@ -163,13 +169,26 @@ pub const ShaderPass = struct {
     }
 };
 
-fn CreatePipelineLayout() !c.VkPipelineLayout {
+fn CreatePipelineLayout(shaderEffect: *const ShaderEffect, allocator: Allocator) !c.VkPipelineLayout {
     const rContext = try RenderContext.GetInstance();
 
+    var setLayouts = ArrayList(c.VkDescriptorSetLayout).init(allocator);
+    setLayouts.append(rContext.m_gpuSceneDescriptorLayout);
+    if (shaderEffect.m_shaderDescriptorSetLayout) |layout| {
+        setLayouts.append(layout);
+    }
+    if (shaderEffect.m_instanceDescriptorSetLayout) |layout| {
+        setLayouts.append(layout);
+    }
+    if (shaderEffect.m_objectDescriptorSetLayout) |layout| {
+        setLayouts.append(layout);
+    }
+
+    //TODO push constants
     const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = rContext.m_descriptorSetLayouts.len,
-        .pSetLayouts = &rContext.m_descriptorSetLayouts,
+        .setLayoutCount = setLayouts.len,
+        .pSetLayouts = setLayouts.ptr,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = null,
         .flags = 0,

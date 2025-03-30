@@ -30,7 +30,13 @@ pub const ShaderEffect = struct {
     const Self = @This();
 
     m_shaderStages: ArrayList(ShaderStage),
-    m_descriptorSetLayouts: [MAX_DESCRIPTORS]c.VkDescriptorSetLayout,
+    // set 0 descriptor layout: rContext gpuSceneData globals
+    // set 1 descriptor layout: per shader layout
+    m_shaderDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
+    // set 2 descriptor layout: per shader instance layout
+    m_instanceDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
+    // set 3 per render object layout
+    m_objectDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
 
     pub const ShaderStage = struct {
         m_shader: c.VkShaderModule,
@@ -52,7 +58,6 @@ pub const ShaderEffect = struct {
     ) !ShaderEffect {
         var newShader = ShaderEffect{
             .m_shaderStages = ArrayList(ShaderStage).init(allocator),
-            .m_descriptorSetLayouts = undefined,
         };
 
         try newShader.AddShaderStage(allocator, vertShaderSource, c.VK_SHADER_STAGE_VERTEX_BIT);

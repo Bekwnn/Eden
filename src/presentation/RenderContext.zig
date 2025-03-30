@@ -101,7 +101,8 @@ pub const RenderContext = struct {
     m_presentQueueIdx: ?u32 = null,
     m_presentQueue: c.VkQueue = undefined,
 
-    //TODO move?
+    // descriptor set 0 data shared across shaders/materials
+    // includes some fundamental scene data like global lights, view and projection matrix
     m_gpuSceneData: GPUSceneData = undefined,
     m_gpuSceneDescriptorLayout: c.VkDescriptorSetLayout = undefined,
 

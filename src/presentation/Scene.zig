@@ -41,9 +41,7 @@ pub const Scene = struct {
     m_defaultCamera: ?*Camera = null,
 
     pub fn CreateCamera(self: *Self, name: []const u8) !void {
-        try self.m_cameras.put(name, Camera{
-            .m_name = name,
-        });
+        try self.m_cameras.put(name, Camera{});
         if (self.m_currentCamera == null) {
             self.m_currentCamera = self.m_cameras.getPtr(name);
         }

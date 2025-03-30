@@ -47,7 +47,7 @@ pub const DescriptorLayoutBuilder = struct {
         const layoutInfo = c.VkDescriptorSetLayoutCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
             .bindingCount = @intCast(self.m_bindings.items.len),
-            .pBindings = @ptrCast(&self.m_bindings.items),
+            .pBindings = self.m_bindings.items.ptr,
             .flags = 0,
             .pNext = null,
         };

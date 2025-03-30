@@ -118,7 +118,11 @@ fn InitializeScene() !void {
         return materialErr;
     };
 
+    try currentScene.CreateCamera("default");
+
     const currentCamera = try currentScene.GetCurrentCamera();
+    currentCamera.m_pos = Vec3{ .x = 0.0, .y = 0.0, .z = -5.0 };
+
     const cameraViewMat = currentCamera.GetViewMatrix();
     const cameraProjMat = currentCamera.GetProjectionMatrix();
 
@@ -147,7 +151,13 @@ fn InitializeScene() !void {
         },
     };
 
-    const testShaderEffect = try ShaderEffect.CreateBasicShader(allocator, "basic.vert", "basic.frag");
+    debug.print("Building ShaderEffect...\n", .{});
+    const testShaderEffect = try ShaderEffect.CreateBasicShader(
+        allocator,
+        "src\\shaders\\compiled\\basic-vert.spv",
+        "src\\shaders\\compiled\\basic-frag.spv",
+    );
+    debug.print("Building ShaderPass...\n", .{});
     const testShaderPass = try ShaderPass.BuildShaderPass(
         &testShaderEffect,
         c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,

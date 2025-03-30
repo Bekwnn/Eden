@@ -1,20 +1,22 @@
 const c = @import("../c.zig");
 
 const std = @import("std");
+const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
+
+const DeletionQueue = @import("../coreutil/DeletionQueue.zig").DeletionQueue;
 
 const Buffer = @import("Buffer.zig").Buffer;
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
 const FrameUBO = @import("Camera.zig").FrameUBO;
 const GPUSceneData = @import("Scene.zig").GPUSceneData;
+const Mesh = @import("Mesh.zig").Mesh;
 const PipelineBuilder = @import("PipelineBuilder.zig").PipelineBuilder;
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
 const vkUtil = @import("VulkanUtil.zig");
-
-const Mesh = @import("Mesh.zig").Mesh;
 
 var instance: ?RenderContext = null;
 
@@ -56,6 +58,7 @@ pub const RenderContextError = error{
     NotInitialized,
 };
 
+//TODO gets used by shader system move out to its own file maybe?
 pub const DescriptorSetType = enum(u8) {
     PerFrame = 0,
     PerPass = 1,

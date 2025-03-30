@@ -135,7 +135,7 @@ pub const DescriptorAllocator = struct {
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .maxSets = setCount,
             .poolSizeCount = @intCast(poolSizes.items.len),
-            .pPoolSizes = @ptrCast(&poolSizes.items),
+            .pPoolSizes = poolSizes.items.ptr,
             .flags = 0,
             .pNext = null,
         };

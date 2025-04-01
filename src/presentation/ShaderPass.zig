@@ -22,6 +22,7 @@ pub const ShaderPass = struct {
     m_pipeline: c.VkPipeline,
 
     pub fn BuildShaderPass(
+        allocator: Allocator,
         shaderEffect: *const ShaderEffect,
         topology: c.VkPrimitiveTopology,
         polygonMode: c.VkPolygonMode,
@@ -30,7 +31,7 @@ pub const ShaderPass = struct {
     ) !Self {
         var newShaderPass = ShaderPass{
             .m_shaderEffect = shaderEffect,
-            .m_pipelineLayout = try CreatePipelineLayout(),
+            .m_pipelineLayout = try CreatePipelineLayout(shaderEffect, allocator),
             .m_pipeline = undefined,
         };
 
@@ -131,10 +132,23 @@ pub const ShaderPass = struct {
             .flags = 0,
         };
 
+        var pipelineShaderStageInfos = ArrayList(c.VkPipelineShaderStageCreateInfo).init(allocator);
+        for (shaderEffect.m_shaderStages.items) |shaderStage| {
+            try pipelineShaderStageInfos.append(c.VkPipelineShaderStageCreateInfo{
+                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                .stage = shaderStage.m_flags,
+                .module = shaderStage.m_shader,
+                .pName = "main",
+                .pSpecializationInfo = null,
+                .flags = 0,
+                .pNext = null,
+            });
+        }
+
         const pipelineInfo = c.VkGraphicsPipelineCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-            .stageCount = @intCast(shaderEffect.m_shaderStages.items.len),
-            .pStages = @ptrCast(shaderEffect.m_shaderStages.items.ptr),
+            .stageCount = @intCast(pipelineShaderStageInfos.items.len),
+            .pStages = pipelineShaderStageInfos.items.ptr,
             .pVertexInputState = &vertexInputState,
             .pInputAssemblyState = &inputAssemblyState,
             .pViewportState = &viewportState,
@@ -173,22 +187,22 @@ fn CreatePipelineLayout(shaderEffect: *const ShaderEffect, allocator: Allocator)
     const rContext = try RenderContext.GetInstance();
 
     var setLayouts = ArrayList(c.VkDescriptorSetLayout).init(allocator);
-    setLayouts.append(rContext.m_gpuSceneDescriptorLayout);
+    try setLayouts.append(rContext.m_gpuSceneDescriptorLayout);
     if (shaderEffect.m_shaderDescriptorSetLayout) |layout| {
-        setLayouts.append(layout);
+        try setLayouts.append(layout);
     }
     if (shaderEffect.m_instanceDescriptorSetLayout) |layout| {
-        setLayouts.append(layout);
+        try setLayouts.append(layout);
     }
     if (shaderEffect.m_objectDescriptorSetLayout) |layout| {
-        setLayouts.append(layout);
+        try setLayouts.append(layout);
     }
 
     //TODO push constants
     const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = setLayouts.len,
-        .pSetLayouts = setLayouts.ptr,
+        .setLayoutCount = @intCast(setLayouts.items.len),
+        .pSetLayouts = setLayouts.items.ptr,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = null,
         .flags = 0,

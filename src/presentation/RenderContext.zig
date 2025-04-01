@@ -110,6 +110,7 @@ pub const RenderContext = struct {
     m_currentFrame: u32 = 0,
 
     m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
+    m_maxDescriptorSets: u32 = 0,
 
     m_descriptorSetLayouts: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSetLayout = undefined,
     m_pipelineLayout: c.VkPipelineLayout = undefined,
@@ -424,7 +425,8 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
     for (deviceList) |device| {
         if (try PhysicalDeviceIsSuitable(allocator, device, window, rContext.m_surface)) {
             rContext.m_physicalDevice = device;
-            rContext.m_msaaSamples = try GetMaxUsableSampleCount();
+            rContext.m_msaaSamples = try GetDeviceMaxUsableSampleCount();
+            rContext.m_maxDescriptorSets = try GetDeviceMaxDescriptorSets();
             return;
         }
     }
@@ -591,7 +593,7 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
     }
 }
 
-fn GetMaxUsableSampleCount() !c.VkSampleCountFlagBits {
+fn GetDeviceMaxUsableSampleCount() !c.VkSampleCountFlagBits {
     const rContext = try RenderContext.GetInstance();
     var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
     c.vkGetPhysicalDeviceProperties(rContext.m_physicalDevice, &deviceProperties);
@@ -624,6 +626,15 @@ fn GetMaxUsableSampleCount() !c.VkSampleCountFlagBits {
 
     std.debug.print("MSAA detected: SAMPLE_COUNT_1_BIT\n", .{});
     return c.VK_SAMPLE_COUNT_1_BIT;
+}
+
+fn GetDeviceMaxDescriptorSets() !u32 {
+    const rContext = try RenderContext.GetInstance();
+    var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
+    c.vkGetPhysicalDeviceProperties(rContext.m_physicalDevice, &deviceProperties);
+
+    std.debug.print("Max bound descriptor sets detected: {}\n", .{deviceProperties.limits.maxBoundDescriptorSets});
+    return deviceProperties.limits.maxBoundDescriptorSets;
 }
 
 fn CreateUniformBuffers() !void {

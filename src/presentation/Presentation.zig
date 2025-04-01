@@ -159,6 +159,7 @@ fn InitializeScene() !void {
     );
     debug.print("Building ShaderPass...\n", .{});
     const testShaderPass = try ShaderPass.BuildShaderPass(
+        allocator,
         &testShaderEffect,
         c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         c.VK_POLYGON_MODE_FILL,

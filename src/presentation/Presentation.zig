@@ -266,13 +266,16 @@ pub fn RenderFrame() !void {
     curTime += game.deltaTime;
     const rContext = try RenderContext.GetInstance();
 
+    // 1sec = 1e9 nanoseconds
+    const timeoutns = 1000000000;
+
     // sync stage
     const fencesResult = c.vkWaitForFences(
         rContext.m_logicalDevice,
         1,
         &rContext.m_frameData[currentFrame].m_renderFence,
         c.VK_TRUE,
-        2000000000,
+        timeoutns,
     );
     if (fencesResult != c.VK_SUCCESS and fencesResult != c.VK_TIMEOUT) {
         return RenderLoopError.FailedToWaitForInFlightFence;
@@ -284,7 +287,6 @@ pub fn RenderFrame() !void {
     );
 
     var imageIndex: u32 = 0;
-    const timeoutns = 1000000000; // 1sec = 1e9 nanoseconds
     const acquireImageResult = c.vkAcquireNextImageKHR(
         rContext.m_logicalDevice,
         rContext.m_swapchain.m_swapchain,
@@ -299,6 +301,8 @@ pub fn RenderFrame() !void {
     } else if (acquireImageResult != c.VK_SUCCESS and acquireImageResult != c.VK_SUBOPTIMAL_KHR) {
         return RenderLoopError.FailedToAcquireNextImage;
     }
+
+    try RecordCommandBuffer(rContext.m_frameData[currentFrame].m_mainCommandBuffer, @intCast(currentFrame));
 
     currentFrame = (currentFrame + 1) % renderContext.FRAMES_IN_FLIGHT;
 }

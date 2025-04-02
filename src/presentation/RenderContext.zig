@@ -12,7 +12,6 @@ const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").Descripto
 const FrameUBO = @import("Camera.zig").FrameUBO;
 const GPUSceneData = @import("Scene.zig").GPUSceneData;
 const Mesh = @import("Mesh.zig").Mesh;
-const PipelineBuilder = @import("PipelineBuilder.zig").PipelineBuilder;
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const swapchain = @import("Swapchain.zig");
 const Swapchain = swapchain.Swapchain;
@@ -199,6 +198,8 @@ pub const RenderContext = struct {
 
         std.debug.print("Creating gpu scene data...\n", .{});
         try InitGPUSceneData(allocator);
+
+        //TODO cleanup all removed/moved functions once they are no longer being referenced for implementation details
 
         //std.debug.print("Creating uniform buffers...\n", .{});
         //try CreateUniformBuffers();
@@ -808,63 +809,63 @@ fn CreateDescriptorSetsAndBuffers() !void {
     }
 }
 
-fn CreatePipeline(
-    allocator: Allocator,
-    vertShaderRelativePath: []const u8,
-    fragShaderRelativePath: []const u8,
-) !void {
-    const rContext = try RenderContext.GetInstance();
-
-    const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = rContext.m_descriptorSetLayouts.len,
-        .pSetLayouts = &rContext.m_descriptorSetLayouts,
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges = null,
-        .flags = 0,
-        .pNext = null,
-    };
-
-    try vkUtil.CheckVkSuccess(
-        c.vkCreatePipelineLayout(
-            rContext.m_logicalDevice,
-            &pipelineLayoutInfo,
-            null,
-            &rContext.m_pipelineLayout,
-        ),
-        RenderContextError.FailedToCreatePipelineLayout,
-    );
-
-    var shader = try ShaderEffect.CreateBasicShader(
-        allocator,
-        vertShaderRelativePath,
-        fragShaderRelativePath,
-    );
-    defer shader.deinit();
-
-    var pipelineBuilder = PipelineBuilder{};
-
-    const bindingDescription = Mesh.GetBindingDescription();
-    const attribDescriptions = Mesh.GetAttributeDescriptions();
-    try pipelineBuilder.InitializeBuilder(
-        c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        c.VK_POLYGON_MODE_FILL,
-        bindingDescription,
-        attribDescriptions,
-    );
-
-    pipelineBuilder.ClearShaderStages();
-    try pipelineBuilder.AddShaderStage(
-        c.VK_SHADER_STAGE_VERTEX_BIT,
-        shader.m_vertShader.?,
-    );
-    try pipelineBuilder.AddShaderStage(
-        c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        shader.m_fragShader.?,
-    );
-
-    rContext.m_pipeline = try pipelineBuilder.BuildPipeline();
-}
+//fn CreatePipeline(
+//    allocator: Allocator,
+//    vertShaderRelativePath: []const u8,
+//    fragShaderRelativePath: []const u8,
+//) !void {
+//    const rContext = try RenderContext.GetInstance();
+//
+//    const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
+//        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+//        .setLayoutCount = rContext.m_descriptorSetLayouts.len,
+//        .pSetLayouts = &rContext.m_descriptorSetLayouts,
+//        .pushConstantRangeCount = 0,
+//        .pPushConstantRanges = null,
+//        .flags = 0,
+//        .pNext = null,
+//    };
+//
+//    try vkUtil.CheckVkSuccess(
+//        c.vkCreatePipelineLayout(
+//            rContext.m_logicalDevice,
+//            &pipelineLayoutInfo,
+//            null,
+//            &rContext.m_pipelineLayout,
+//        ),
+//        RenderContextError.FailedToCreatePipelineLayout,
+//    );
+//
+//    var shader = try ShaderEffect.CreateBasicShader(
+//        allocator,
+//        vertShaderRelativePath,
+//        fragShaderRelativePath,
+//    );
+//    defer shader.deinit();
+//
+//    var pipelineBuilder = PipelineBuilder{};
+//
+//    const bindingDescription = Mesh.GetBindingDescription();
+//    const attribDescriptions = Mesh.GetAttributeDescriptions();
+//    try pipelineBuilder.InitializeBuilder(
+//        c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+//        c.VK_POLYGON_MODE_FILL,
+//        bindingDescription,
+//        attribDescriptions,
+//    );
+//
+//    pipelineBuilder.ClearShaderStages();
+//    try pipelineBuilder.AddShaderStage(
+//        c.VK_SHADER_STAGE_VERTEX_BIT,
+//        shader.m_vertShader.?,
+//    );
+//    try pipelineBuilder.AddShaderStage(
+//        c.VK_SHADER_STAGE_FRAGMENT_BIT,
+//        shader.m_fragShader.?,
+//    );
+//
+//    rContext.m_pipeline = try pipelineBuilder.BuildPipeline();
+//}
 
 fn CreateRenderPass() !void {
     const rContext = try RenderContext.GetInstance();
@@ -1096,7 +1097,7 @@ fn CreateFencesAndSemaphores() !void {
 
     const fenceInfo = c.VkFenceCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = 0,
+        .flags = c.VK_FENCE_CREATE_SIGNALED_BIT,
         .pNext = null,
     };
 

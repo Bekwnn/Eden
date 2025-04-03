@@ -201,22 +201,6 @@ pub const RenderContext = struct {
 
         //TODO cleanup all removed/moved functions once they are no longer being referenced for implementation details
 
-        //std.debug.print("Creating uniform buffers...\n", .{});
-        //try CreateUniformBuffers();
-
-        //std.debug.print("Creating descriptor set layouts...\n", .{});
-        //try CreateDescriptorSetLayouts();
-
-        //std.debug.print("Creating descriptor sets and buffers...\n", .{});
-        //try CreateDescriptorSetsAndBuffers();
-
-        //std.debug.print("Creating pipeline...\n", .{});
-        //try CreatePipeline(
-        //    allocator,
-        //    "src/shaders/compiled/basic_mesh-vert.spv",
-        //    "src/shaders/compiled/basic_mesh-frag.spv",
-        //);
-
         //std.debug.print("Creating color depth resources...\n", .{});
         //try newInstance.m_swapchain.CreateColorAndDepthResources(
         //    newInstance.m_logicalDevice,
@@ -232,7 +216,8 @@ pub const RenderContext = struct {
     }
 
     pub fn Shutdown(self: *RenderContext) void {
-        // if (enableValidationLayers) destroy debug utils messenger
+        // TODO if (enableValidationLayers) destroy debug utils messenger
+        // TODO teardown out of date
         defer c.vkDestroyInstance(self.m_vkInstance, null);
 
         defer c.vkDestroySurfaceKHR(self.m_vkInstance, self.m_surface, null);
@@ -277,15 +262,18 @@ pub const RenderContext = struct {
             self.m_presentQueueIdx.?,
         );
         try CreateRenderPass();
-        try self.m_swapchain.CreateColorAndDepthResources(
-            self.m_logicalDevice,
-            self.m_msaaSamples,
-        );
-        try self.m_swapchain.CreateFrameBuffers(
-            allocator,
-            self.m_logicalDevice,
-            self.m_renderPass,
-        );
+
+        //TODO update based on if we still handle these in RenderContext
+        //try self.m_swapchain.CreateColorAndDepthResources(
+        //    self.m_logicalDevice,
+        //    self.m_msaaSamples,
+        //);
+        //try self.m_swapchain.CreateFrameBuffers(
+        //    allocator,
+        //    self.m_logicalDevice,
+        //    self.m_renderPass,
+        //);
+
         try CreateCommandBuffers();
     }
 
@@ -638,12 +626,6 @@ fn GetDeviceMaxDescriptorSets() !u32 {
     return deviceProperties.limits.maxBoundDescriptorSets;
 }
 
-fn CreateUniformBuffers() !void {
-    //const rContext = try RenderContext.GetInstance();
-
-    //TODO handle this all in shader/pipeline land
-}
-
 fn CreateDescriptorAllocators(allocator: Allocator) !void {
     const rContext = try RenderContext.GetInstance();
 
@@ -669,203 +651,6 @@ fn InitGPUSceneData(allocator: Allocator) !void {
         c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
     );
 }
-
-fn CreateDescriptorSetLayouts() !void {
-    const rContext = try RenderContext.GetInstance();
-
-    // create ubo for mvp matrix
-    const uboLayoutBinding = c.VkDescriptorSetLayoutBinding{
-        .binding = 0,
-        .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-        .pImmutableSamplers = null,
-    };
-
-    const samplerLayoutBinding = c.VkDescriptorSetLayoutBinding{
-        .binding = 1,
-        .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-        .pImmutableSamplers = null,
-    };
-
-    const descriptorLayoutBindings = [_]c.VkDescriptorSetLayoutBinding{ samplerLayoutBinding, uboLayoutBinding };
-    const perFrameLayoutInfo = c.VkDescriptorSetLayoutCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &descriptorLayoutBindings,
-        .flags = 0,
-        .pNext = null,
-    };
-
-    try vkUtil.CheckVkSuccess(
-        c.vkCreateDescriptorSetLayout(
-            rContext.m_logicalDevice,
-            &perFrameLayoutInfo,
-            null,
-            &rContext.m_descriptorSetLayouts[@intFromEnum(DescriptorSetType.PerFrame)],
-        ),
-        RenderContextError.FailedToCreateDescriptorSets,
-    );
-
-    // init the rest of the descriptors as empty
-    // TODO figure out a cleaner way to handle initializing empty descriptor sets
-    for (&rContext.m_descriptorSetLayouts, 0..) |*descriptorSetLayout, iSetType| {
-
-        // skip the one we created above
-        if (iSetType == @intFromEnum(DescriptorSetType.PerFrame)) continue;
-
-        const layoutInfo = c.VkDescriptorSetLayoutCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .bindingCount = 0,
-            .pBindings = 0,
-            .flags = 0,
-            .pNext = null,
-        };
-
-        try vkUtil.CheckVkSuccess(
-            c.vkCreateDescriptorSetLayout(
-                rContext.m_logicalDevice,
-                &layoutInfo,
-                null,
-                descriptorSetLayout,
-            ),
-            RenderContextError.FailedToCreateDescriptorSets,
-        );
-    }
-}
-
-fn CreateDescriptorSetsAndBuffers() !void {
-    const rContext = try RenderContext.GetInstance();
-
-    // create descriptor sets and buffers per frame in flight
-    for (&rContext.m_frameData) |*frameData| {
-        const allocInfo = c.VkDescriptorSetAllocateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .descriptorPool = rContext.m_descriptorPool,
-            .descriptorSetCount = @intCast(frameData.m_descriptorSets.len),
-            .pSetLayouts = &rContext.m_descriptorSetLayouts,
-            .pNext = null,
-        };
-
-        try vkUtil.CheckVkSuccess(
-            c.vkAllocateDescriptorSets(
-                rContext.m_logicalDevice,
-                &allocInfo,
-                &frameData.m_descriptorSets,
-            ),
-            RenderContextError.FailedToCreateDescriptorSets,
-        );
-
-        const bufferInfo = c.VkDescriptorBufferInfo{
-            .buffer = frameData.m_uniformBuffers[@intFromEnum(DescriptorSetType.PerFrame)].m_buffer,
-            .offset = 0,
-            .range = @sizeOf(FrameUBO),
-        };
-
-        //TODO add texture sampler to Material or MaterialInstance UBO
-        //const imageInfo = c.VkDescriptorImageInfo{
-        //    .imageLayout = c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        //    .imageView = textureImage.m_imageView,
-        //    .sampler = textureSampler,
-        //};
-
-        const uboDescriptorWrite = c.VkWriteDescriptorSet{
-            .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = frameData.m_descriptorSets[@intFromEnum(DescriptorSetType.PerFrame)],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = 1,
-            .pBufferInfo = &bufferInfo,
-            .pImageInfo = null,
-            .pTexelBufferView = null,
-            .pNext = null,
-        };
-        //const textureSamplerDescriptorWrite = c.VkWriteDescriptorSet{
-        //    .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        //    .dstSet = descriptorSets[DescriptorSetType.PerFrame],
-        //    .dstBinding = 1,
-        //    .dstArrayElement = 0,
-        //    .descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        //    .descriptorCount = 1,
-        //    .pBufferInfo = null,
-        //    .pImageInfo = &imageInfo,
-        //    .pTexelBufferView = null,
-        //    .pNext = null,
-        //};
-        const descriptorWrites = [_]c.VkWriteDescriptorSet{
-            uboDescriptorWrite,
-            //textureSamplerDescriptorWrite,
-        };
-        c.vkUpdateDescriptorSets(
-            rContext.m_logicalDevice,
-            descriptorWrites.len,
-            &descriptorWrites,
-            0,
-            null,
-        );
-    }
-}
-
-//fn CreatePipeline(
-//    allocator: Allocator,
-//    vertShaderRelativePath: []const u8,
-//    fragShaderRelativePath: []const u8,
-//) !void {
-//    const rContext = try RenderContext.GetInstance();
-//
-//    const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
-//        .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-//        .setLayoutCount = rContext.m_descriptorSetLayouts.len,
-//        .pSetLayouts = &rContext.m_descriptorSetLayouts,
-//        .pushConstantRangeCount = 0,
-//        .pPushConstantRanges = null,
-//        .flags = 0,
-//        .pNext = null,
-//    };
-//
-//    try vkUtil.CheckVkSuccess(
-//        c.vkCreatePipelineLayout(
-//            rContext.m_logicalDevice,
-//            &pipelineLayoutInfo,
-//            null,
-//            &rContext.m_pipelineLayout,
-//        ),
-//        RenderContextError.FailedToCreatePipelineLayout,
-//    );
-//
-//    var shader = try ShaderEffect.CreateBasicShader(
-//        allocator,
-//        vertShaderRelativePath,
-//        fragShaderRelativePath,
-//    );
-//    defer shader.deinit();
-//
-//    var pipelineBuilder = PipelineBuilder{};
-//
-//    const bindingDescription = Mesh.GetBindingDescription();
-//    const attribDescriptions = Mesh.GetAttributeDescriptions();
-//    try pipelineBuilder.InitializeBuilder(
-//        c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-//        c.VK_POLYGON_MODE_FILL,
-//        bindingDescription,
-//        attribDescriptions,
-//    );
-//
-//    pipelineBuilder.ClearShaderStages();
-//    try pipelineBuilder.AddShaderStage(
-//        c.VK_SHADER_STAGE_VERTEX_BIT,
-//        shader.m_vertShader.?,
-//    );
-//    try pipelineBuilder.AddShaderStage(
-//        c.VK_SHADER_STAGE_FRAGMENT_BIT,
-//        shader.m_fragShader.?,
-//    );
-//
-//    rContext.m_pipeline = try pipelineBuilder.BuildPipeline();
-//}
 
 fn CreateRenderPass() !void {
     const rContext = try RenderContext.GetInstance();
@@ -1009,55 +794,55 @@ fn CreateCommandBuffers() !void {
         );
 
         //TODO ??? this code seems like it got lost
-        //        var beginInfo = c.VkCommandBufferBeginInfo{
-        //            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        //            .pInheritanceInfo = null,
-        //            .flags = 0,
-        //            .pNext = null,
-        //        };
+        //var beginInfo = c.VkCommandBufferBeginInfo{
+        //    .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        //    .pInheritanceInfo = null,
+        //    .flags = 0,
+        //    .pNext = null,
+        //};
         //
-        //        try vkUtil.CheckVkSuccess(
-        //            c.vkBeginCommandBuffer(frameData.m_mainCommandBuffer, &beginInfo),
-        //            RenderContextError.FailedToCreateCommandBuffers,
-        //        );
+        //try vkUtil.CheckVkSuccess(
+        //    c.vkBeginCommandBuffer(frameData.m_mainCommandBuffer, &beginInfo),
+        //    RenderContextError.FailedToCreateCommandBuffers,
+        //);
         //
-        //        const clearColor = c.VkClearValue{
-        //            .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
-        //        };
-        //        const clearDepth = c.VkClearValue{
-        //            .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
-        //        };
-        //        const clearValues = [_]c.VkClearValue{ clearColor, clearDepth };
-        //        const renderPassInfo = c.VkRenderPassBeginInfo{
-        //            .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        //            .renderPass = rContext.m_renderPass,
-        //            .framebuffer = rContext.m_swapchain.m_frameBuffers[i],
-        //            .renderArea = c.VkRect2D{
-        //                .offset = c.VkOffset2D{
-        //                    .x = 0,
-        //                    .y = 0,
-        //                },
-        //                .extent = rContext.m_swapchain.m_extent,
-        //            },
-        //            .clearValueCount = 2,
-        //            .pClearValues = &clearValues,
-        //            .pNext = null,
-        //        };
+        //const clearColor = c.VkClearValue{
+        //    .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
+        //};
+        //const clearDepth = c.VkClearValue{
+        //    .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
+        //};
+        //const clearValues = [_]c.VkClearValue{ clearColor, clearDepth };
+        //const renderPassInfo = c.VkRenderPassBeginInfo{
+        //    .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        //    .renderPass = rContext.m_renderPass,
+        //    .framebuffer = rContext.m_swapchain.m_frameBuffers[i],
+        //    .renderArea = c.VkRect2D{
+        //        .offset = c.VkOffset2D{
+        //            .x = 0,
+        //            .y = 0,
+        //        },
+        //        .extent = rContext.m_swapchain.m_extent,
+        //    },
+        //    .clearValueCount = 2,
+        //    .pClearValues = &clearValues,
+        //    .pNext = null,
+        //};
         //
-        //        c.vkCmdBeginRenderPass(
-        //            rContext.m_frameData[i].m_mainCommandBuffer,
-        //            &renderPassInfo,
-        //            c.VK_SUBPASS_CONTENTS_INLINE,
-        //        );
-        //        {
-        //            //TODO scene.RenderObjects(commandBuffers[i], renderObjects);
-        //        }
-        //        c.vkCmdEndRenderPass(rContext.m_frameData[i].m_mainCommandBuffer);
+        //c.vkCmdBeginRenderPass(
+        //    rContext.m_frameData[i].m_mainCommandBuffer,
+        //    &renderPassInfo,
+        //    c.VK_SUBPASS_CONTENTS_INLINE,
+        //);
+        //{
+        //    //TODO scene.RenderObjects(commandBuffers[i], renderObjects);
+        //}
+        //c.vkCmdEndRenderPass(rContext.m_frameData[i].m_mainCommandBuffer);
         //
-        //        try vkUtil.CheckVkSuccess(
-        //            c.vkEndCommandBuffer(rContext.m_frameData[i].m_mainCommandBuffer),
-        //            RenderContextError.FailedToRecordCommandBuffers,
-        //        );
+        //try vkUtil.CheckVkSuccess(
+        //    c.vkEndCommandBuffer(rContext.m_frameData[i].m_mainCommandBuffer),
+        //    RenderContextError.FailedToRecordCommandBuffers,
+        //);
     }
 }
 
@@ -1075,13 +860,13 @@ fn CreateCommandPool() !void {
         .pNext = null,
     };
 
-    for (rContext.m_frameData, 0..) |_, i| {
+    for (&rContext.m_frameData) |*frameData| {
         try vkUtil.CheckVkSuccess(
             c.vkCreateCommandPool(
                 rContext.m_logicalDevice,
                 &poolInfo,
                 null,
-                &rContext.m_frameData[i].m_commandPool,
+                &frameData.m_commandPool,
             ),
             RenderContextError.FailedToCreateCommandPool,
         );
@@ -1102,17 +887,17 @@ fn CreateFencesAndSemaphores() !void {
     };
 
     var rContext = try RenderContext.GetInstance();
-    for (rContext.m_frameData, 0..) |_, i| {
+    for (&rContext.m_frameData) |*frameData| {
         try vkUtil.CheckVkSuccess(
-            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_frameData[i].m_renderSemaphore),
+            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &frameData.m_renderSemaphore),
             RenderContextError.FailedToCreateSemaphores,
         );
         try vkUtil.CheckVkSuccess(
-            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &rContext.m_frameData[i].m_swapchainSemaphore),
+            c.vkCreateSemaphore(rContext.m_logicalDevice, &semaphoreInfo, null, &frameData.m_swapchainSemaphore),
             RenderContextError.FailedToCreateSemaphores,
         );
         try vkUtil.CheckVkSuccess(
-            c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &rContext.m_frameData[i].m_renderFence),
+            c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &frameData.m_renderFence),
             RenderContextError.FailedToCreateFences,
         );
     }

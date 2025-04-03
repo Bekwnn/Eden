@@ -229,17 +229,20 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .pNext = null,
     };
 
+    //TODO all render objs should be grouped into arrays based on their pipeline
+    // pipelines should be sorted by draw step (opaque, transparent, etc)
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
-        for (&renderables.items, 0..) |*renderObj, i| {
-            _ = renderObj;
-            _ = i;
-            //TODO
-            //c.vkCmdBindVertexBuffers();
-            //c.vkCmdBindIndexBuffer();
-            //c.vkCmdBindDescriptorSets();
-            //c.vkCmdDrawIndexed();
-        }
+        //for each render type (shadow, opaque, transparent, post process, etc)
+        //  bindGlobalDescriptors()
+        //  for each material:
+        //    bindPipeline()
+        //    bindPerMaterialDescriptors()
+        //    for each material instance:
+        //      bindPerInstanceDescriptors()
+        //      for each render object:
+        //        bindPerObjectDescriptors()
+        //        draw()
     }
     c.vkCmdEndRenderPass(commandBuffer);
 
@@ -306,11 +309,3 @@ pub fn RenderFrame() !void {
 
     currentFrame = (currentFrame + 1) % renderContext.FRAMES_IN_FLIGHT;
 }
-
-//fn DrawBackground(cmd: c.VkCommandBuffer) void {
-//
-//}
-//
-//fn DrawMeshes(cmd: c.VkCommandBuffer) void {
-//
-//}

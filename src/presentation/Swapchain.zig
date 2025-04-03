@@ -23,7 +23,6 @@ pub const SwapchainSupportDetails = struct {
     presentModes: []c.VkPresentModeKHR,
 };
 
-//TODO Should the instance of this live somewhere in PresentationInstance?
 pub const Swapchain = struct {
     m_swapchain: c.VkSwapchainKHR,
     m_imageCount: u32,

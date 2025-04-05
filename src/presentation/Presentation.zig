@@ -231,6 +231,11 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
+        // Update and bind gpu scene data:
+        const currentFrameData = rContext.GetCurrentFrame();
+        @memcpy(currentFrameData.m_gpuSceneDataBuffer.m_memory, currentFrameData.m_gpuSceneData);
+        // TODO UpdateGPUSceneData() at some point
+
         //TODO bind everything to a single vert/index buffer?
 
         //for each render type (shadow, opaque, transparent, post process, etc)

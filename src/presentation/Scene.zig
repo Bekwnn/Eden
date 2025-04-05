@@ -76,6 +76,8 @@ pub const Scene = struct {
         }
     }
 
+    //TODO delete/remove
+    // scene shouldn't be in charge of drawing itself imo
     pub fn DrawScene(
         self: *Self,
         cmd: c.VkCommandBuffer,

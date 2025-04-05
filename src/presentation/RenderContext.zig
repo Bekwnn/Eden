@@ -77,6 +77,9 @@ pub const FrameData = struct {
     m_commandPool: c.VkCommandPool,
     m_mainCommandBuffer: c.VkCommandBuffer,
 
+    m_gpuSceneData: GPUSceneData = undefined,
+    m_gpuSceneDataBuffer: Buffer = undefined,
+
     //TODO move these out to pipeline?
     m_descriptorAllocator: DescriptorAllocator,
     m_descriptorSets: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSet = undefined,
@@ -102,7 +105,6 @@ pub const RenderContext = struct {
 
     // descriptor set 0 data shared across shaders/materials
     // includes some fundamental scene data like global lights, view and projection matrix
-    m_gpuSceneData: GPUSceneData = undefined,
     m_gpuSceneDescriptorLayout: c.VkDescriptorSetLayout = undefined,
 
     m_frameData: [FRAMES_IN_FLIGHT]FrameData = undefined,
@@ -650,6 +652,14 @@ fn InitGPUSceneData(allocator: Allocator) !void {
         rContext.m_logicalDevice,
         c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
     );
+
+    for (&rContext.m_frameData) |*frameData| {
+        frameData.m_gpuSceneDataBuffer = Buffer.CreateBuffer(
+            @sizeOf(GPUSceneData),
+            c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        );
+    }
 }
 
 fn CreateRenderPass() !void {

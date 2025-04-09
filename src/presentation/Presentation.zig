@@ -190,6 +190,9 @@ fn InitializeScene() !void {
 }
 
 pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
+    const rContext = try RenderContext.GetInstance();
+    const currentFrameData = rContext.GetCurrentFrame();
+
     const beginInfo = c.VkCommandBufferBeginInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext = null,
@@ -209,7 +212,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         );
         writer.UpdateSet(
             rContext.m_logicalDevice,
-
         );
     }
 
@@ -217,8 +219,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         c.vkBeginCommandBuffer(commandBuffer, &beginInfo),
         RenderLoopError.FailedToBeginCommandBuffer,
     );
-
-    const rContext = try RenderContext.GetInstance();
 
     const clearColor = c.VkClearValue{
         .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },

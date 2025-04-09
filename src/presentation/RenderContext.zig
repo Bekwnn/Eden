@@ -77,13 +77,13 @@ pub const FrameData = struct {
     m_commandPool: c.VkCommandPool,
     m_mainCommandBuffer: c.VkCommandBuffer,
 
+    // descriptor set 0 scene data used by most shaders
     m_gpuSceneData: GPUSceneData = undefined,
     m_gpuSceneDataBuffer: Buffer = undefined,
+    m_gpuSceneDataSet: c.VkDescriptorSet = undefined,
 
-    //TODO move these out to pipeline?
+    // do we want one for each frame?
     m_descriptorAllocator: DescriptorAllocator,
-    m_descriptorSets: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSet = undefined,
-    m_uniformBuffers: [DESCRIPTOR_SET_COUNT]Buffer = undefined,
 };
 
 pub const FRAMES_IN_FLIGHT = 2;
@@ -113,7 +113,6 @@ pub const RenderContext = struct {
     m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
     m_maxDescriptorSets: u32 = 0,
 
-    m_descriptorSetLayouts: [DESCRIPTOR_SET_COUNT]c.VkDescriptorSetLayout = undefined,
     m_pipelineLayout: c.VkPipelineLayout = undefined,
     m_pipeline: c.VkPipeline = undefined,
 

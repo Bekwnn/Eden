@@ -191,7 +191,6 @@ fn InitializeScene() !void {
 
 pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
     const rContext = try RenderContext.GetInstance();
-    const currentFrameData = rContext.GetCurrentFrame();
 
     const beginInfo = c.VkCommandBufferBeginInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -199,21 +198,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .flags = 0,
         .pInheritanceInfo = null,
     };
-
-    //update gpuscenedata
-    //TODO move
-    {
-        var writer = DescriptorWriter.init(allocator);
-        writer.WriteBuffer(
-            0,
-            currentFrameData.m_gpuSceneDataBuffer.m_buffer,
-            @sizeOf(scene.GPUSceneData),
-            c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        );
-        writer.UpdateSet(
-            rContext.m_logicalDevice,
-        );
-    }
 
     try vkUtil.CheckVkSuccess(
         c.vkBeginCommandBuffer(commandBuffer, &beginInfo),
@@ -275,6 +259,27 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     );
 }
 
+pub fn UpdateUniformSceneBuffer() void {
+    const rContext = try RenderContext.GetInstance();
+    const currentFrameData = rContext.GetCurrentFrame();
+
+    const gpuSceneDataBuffer = currentFrameData.m_descriptorAllocator.Allocate(rContext.m_logicalDevice, rContext.m_gpuSceneDescriptorLayout,);
+
+    //update gpuscenedata
+    {
+        var writer = DescriptorWriter.init(allocator);
+        writer.WriteBuffer(
+            0,
+            currentFrameData.m_gpuSceneDataBuffer.m_buffer,
+            @sizeOf(scene.GPUSceneData),
+            c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        );
+        writer.UpdateSet(
+            rContext.m_logicalDevice,
+        );
+    }
+}
+
 //TODO make a generalized function
 var framebufferResized = false;
 var showDemoWindow = true;
@@ -328,6 +333,8 @@ pub fn RenderFrame() !void {
     } else if (acquireImageResult != c.VK_SUCCESS and acquireImageResult != c.VK_SUBOPTIMAL_KHR) {
         return RenderLoopError.FailedToAcquireNextImage;
     }
+
+    try UpdateUniformSceneBuffer();
 
     try RecordCommandBuffer(rContext.m_frameData[currentFrame].m_mainCommandBuffer, @intCast(currentFrame));
 

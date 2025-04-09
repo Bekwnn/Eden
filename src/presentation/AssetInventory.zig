@@ -55,7 +55,11 @@ pub const AssetInventory = struct {
         return self.m_materials.getPtr(name);
     }
 
-    pub fn CreateMesh(self: *AssetInventory, name: []const u8, filePath: []const u8) !*Mesh {
+    pub fn CreateMesh(
+        self: *AssetInventory,
+        name: []const u8,
+        filePath: []const u8,
+    ) !*Mesh {
         const meshPath = try filePathUtils.CwdToAbsolute(allocator, filePath);
         defer allocator.free(meshPath);
         //TODO avoid unnecessary copyingo on creation

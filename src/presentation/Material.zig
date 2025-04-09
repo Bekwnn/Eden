@@ -13,5 +13,5 @@ pub var materialCache = StringHashMap(Material).init(allocator);
 
 pub const Material = struct {
     //TODO multiple pass shaders?
-    m_shaderPass: *ShaderPass = undefined,
+    m_shaderPass: ShaderPass = undefined,
 };

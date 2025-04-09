@@ -654,7 +654,7 @@ fn InitGPUSceneData(allocator: Allocator) !void {
     );
 
     for (&rContext.m_frameData) |*frameData| {
-        frameData.m_gpuSceneDataBuffer = Buffer.CreateBuffer(
+        frameData.m_gpuSceneDataBuffer = try Buffer.CreateBuffer(
             @sizeOf(GPUSceneData),
             c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,

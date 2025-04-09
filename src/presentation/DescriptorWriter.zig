@@ -2,8 +2,7 @@ const c = @import("../c.zig");
 
 const std = @import("std");
 const ArrayList = std.ArrayList;
-//TODO delete if not needed
-//const Allocator = std.mem.Allocator;
+const Allocator = std.mem.Allocator;
 
 pub const DescriptorWriter = struct {
     const Self = @This();
@@ -11,6 +10,14 @@ pub const DescriptorWriter = struct {
     m_imageInfos: ArrayList(c.VkDescriptorImageInfo),
     m_bufferInfos: ArrayList(c.VkDescriptorBufferInfo),
     m_writes: ArrayList(c.VkWriteDescriptorSet),
+
+    pub fn init(allocator: Allocator) Self {
+        return Self{
+            .m_imageInfos = ArrayList(c.VkDescriptorImageInfo).init(allocator),
+            .m_bufferInfos = ArrayList(c.VkDescriptorBufferInfo).init(allocator),
+            .m_writes = ArrayList(c.VkWriteDescriptorSet).init(allocator),
+        };
+    }
 
     pub fn WriteImage(
         self: *Self,

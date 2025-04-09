@@ -18,6 +18,7 @@ const scene = @import("Scene.zig");
 const Scene = scene.Scene;
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
+const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
 
 const mat4x4 = @import("../math/Mat4x4.zig");
 const Vec3 = @import("../math/Vec3.zig").Vec3;
@@ -127,29 +128,31 @@ fn InitializeScene() !void {
     const cameraProjMat = currentCamera.GetProjectionMatrix();
 
     const rContext = try RenderContext.GetInstance();
-    rContext.m_gpuSceneData = scene.GPUSceneData{
-        .m_view = cameraViewMat,
-        .m_projection = cameraProjMat,
-        .m_viewProj = cameraViewMat.Mul(&cameraProjMat),
-        .m_ambientColor = Vec4{
-            .x = 0.5,
-            .y = 0.5,
-            .z = 0.5,
-            .w = 1.0,
-        },
-        .m_sunDirection = Vec4{
-            .x = 0.0,
-            .y = 0.0,
-            .z = -1.0,
-            .w = 0.0,
-        },
-        .m_sunColor = Vec4{
-            .x = 1.0,
-            .y = 1.0,
-            .z = 1.0,
-            .w = 1.0,
-        },
-    };
+    for (&rContext.m_frameData) |*frameData| {
+        frameData.m_gpuSceneData = scene.GPUSceneData{
+            .m_view = cameraViewMat,
+            .m_projection = cameraProjMat,
+            .m_viewProj = cameraViewMat.Mul(&cameraProjMat),
+            .m_ambientColor = Vec4{
+                .x = 0.5,
+                .y = 0.5,
+                .z = 0.5,
+                .w = 1.0,
+            },
+            .m_sunDirection = Vec4{
+                .x = 0.0,
+                .y = 0.0,
+                .z = -1.0,
+                .w = 0.0,
+            },
+            .m_sunColor = Vec4{
+                .x = 1.0,
+                .y = 1.0,
+                .z = 1.0,
+                .w = 1.0,
+            },
+        };
+    }
 
     debug.print("Building ShaderEffect...\n", .{});
     const testShaderEffect = try ShaderEffect.CreateBasicShader(
@@ -158,7 +161,7 @@ fn InitializeScene() !void {
         "src\\shaders\\compiled\\basic-frag.spv",
     );
     debug.print("Building ShaderPass...\n", .{});
-    const testShaderPass = try ShaderPass.BuildShaderPass(
+    material.m_shaderPass = try ShaderPass.BuildShaderPass(
         allocator,
         &testShaderEffect,
         c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -166,7 +169,6 @@ fn InitializeScene() !void {
         Mesh.GetBindingDescription(),
         Mesh.GetAttributeDescriptions(),
     );
-    _ = testShaderPass;
 
     // set up meshes
     var ix: i8 = -1;
@@ -174,18 +176,14 @@ fn InitializeScene() !void {
     while (iy <= 1) : (iy += 1) {
         while (ix <= 1) : (ix += 1) {
             // TODO build properly
-            _ = mesh;
             try renderables.append(RenderObject{
-                .m_firstIndex = 0,
-                .m_indexCount = 0,
-                .m_indexBuffer = undefined,
+                .m_mesh = mesh,
                 .m_material = material,
                 .m_transform = mat4x4.TranslationMat4x4(Vec3{
                     .x = @as(f32, @floatFromInt(ix)) * 2.0,
                     .y = @as(f32, @floatFromInt(iy)) * 2.0,
                     .z = 0.0,
                 }),
-                .m_vertBufferAddress = undefined,
             });
         }
     }
@@ -198,6 +196,22 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .flags = 0,
         .pInheritanceInfo = null,
     };
+
+    //update gpuscenedata
+    //TODO move
+    {
+        var writer = DescriptorWriter.init(allocator);
+        writer.WriteBuffer(
+            0,
+            currentFrameData.m_gpuSceneDataBuffer.m_buffer,
+            @sizeOf(scene.GPUSceneData),
+            c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        );
+        writer.UpdateSet(
+            rContext.m_logicalDevice,
+
+        );
+    }
 
     try vkUtil.CheckVkSuccess(
         c.vkBeginCommandBuffer(commandBuffer, &beginInfo),
@@ -231,12 +245,16 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
-        // Update and bind gpu scene data:
-        const currentFrameData = rContext.GetCurrentFrame();
-        @memcpy(currentFrameData.m_gpuSceneDataBuffer.m_memory, currentFrameData.m_gpuSceneData);
         // TODO UpdateGPUSceneData() at some point
 
-        //TODO bind everything to a single vert/index buffer?
+        // TODO bind everything to a single vert/index buffer?
+
+        var renderableIter = currentScene.m_renderables.iterator();
+        while (renderableIter.next()) |renderableEntry| {
+            renderableEntry.value_ptr.Draw(commandBuffer) catch |err| {
+                std.debug.print("Error {} drawing {s}\n", .{ err, renderableEntry.key_ptr });
+            };
+        }
 
         //for each render type (shadow, opaque, transparent, post process, etc)
         //  bindGlobalDescriptors()
@@ -273,6 +291,7 @@ pub fn RenderFrame() !void {
 
     curTime += game.deltaTime;
     const rContext = try RenderContext.GetInstance();
+    const currentFrameData = rContext.GetCurrentFrame();
 
     // 1sec = 1e9 nanoseconds
     const timeoutns = 1000000000;
@@ -281,7 +300,7 @@ pub fn RenderFrame() !void {
     const fencesResult = c.vkWaitForFences(
         rContext.m_logicalDevice,
         1,
-        &rContext.m_frameData[currentFrame].m_renderFence,
+        &currentFrameData.m_renderFence,
         c.VK_TRUE,
         timeoutns,
     );
@@ -299,7 +318,7 @@ pub fn RenderFrame() !void {
         rContext.m_logicalDevice,
         rContext.m_swapchain.m_swapchain,
         timeoutns,
-        rContext.m_frameData[currentFrame].m_swapchainSemaphore,
+        currentFrameData.m_swapchainSemaphore,
         null,
         &imageIndex,
     );

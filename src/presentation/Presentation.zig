@@ -240,6 +240,19 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
             };
         }
 
+        // bind scene data
+        // updating and binding this data should probably be broken up into two steps, but for now doing both works
+        c.vkCmdBindDescriptorSets(
+            cmd,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.m_material.m_shaderPass.m_pipelineLayout,
+            @intFromEnum(renderContext.DescriptorSetType.PerFrame),
+            1,
+            self.m_material.m_shaderPass.m_descriptors,
+            0,
+            null,
+        );
+
         //for each render type (shadow, opaque, transparent, post process, etc)
         //  bindGlobalDescriptors()
         //  for each material:
@@ -259,38 +272,31 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     );
 }
 
-pub fn UpdateUniformSceneBuffer() void {
+pub fn UpdateAndBindUniformSceneBuffer(cmd: c.VkCommandBuffer) !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
 
-    const gpuSceneDataBuffer = currentFrameData.m_descriptorAllocator.Allocate(rContext.m_logicalDevice, rContext.m_gpuSceneDescriptorLayout,);
+    // update scene data
+    try currentFrameData.m_gpuSceneDataBuffer.MapData(
+        &currentFrameData.m_gpuSceneData,
+        @sizeOf(@TypeOf(currentFrameData.m_gpuSceneData)),
+    );
 
-    //update gpuscenedata
-    {
-        var writer = DescriptorWriter.init(allocator);
-        writer.WriteBuffer(
-            0,
-            currentFrameData.m_gpuSceneDataBuffer.m_buffer,
-            @sizeOf(scene.GPUSceneData),
-            c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        );
-        writer.UpdateSet(
-            rContext.m_logicalDevice,
-        );
-    }
+    //update gpuscenedata ??
+    //{
+    //    var writer = DescriptorWriter.init(allocator);
+    //    writer.WriteBuffer(
+    //        0,
+    //        currentFrameData.m_gpuSceneDataBuffer.m_buffer,
+    //        @sizeOf(scene.GPUSceneData),
+    //        c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    //    );
+    //    writer.UpdateSet(
+    //        rContext.m_logicalDevice,
+    //    );
+    //}
 }
 
-//TODO make a generalized function
-var framebufferResized = false;
-var showDemoWindow = true;
-var f: f32 = 0.0;
-var counter: u32 = 0;
-//TODO
-//pub fun FramebufferResizeCallback(GLFWwindow* window, u32 width, u32 height) void {
-//    framebufferResized = true;
-//}
-var currentFrame: usize = 0;
-//pub fn RenderFrame(window: *c.SDL_Window) !void { //ImGui
 pub fn RenderFrame() !void {
     const swapchainAllocator = std.heap.page_allocator;
 
@@ -314,7 +320,7 @@ pub fn RenderFrame() !void {
     }
 
     try vkUtil.CheckVkSuccess(
-        c.vkResetFences(rContext.m_logicalDevice, 1, &rContext.m_frameData[currentFrame].m_renderFence),
+        c.vkResetFences(rContext.m_logicalDevice, 1, &currentFrameData.m_renderFence),
         RenderLoopError.FailedToResetFences,
     );
 
@@ -334,9 +340,11 @@ pub fn RenderFrame() !void {
         return RenderLoopError.FailedToAcquireNextImage;
     }
 
-    try UpdateUniformSceneBuffer();
+    try UpdateAndBindUniformSceneBuffer(currentFrameData.m_mainCommandBuffer);
 
-    try RecordCommandBuffer(rContext.m_frameData[currentFrame].m_mainCommandBuffer, @intCast(currentFrame));
+    try RecordCommandBuffer(currentFrameData.m_mainCommandBuffer, @intCast(rContext.m_currentFrame));
 
-    currentFrame = (currentFrame + 1) % renderContext.FRAMES_IN_FLIGHT;
+    //TODO submit
+
+    rContext.m_currentFrame = (rContext.m_currentFrame + 1) % renderContext.FRAMES_IN_FLIGHT;
 }

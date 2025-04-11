@@ -9,7 +9,8 @@ const Mat4x4 = mat4x4.Mat4x4;
 const Buffer = @import("Buffer.zig").Buffer;
 const Material = @import("Material.zig").Material;
 const Mesh = @import("Mesh.zig").Mesh;
-const RenderContext = @import("RenderContext.zig").RenderContext;
+const renderContext = @import("RenderContext.zig");
+const RenderContext = renderContext.RenderContext;
 
 pub const RenderObjError = error{
     NoMeshBufferData,
@@ -25,29 +26,12 @@ pub const RenderObject = struct {
 
     pub fn Draw(self: Self, cmd: c.VkCommandBuffer) !void {
         if (self.m_mesh.m_bufferData) |*meshBufferData| {
-            const rContext = try RenderContext.GetInstance();
-
             //bind pipeline
             //TODO sort render objs by material and move this out
             c.vkCmdBindPipeline(
                 cmd,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 self.m_material.m_shaderPass.m_pipeline,
-            );
-
-            //bind scene data
-            //TODO move this out and only bind global scene data once
-            const currentFrameData = rContext.GetCurrentFrame();
-            @memcpy(currentFrameData.m_gpuSceneDataBuffer.m_memory, currentFrameData.m_gpuSceneData);
-            c.vkCmdBindDescriptorSets(
-                cmd,
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.m_material.m_shaderPass.m_pipelineLayout,
-                0,
-                1,
-                self.m_material.m_shaderPass.m_descriptors,
-                0,
-                null,
             );
 
             //bind vertex and index buffers
@@ -75,7 +59,7 @@ pub const RenderObject = struct {
                 cmd,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 self.m_materialInstance.m_material.m_shaderPass.m_pipelineLayout,
-                0,
+                2,
                 1,
                 self.m_materialInstance.m_shaderPass.m_descriptors,
                 0,

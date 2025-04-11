@@ -1,5 +1,7 @@
 const c = @import("../c.zig");
 
+const std = @import("std");
+
 const vkUtil = @import("VulkanUtil.zig");
 const RenderContext = @import("RenderContext.zig").RenderContext;
 const VertexData = @import("Mesh.zig").VertexData;
@@ -7,11 +9,14 @@ const Mesh = @import("Mesh.zig").Mesh;
 
 pub const BufferError = error{
     FailedToCreateBuffer,
-    FailedToCreateVertexBuffer,
     FailedToCreateIndexBuffer,
+    FailedToCreateVertexBuffer,
+    FailedToMapData,
 };
 
 pub const Buffer = struct {
+    const Self = @This();
+
     m_buffer: c.VkBuffer,
     m_memory: c.VkDeviceMemory,
 
@@ -90,6 +95,40 @@ pub const Buffer = struct {
         try CopyBuffer(stagingBuffer.m_buffer, newIndexBuffer.m_buffer, bufferSize);
 
         return newIndexBuffer;
+    }
+
+    pub fn MapData(
+        self: *Self,
+        inData: *anyopaque,
+        bufferSize: c.VkDeviceSize,
+    ) !void {
+        const rContext = try RenderContext.GetInstance();
+        var stagingBuffer: Buffer = try CreateBuffer(
+            bufferSize,
+            c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        );
+        defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
+
+        var mappedData: [*]u8 = undefined;
+        try vkUtil.CheckVkSuccess(
+            c.vkMapMemory(
+                rContext.m_logicalDevice,
+                stagingBuffer.m_memory,
+                0,
+                bufferSize,
+                0,
+                @ptrCast(&mappedData),
+            ),
+            BufferError.FailedToMapData,
+        );
+        @memcpy(
+            @as([*]u8, @ptrCast(mappedData))[0..bufferSize],
+            @as([*]u8, @ptrCast(inData))[0..bufferSize],
+        );
+        c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
+
+        try CopyBuffer(stagingBuffer.m_buffer, self.m_buffer, bufferSize);
     }
 
     pub fn CreateBuffer(

@@ -69,7 +69,7 @@ pub const Buffer = struct {
         );
         defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
-        const data: ?*anyopaque = null;
+        var data: ?*anyopaque = null;
         try vkUtil.CheckVkSuccess(
             c.vkMapMemory(
                 rContext.m_logicalDevice,
@@ -77,14 +77,14 @@ pub const Buffer = struct {
                 0,
                 bufferSize,
                 0,
-                @ptrCast(@alignCast(data)),
+                @ptrCast(&data),
             ),
             BufferError.FailedToMapData,
         );
         if (data) |*dataPtr| {
             @memcpy(
                 @as([*]u8, @ptrCast(dataPtr))[0..bufferSize],
-                @as([*]u8, @ptrCast(inData))[0..bufferSize],
+                @as([*]const u8, @ptrCast(inData))[0..bufferSize],
             );
         }
 
@@ -112,7 +112,7 @@ pub const Buffer = struct {
                 0,
                 bufferSize,
                 0,
-                @ptrCast(@alignCast(self.m_mappedData)),
+                @ptrCast(&self.m_mappedData),
             ),
             BufferError.FailedToMapData,
         );

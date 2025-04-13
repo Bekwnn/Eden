@@ -6,19 +6,20 @@ const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
 
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
-const vkUtil = @import("VulkanUtil.zig");
-
 const Camera = @import("Camera.zig").Camera;
+const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
 const Material = @import("Material.zig").Material;
 const Mesh = @import("Mesh.zig").Mesh;
 const renderContext = @import("RenderContext.zig");
-const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
 const scene = @import("Scene.zig");
-const Scene = scene.Scene;
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
-const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
+const vkUtil = @import("VulkanUtil.zig");
+
+const GPUSceneData = scene.GPUSceneData;
+const RenderContext = renderContext.RenderContext;
+const Scene = scene.Scene;
 
 const mat4x4 = @import("../math/Mat4x4.zig");
 const Vec3 = @import("../math/Vec3.zig").Vec3;
@@ -151,6 +152,12 @@ fn InitializeScene() !void {
                 .z = 1.0,
                 .w = 1.0,
             },
+            .m_time = Vec4{
+                .x = 0.0,
+                .y = 0.0,
+                .z = 0.0,
+                .w = 0.0,
+            },
         };
     }
 
@@ -229,7 +236,9 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
-        // TODO UpdateGPUSceneData() at some point
+        // bind scene data
+        // updating and binding this data should probably be broken up into two steps, but for now doing both works
+        try UpdateAndBindUniformSceneBuffer();
 
         // TODO bind everything to a single vert/index buffer?
 
@@ -239,19 +248,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
                 std.debug.print("Error {} drawing {s}\n", .{ err, renderableEntry.key_ptr });
             };
         }
-
-        // bind scene data
-        // updating and binding this data should probably be broken up into two steps, but for now doing both works
-        c.vkCmdBindDescriptorSets(
-            cmd,
-            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            self.m_material.m_shaderPass.m_pipelineLayout,
-            @intFromEnum(renderContext.DescriptorSetType.PerFrame),
-            1,
-            self.m_material.m_shaderPass.m_descriptors,
-            0,
-            null,
-        );
 
         //for each render type (shadow, opaque, transparent, post process, etc)
         //  bindGlobalDescriptors()
@@ -272,15 +268,21 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     );
 }
 
-pub fn UpdateAndBindUniformSceneBuffer(cmd: c.VkCommandBuffer) !void {
+pub fn UpdateAndBindUniformSceneBuffer() !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
 
-    // update scene data
-    try currentFrameData.m_gpuSceneDataBuffer.MapData(
-        &currentFrameData.m_gpuSceneData,
-        @sizeOf(@TypeOf(currentFrameData.m_gpuSceneData)),
-    );
+    // update time vec
+    currentFrameData.m_gpuSceneData.m_time = GPUSceneData.CreateTimeVec(curTime);
+
+    // update uniform buffer
+    if (currentFrameData.m_gpuSceneDataBuffer.m_mappedData) |*mappedData| {
+        const bufferSize = @sizeOf(@TypeOf(currentFrameData.m_gpuSceneData));
+        @memcpy(
+            @as([*]u8, @ptrCast(mappedData))[0..bufferSize],
+            @as([*]u8, @ptrCast(&currentFrameData.m_gpuSceneData))[0..bufferSize],
+        );
+    }
 
     //update gpuscenedata ??
     //{
@@ -339,8 +341,6 @@ pub fn RenderFrame() !void {
     } else if (acquireImageResult != c.VK_SUCCESS and acquireImageResult != c.VK_SUBOPTIMAL_KHR) {
         return RenderLoopError.FailedToAcquireNextImage;
     }
-
-    try UpdateAndBindUniformSceneBuffer(currentFrameData.m_mainCommandBuffer);
 
     try RecordCommandBuffer(currentFrameData.m_mainCommandBuffer, @intCast(rContext.m_currentFrame));
 

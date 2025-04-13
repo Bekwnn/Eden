@@ -28,6 +28,16 @@ pub const GPUSceneData = struct {
     m_ambientColor: Vec4,
     m_sunDirection: Vec4, // .w is sun power
     m_sunColor: Vec4,
+    m_time: Vec4, //(t/10, t, t*2, t*3)
+
+    pub fn CreateTimeVec(time: f32) Vec4 {
+        return Vec4{
+            .x = time * 0.1,
+            .y = time,
+            .z = time * 2.0,
+            .w = time * 3.0,
+        };
+    }
 };
 
 pub const Scene = struct {

@@ -652,12 +652,15 @@ fn InitGPUSceneData(allocator: Allocator) !void {
         c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
     );
 
+    const sizeOfSceneData = @sizeOf(@TypeOf(rContext.m_frameData[0].m_gpuSceneData));
     for (&rContext.m_frameData) |*frameData| {
         frameData.m_gpuSceneDataBuffer = try Buffer.CreateBuffer(
-            @sizeOf(GPUSceneData),
+            sizeOfSceneData,
             c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         );
+
+        try frameData.m_gpuSceneDataBuffer.MapMemory(@ptrCast(&frameData.m_gpuSceneData), sizeOfSceneData);
     }
 }
 

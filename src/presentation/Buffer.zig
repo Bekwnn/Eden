@@ -12,6 +12,7 @@ pub const BufferError = error{
     FailedToCreateIndexBuffer,
     FailedToCreateVertexBuffer,
     FailedToMapData,
+    FailedToUnmapData,
 };
 
 pub const Buffer = struct {
@@ -19,42 +20,20 @@ pub const Buffer = struct {
 
     m_buffer: c.VkBuffer,
     m_memory: c.VkDeviceMemory,
+    m_mappedData: ?*anyopaque = null,
 
     //TODO Creating index/vertex buffers should probably
     // live in mesh or meshutil and this class be more generic
     pub fn CreateVertexBuffer(mesh: *const Mesh) !Buffer {
         const bufferSize: c.VkDeviceSize = mesh.m_vertexData.items.len * @sizeOf(VertexData);
 
-        const rContext = try RenderContext.GetInstance();
-        var stagingBuffer: Buffer = try CreateBuffer(
-            bufferSize,
-            c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        );
-        defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
-
-        var data: [*]VertexData = undefined;
-        try vkUtil.CheckVkSuccess(
-            c.vkMapMemory(
-                rContext.m_logicalDevice,
-                stagingBuffer.m_memory,
-                0,
-                bufferSize,
-                0,
-                @ptrCast(&data),
-            ),
-            BufferError.FailedToCreateVertexBuffer,
-        );
-        @memcpy(data, mesh.m_vertexData.items);
-        c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
-
-        const newVertexBuffer = try CreateBuffer(
+        var newVertexBuffer = try CreateBuffer(
             bufferSize,
             c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         );
 
-        try CopyBuffer(stagingBuffer.m_buffer, newVertexBuffer.m_buffer, bufferSize);
+        try newVertexBuffer.CopyStagingBuffer(@ptrCast(mesh.m_vertexData.items.ptr), bufferSize);
 
         return newVertexBuffer;
     }
@@ -63,43 +42,23 @@ pub const Buffer = struct {
         const bufferSize: c.VkDeviceSize =
             mesh.m_indices.items.len * @sizeOf(u32);
 
-        const rContext = try RenderContext.GetInstance();
-        var stagingBuffer: Buffer = try CreateBuffer(
-            bufferSize,
-            c.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        );
-        defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
-
-        var data: [*]u32 = undefined;
-        try vkUtil.CheckVkSuccess(
-            c.vkMapMemory(
-                rContext.m_logicalDevice,
-                stagingBuffer.m_memory,
-                0,
-                bufferSize,
-                0,
-                @ptrCast(&data),
-            ),
-            BufferError.FailedToCreateIndexBuffer,
-        );
-        @memcpy(data, mesh.m_indices.items);
-        c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
-
-        const newIndexBuffer: Buffer = try CreateBuffer(
+        var newIndexBuffer: Buffer = try CreateBuffer(
             bufferSize,
             c.VK_BUFFER_USAGE_TRANSFER_DST_BIT | c.VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         );
 
-        try CopyBuffer(stagingBuffer.m_buffer, newIndexBuffer.m_buffer, bufferSize);
+        try newIndexBuffer.CopyStagingBuffer(@ptrCast(mesh.m_indices.items.ptr), bufferSize);
 
         return newIndexBuffer;
     }
 
-    pub fn MapData(
+    // creates a temporary staging buffer and copies inData to it, then uses a buffer copy command
+    // required when using VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, which is memory not directly accessible
+    // by the CPU
+    pub fn CopyStagingBuffer(
         self: *Self,
-        inData: *anyopaque,
+        inData: *const anyopaque,
         bufferSize: c.VkDeviceSize,
     ) !void {
         const rContext = try RenderContext.GetInstance();
@@ -110,7 +69,7 @@ pub const Buffer = struct {
         );
         defer stagingBuffer.DestroyBuffer(rContext.m_logicalDevice);
 
-        var mappedData: [*]u8 = undefined;
+        const data: ?*anyopaque = null;
         try vkUtil.CheckVkSuccess(
             c.vkMapMemory(
                 rContext.m_logicalDevice,
@@ -118,17 +77,61 @@ pub const Buffer = struct {
                 0,
                 bufferSize,
                 0,
-                @ptrCast(&mappedData),
+                @ptrCast(@alignCast(data)),
+            ),
+            BufferError.FailedToMapData,
+        );
+        if (data) |*dataPtr| {
+            @memcpy(
+                @as([*]u8, @ptrCast(dataPtr))[0..bufferSize],
+                @as([*]u8, @ptrCast(inData))[0..bufferSize],
+            );
+        }
+
+        c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
+
+        try CopyBuffer(stagingBuffer.m_buffer, self.m_buffer, bufferSize);
+    }
+
+    // calls vkMapMemory to map the m_mappedData member of this buffer and then memcpy inData to the newly mapped data
+    // use CopyStagingBuffer instead if this buffer is VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    pub fn MapMemory(
+        self: *Self,
+        inData: *anyopaque,
+        bufferSize: c.VkDeviceSize,
+    ) !void {
+        if (self.m_mappedData != null) {
+            return BufferError.FailedToMapData;
+        }
+
+        const rContext = try RenderContext.GetInstance();
+        try vkUtil.CheckVkSuccess(
+            c.vkMapMemory(
+                rContext.m_logicalDevice,
+                self.m_memory,
+                0,
+                bufferSize,
+                0,
+                @ptrCast(@alignCast(self.m_mappedData)),
             ),
             BufferError.FailedToMapData,
         );
         @memcpy(
-            @as([*]u8, @ptrCast(mappedData))[0..bufferSize],
-            @as([*]u8, @ptrCast(inData))[0..bufferSize],
+            @as([*]u8, @ptrCast(@alignCast(self.m_mappedData)))[0..bufferSize],
+            @as([*]u8, @ptrCast(@alignCast(inData)))[0..bufferSize],
         );
-        c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
+    }
 
-        try CopyBuffer(stagingBuffer.m_buffer, self.m_buffer, bufferSize);
+    // returns an error if memory already unmapped
+    pub fn UnmapMemory(
+        self: *const Self,
+    ) !void {
+        if (self.m_mappedData == null) {
+            return BufferError.FailedToUnmapMemory;
+        }
+
+        const rContext = try RenderContext.GetInstance();
+        c.vkUnmapMemory(rContext.m_logicalDevice, self.m_memory);
     }
 
     pub fn CreateBuffer(
@@ -190,6 +193,7 @@ pub const Buffer = struct {
             ),
             BufferError.FailedToCreateBuffer,
         );
+        newBuffer.m_mappedData = null;
         return newBuffer;
     }
 

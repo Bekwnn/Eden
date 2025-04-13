@@ -55,20 +55,20 @@ pub const RenderObject = struct {
 
             //bind per object descriptor sets
             //TODO make this push constants later
-            c.vkCmdBindDescriptorSets(
-                cmd,
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.m_materialInstance.m_material.m_shaderPass.m_pipelineLayout,
-                2,
-                1,
-                self.m_materialInstance.m_shaderPass.m_descriptors,
-                0,
-                null,
-            );
+            //c.vkCmdBindDescriptorSets(
+            //    cmd,
+            //    c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            //    self.m_material.m_shaderPass.m_pipelineLayout,
+            //    2,
+            //    1,
+            //    self.m_material.m_shaderPass.m_descriptors,
+            //    0,
+            //    null,
+            //);
 
             c.vkCmdDrawIndexed(
                 cmd,
-                self.m_mesh.m_indices.items.len,
+                @intCast(self.m_mesh.m_indices.items.len),
                 1,
                 0,
                 0,

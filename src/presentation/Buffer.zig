@@ -81,12 +81,10 @@ pub const Buffer = struct {
             ),
             BufferError.FailedToMapData,
         );
-        if (data) |*dataPtr| {
-            @memcpy(
-                @as([*]u8, @ptrCast(dataPtr))[0..bufferSize],
-                @as([*]const u8, @ptrCast(inData))[0..bufferSize],
-            );
-        }
+        @memcpy(
+            @as([*]u8, @ptrCast(@alignCast(data)))[0..bufferSize],
+            @as([*]const u8, @ptrCast(@alignCast(inData)))[0..bufferSize],
+        );
 
         c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
 

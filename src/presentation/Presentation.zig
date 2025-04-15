@@ -40,16 +40,17 @@ var currentScene = Scene{};
 var renderables: ArrayList(RenderObject) = ArrayList(RenderObject).init(allocator);
 
 const RenderLoopError = error{
-    FailedToSubmitDrawCommandBuffer,
-    FailedToQueuePresent,
-    FailedToQueueWaitIdle,
-    FailedToWaitForInFlightFence,
-    FailedToWaitForImageFence,
-    FailedToResetFences,
-    FailedToResetCommandBuffer,
     FailedToAcquireNextImage,
     FailedToBeginCommandBuffer,
     FailedToEndCommandBuffer,
+    FailedToPresent,
+    FailedToQueuePresent,
+    FailedToQueueSubmit,
+    FailedToQueueWaitIdle,
+    FailedToResetCommandBuffer,
+    FailedToResetFences,
+    FailedToWaitForImageFence,
+    FailedToWaitForInFlightFence,
 };
 
 //var imguiIO: ?*c.ImGuiIO = null;
@@ -342,9 +343,49 @@ pub fn RenderFrame() !void {
         return RenderLoopError.FailedToAcquireNextImage;
     }
 
+    // reset and record command buffer
+    try vkUtil.CheckVkSuccess(
+        c.vkResetCommandBuffer(currentFrameData.m_mainCommandBuffer, 0),
+        RenderLoopError.FailedToResetCommandBuffer,
+    );
+
     try RecordCommandBuffer(currentFrameData.m_mainCommandBuffer, @intCast(rContext.m_currentFrame));
 
-    //TODO submit
+    // submit commands
+    const waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    const submitInfo = c.VkSubmitInfo{
+        .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &currentFrameData.m_mainCommandBuffer,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &currentFrameData.m_renderSemaphore,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &currentFrameData.m_swapchainSemaphore,
+        .pWaitDstStageMask = &waitStages,
+        .pNext = null,
+    };
+
+    try vkUtil.CheckVkSuccess(
+        c.vkQueueSubmit(rContext.m_graphicsQueue, 1, &submitInfo, currentFrameData.m_renderFence),
+        RenderLoopError.FailedToQueueSubmit,
+    );
+
+    // present the result
+    const presentInfo = c.VkPresentInfoKHR{
+        .sType = c.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &currentFrameData.m_renderSemaphore,
+        .swapchainCount = 1,
+        .pSwapchains = @ptrCast(&rContext.m_swapchain),
+        .pImageIndices = &imageIndex,
+        .pResults = null,
+        .pNext = null,
+    };
+
+    try vkUtil.CheckVkSuccess(
+        c.vkQueuePresentKHR(rContext.m_presentQueue, &presentInfo),
+        RenderLoopError.FailedToPresent,
+    );
 
     rContext.m_currentFrame = (rContext.m_currentFrame + 1) % renderContext.FRAMES_IN_FLIGHT;
 }

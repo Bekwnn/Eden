@@ -200,20 +200,18 @@ pub const RenderContext = struct {
         std.debug.print("Creating gpu scene data...\n", .{});
         try InitGPUSceneData(allocator);
 
-        //TODO cleanup all removed/moved functions once they are no longer being referenced for implementation details
+        std.debug.print("Creating color depth resources...\n", .{});
+        try newInstance.m_swapchain.CreateColorAndDepthResources(
+            newInstance.m_logicalDevice,
+            newInstance.m_msaaSamples,
+        );
 
-        //std.debug.print("Creating color depth resources...\n", .{});
-        //try newInstance.m_swapchain.CreateColorAndDepthResources(
-        //    newInstance.m_logicalDevice,
-        //    newInstance.m_msaaSamples,
-        //);
-
-        //std.debug.print("Creating frame buffers...\n", .{});
-        //try newInstance.m_swapchain.CreateFrameBuffers(
-        //    allocator,
-        //    newInstance.m_logicalDevice,
-        //    newInstance.m_renderPass,
-        //);
+        std.debug.print("Creating frame buffers...\n", .{});
+        try newInstance.m_swapchain.CreateFrameBuffers(
+            allocator,
+            newInstance.m_logicalDevice,
+            newInstance.m_renderPass,
+        );
     }
 
     pub fn Shutdown(self: *RenderContext) void {
@@ -264,17 +262,18 @@ pub const RenderContext = struct {
         );
         try CreateRenderPass();
 
-        //TODO update based on if we still handle these in RenderContext
-        //try self.m_swapchain.CreateColorAndDepthResources(
-        //    self.m_logicalDevice,
-        //    self.m_msaaSamples,
-        //);
-        //try self.m_swapchain.CreateFrameBuffers(
-        //    allocator,
-        //    self.m_logicalDevice,
-        //    self.m_renderPass,
-        //);
+        try self.m_swapchain.CreateColorAndDepthResources(
+            self.m_logicalDevice,
+            self.m_msaaSamples,
+        );
+        try self.m_swapchain.CreateFrameBuffers(
+            allocator,
+            self.m_logicalDevice,
+            self.m_renderPass,
+        );
 
+        //TODO check if we really need to recreate command buffers?
+        // maybe they rely on swapchain state?
         try CreateCommandBuffers();
     }
 

@@ -371,7 +371,8 @@ fn CreateVkInstance(
     //TODO handle return values
     var extensionCount: c_uint = 0;
     _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, null);
-    const extensionNames = try allocator.alloc([*]const u8, extensionCount);
+    const extensionNames = try allocator.alloc([*:0]const u8, extensionCount);
+    defer allocator.free(extensionNames);
     _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast(extensionNames.ptr));
 
     try CheckValidationLayerSupport(allocator);
@@ -382,9 +383,22 @@ fn CreateVkInstance(
         .ppEnabledLayerNames = @ptrCast(validationLayers[0..].ptr),
         .enabledExtensionCount = @intCast(extensionNames.len),
         .ppEnabledExtensionNames = extensionNames.ptr,
-        .pNext = null,
         .flags = 0,
+        .pNext = null,
     };
+
+    const logLayersAndExtensions = true;
+    if (logLayersAndExtensions) {
+        std.debug.print("Enabled Extensions:\n", .{});
+        for (extensionNames) |extName| {
+            std.debug.print(" {s}\n", .{extName});
+        }
+
+        std.debug.print("Enabled Validation Layers:\n", .{});
+        for (validationLayers) |layerName| {
+            std.debug.print(" {s}\n", .{layerName});
+        }
+    }
 
     const rContext = try RenderContext.GetInstance();
     try vkUtil.CheckVkSuccess(
@@ -425,7 +439,7 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
 
 // Currently just checks if geometry shaders are supported and if the device supports VK_QUEUE_GRAPHICS_BIT
 // Mostly a proof-of-concept function; could ensure device support exists for more advanced stuff later
-const requiredExtensions = [_][*]const u8{
+const requiredDeviceExtensions = [_][*]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
 fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, window: *c.SDL_Window, surface: c.VkSurfaceKHR) !bool {
@@ -563,8 +577,8 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         .queueCreateInfoCount = numUniqueQueues,
         .pQueueCreateInfos = queueCreateInfos.ptr,
         .pEnabledFeatures = &deviceFeatures,
-        .enabledExtensionCount = requiredExtensions.len,
-        .ppEnabledExtensionNames = &requiredExtensions,
+        .enabledExtensionCount = requiredDeviceExtensions.len,
+        .ppEnabledExtensionNames = &requiredDeviceExtensions,
         .enabledLayerCount = 0, //depricated, per Khronos
         .ppEnabledLayerNames = null, //depricated, per Khronos
         .flags = 0,

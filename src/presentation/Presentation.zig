@@ -277,7 +277,7 @@ pub fn UpdateAndBindUniformSceneBuffer() !void {
     currentFrameData.m_gpuSceneData.m_time = GPUSceneData.CreateTimeVec(curTime);
 
     // update uniform buffer
-    if (currentFrameData.m_gpuSceneDataBuffer.m_mappedData) |*mappedData| {
+    if (currentFrameData.m_gpuSceneDataBuffer.m_mappedData) |mappedData| {
         const bufferSize = @sizeOf(@TypeOf(currentFrameData.m_gpuSceneData));
         @memcpy(
             @as([*]u8, @ptrCast(mappedData))[0..bufferSize],
@@ -376,7 +376,7 @@ pub fn RenderFrame() !void {
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &currentFrameData.m_renderSemaphore,
         .swapchainCount = 1,
-        .pSwapchains = @ptrCast(&rContext.m_swapchain),
+        .pSwapchains = &rContext.m_swapchain.m_swapchain,
         .pImageIndices = &imageIndex,
         .pResults = null,
         .pNext = null,

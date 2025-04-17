@@ -101,14 +101,15 @@ pub fn EndSingleTimeCommands(commandBuffer: c.VkCommandBuffer) !void {
     );
 }
 
+// creates a single time command buffer if cmd is null
 pub fn TransitionImageLayout(
     image: c.VkImage,
     format: c.VkFormat,
     oldLayout: c.VkImageLayout,
     newLayout: c.VkImageLayout,
-    mipLevels: u32,
+    cmd: ?c.VkCommandBuffer,
 ) !void {
-    const commandBuffer = try BeginSingleTimeCommands();
+    const commandBuffer = cmd orelse try BeginSingleTimeCommands();
 
     var barrier = c.VkImageMemoryBarrier{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -120,9 +121,9 @@ pub fn TransitionImageLayout(
         .subresourceRange = c.VkImageSubresourceRange{
             .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
-            .levelCount = mipLevels,
+            .levelCount = c.VK_REMAINING_MIP_LEVELS,
             .baseArrayLayer = 0,
-            .layerCount = 1,
+            .layerCount = c.VK_REMAINING_ARRAY_LAYERS,
         },
         .srcAccessMask = 0, //assigned later
         .dstAccessMask = 0, //assigned later
@@ -174,5 +175,7 @@ pub fn TransitionImageLayout(
         &barrier,
     );
 
-    try EndSingleTimeCommands(commandBuffer);
+    if (cmd == null) {
+        try EndSingleTimeCommands(commandBuffer);
+    }
 }

@@ -212,6 +212,15 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         RenderLoopError.FailedToBeginCommandBuffer,
     );
 
+    // transition layout before rendering
+    try vkUtil.TransitionImageLayout(
+        rContext.m_swapchain.m_images[imageIndex],
+        rContext.m_swapchain.m_format.format,
+        c.VK_IMAGE_LAYOUT_UNDEFINED,
+        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        commandBuffer,
+    );
+
     const clearColor = c.VkClearValue{
         .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
     };
@@ -262,6 +271,15 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         //        draw()
     }
     c.vkCmdEndRenderPass(commandBuffer);
+
+    // transition layout for presenting
+    try vkUtil.TransitionImageLayout(
+        rContext.m_swapchain.m_images[imageIndex],
+        rContext.m_swapchain.m_format.format,
+        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        commandBuffer,
+    );
 
     try vkUtil.CheckVkSuccess(
         c.vkEndCommandBuffer(commandBuffer),

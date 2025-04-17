@@ -72,7 +72,7 @@ pub const Texture = struct {
             c.VK_FORMAT_R8G8B8A8_SRGB,
             c.VK_IMAGE_LAYOUT_UNDEFINED,
             c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            newTexture.m_mipLevels,
+            null,
         );
         try CopyBufferToImage(stagingBuffer.m_buffer, newTexture.m_image, image.m_width, image.m_height);
         //transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
@@ -127,7 +127,7 @@ pub const Texture = struct {
             depthFormat,
             c.VK_IMAGE_LAYOUT_UNDEFINED,
             c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            1,
+            null,
         );
         return depthTexture;
     }

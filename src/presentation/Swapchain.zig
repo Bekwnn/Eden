@@ -253,7 +253,7 @@ fn ChooseSwapPresentMode(availablePresentModes: []c.VkPresentModeKHR) !c.VkPrese
         return SwapchainError.NoAvailablePresentMode;
     }
 
-    return availablePresentModes[0];
+    return c.VK_PRESENT_MODE_FIFO_KHR;
 }
 
 fn ChooseSwapSurfaceFormat(availableFormats: []c.VkSurfaceFormatKHR) !c.VkSurfaceFormatKHR {

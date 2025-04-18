@@ -212,15 +212,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         RenderLoopError.FailedToBeginCommandBuffer,
     );
 
-    // transition layout before rendering
-    try vkUtil.TransitionImageLayout(
-        rContext.m_swapchain.m_images[imageIndex],
-        rContext.m_swapchain.m_format.format,
-        c.VK_IMAGE_LAYOUT_UNDEFINED,
-        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        commandBuffer,
-    );
-
     const clearColor = c.VkClearValue{
         .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
     };
@@ -272,15 +263,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     }
     c.vkCmdEndRenderPass(commandBuffer);
 
-    // transition layout for presenting
-    try vkUtil.TransitionImageLayout(
-        rContext.m_swapchain.m_images[imageIndex],
-        rContext.m_swapchain.m_format.format,
-        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        commandBuffer,
-    );
-
     try vkUtil.CheckVkSuccess(
         c.vkEndCommandBuffer(commandBuffer),
         RenderLoopError.FailedToEndCommandBuffer,
@@ -302,20 +284,6 @@ pub fn UpdateAndBindUniformSceneBuffer() !void {
             @as([*]u8, @ptrCast(&currentFrameData.m_gpuSceneData))[0..bufferSize],
         );
     }
-
-    //update gpuscenedata ??
-    //{
-    //    var writer = DescriptorWriter.init(allocator);
-    //    writer.WriteBuffer(
-    //        0,
-    //        currentFrameData.m_gpuSceneDataBuffer.m_buffer,
-    //        @sizeOf(scene.GPUSceneData),
-    //        c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-    //    );
-    //    writer.UpdateSet(
-    //        rContext.m_logicalDevice,
-    //    );
-    //}
 }
 
 pub fn RenderFrame() !void {
@@ -400,6 +368,11 @@ pub fn RenderFrame() !void {
         .pNext = null,
     };
 
+    //TODO docs.vulkan.org has the following, consider adding something similar:
+    // if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+    //      framebufferResized = false;
+    //      recreateSwapChain();
+    // else if (result != VK_SUCCESS) /*throw error*/
     try vkUtil.CheckVkSuccess(
         c.vkQueuePresentKHR(rContext.m_presentQueue, &presentInfo),
         RenderLoopError.FailedToPresent,

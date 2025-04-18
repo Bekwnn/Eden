@@ -53,18 +53,27 @@ pub const RenderObject = struct {
                 c.VK_INDEX_TYPE_UINT32,
             );
 
-            //bind per object descriptor sets
-            //TODO make this push constants later
-            //c.vkCmdBindDescriptorSets(
-            //    cmd,
-            //    c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            //    self.m_material.m_shaderPass.m_pipelineLayout,
-            //    2,
-            //    1,
-            //    self.m_material.m_shaderPass.m_descriptors,
-            //    0,
-            //    null,
-            //);
+            //bind global uniform buffer set=0
+            const rContext = try RenderContext.GetInstance();
+            const frameData = rContext.GetCurrentFrame();
+            c.vkCmdBindDescriptorSets(
+                cmd,
+                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                self.m_material.m_shaderPass.m_pipelineLayout,
+                0,
+                1,
+                frameData.m_gpuSceneDataSet,
+                0,
+                null,
+            );
+
+            //bind per-material set=1
+            //TODO
+            //c.vkCmdBindDescriptorSets();
+
+            //bind per-object set=2
+            //TODO
+            //c.vkCmdBindDescriptorSets();
 
             c.vkCmdDrawIndexed(
                 cmd,

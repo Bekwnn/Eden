@@ -335,7 +335,7 @@ pub fn RenderFrame() !void {
         RenderLoopError.FailedToResetCommandBuffer,
     );
 
-    try RecordCommandBuffer(currentFrameData.m_mainCommandBuffer, @intCast(rContext.m_currentFrame));
+    try RecordCommandBuffer(currentFrameData.m_mainCommandBuffer, imageIndex);
 
     // submit commands
     const waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};

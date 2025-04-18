@@ -54,18 +54,19 @@ pub const RenderObject = struct {
             );
 
             //bind global uniform buffer set=0
-            const rContext = try RenderContext.GetInstance();
-            const frameData = rContext.GetCurrentFrame();
-            c.vkCmdBindDescriptorSets(
-                cmd,
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.m_material.m_shaderPass.m_pipelineLayout,
-                0,
-                1,
-                frameData.m_gpuSceneDataSet,
-                0,
-                null,
-            );
+            //TODO
+            //const rContext = try RenderContext.GetInstance();
+            //const frameData = rContext.GetCurrentFrame();
+            //c.vkCmdBindDescriptorSets(
+            //    cmd,
+            //    c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            //    self.m_material.m_shaderPass.m_pipelineLayout,
+            //    0,
+            //    1,
+            //    frameData.m_gpuSceneDataSet,
+            //    0,
+            //    null,
+            //);
 
             //bind per-material set=1
             //TODO

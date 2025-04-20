@@ -36,9 +36,6 @@ const circleRadius: f32 = 0.5;
 
 var currentScene = Scene{};
 
-// temporary location for this
-var renderables: ArrayList(RenderObject) = ArrayList(RenderObject).init(allocator);
-
 const RenderLoopError = error{
     FailedToAcquireNextImage,
     FailedToBeginCommandBuffer,
@@ -49,6 +46,7 @@ const RenderLoopError = error{
     FailedToQueueWaitIdle,
     FailedToResetCommandBuffer,
     FailedToResetFences,
+    FailedToUpdateSceneUniforms,
     FailedToWaitForImageFence,
     FailedToWaitForInFlightFence,
 };
@@ -165,8 +163,8 @@ fn InitializeScene() !void {
     debug.print("Building ShaderEffect...\n", .{});
     const testShaderEffect = try ShaderEffect.CreateBasicShader(
         allocator,
-        "src\\shaders\\compiled\\basic-vert.spv",
-        "src\\shaders\\compiled\\basic-frag.spv",
+        "src\\shaders\\compiled\\basic_mesh-vert.spv",
+        "src\\shaders\\compiled\\basic_mesh-frag.spv",
     );
     debug.print("Building ShaderPass...\n", .{});
     material.m_shaderPass = try ShaderPass.BuildShaderPass(
@@ -183,22 +181,26 @@ fn InitializeScene() !void {
     var iy: i8 = -1;
     while (iy <= 1) : (iy += 1) {
         while (ix <= 1) : (ix += 1) {
-            // TODO build properly
-            try renderables.append(RenderObject{
-                .m_mesh = mesh,
-                .m_material = material,
-                .m_transform = mat4x4.TranslationMat4x4(Vec3{
-                    .x = @as(f32, @floatFromInt(ix)) * 2.0,
-                    .y = @as(f32, @floatFromInt(iy)) * 2.0,
-                    .z = 0.0,
-                }),
-            });
+            const meshName = try std.fmt.allocPrint(allocator, "Mesh_{}.{}", .{ ix, iy });
+            try currentScene.m_renderables.put(
+                meshName,
+                RenderObject{
+                    .m_mesh = mesh,
+                    .m_material = material,
+                    .m_transform = mat4x4.TranslationMat4x4(Vec3{
+                        .x = @as(f32, @floatFromInt(ix)) * 2.0,
+                        .y = @as(f32, @floatFromInt(iy)) * 2.0,
+                        .z = 0.0,
+                    }),
+                },
+            );
         }
     }
 }
 
 pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
     const rContext = try RenderContext.GetInstance();
+    const currentFrame = rContext.GetCurrentFrame();
 
     const beginInfo = c.VkCommandBufferBeginInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -239,9 +241,17 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     {
         // bind scene data
         // updating and binding this data should probably be broken up into two steps, but for now doing both works
-        try UpdateAndBindUniformSceneBuffer();
+        try UpdateUniformSceneBuffer();
 
-        // TODO bind everything to a single vert/index buffer?
+        var writer = DescriptorWriter.init(allocator);
+        try writer.WriteBuffer(
+            0,
+            currentFrame.m_gpuSceneDataBuffer.m_buffer,
+            @sizeOf(@TypeOf(currentFrame.m_gpuSceneData)),
+            0,
+            c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        );
+        writer.UpdateSet(rContext.m_logicalDevice, currentFrame.m_gpuSceneDataDescriptorSet);
 
         var renderableIter = currentScene.m_renderables.iterator();
         while (renderableIter.next()) |renderableEntry| {
@@ -269,7 +279,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     );
 }
 
-pub fn UpdateAndBindUniformSceneBuffer() !void {
+pub fn UpdateUniformSceneBuffer() !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
 
@@ -283,6 +293,8 @@ pub fn UpdateAndBindUniformSceneBuffer() !void {
             @as([*]u8, @ptrCast(mappedData))[0..bufferSize],
             @as([*]u8, @ptrCast(&currentFrameData.m_gpuSceneData))[0..bufferSize],
         );
+    } else {
+        return RenderLoopError.FailedToUpdateSceneUniforms;
     }
 }
 

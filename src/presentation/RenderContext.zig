@@ -80,7 +80,7 @@ pub const FrameData = struct {
     // descriptor set 0 scene data used by most shaders
     m_gpuSceneData: GPUSceneData = undefined,
     m_gpuSceneDataBuffer: Buffer = undefined,
-    m_gpuSceneDataSet: c.VkDescriptorSet = undefined,
+    m_gpuSceneDataDescriptorSet: c.VkDescriptorSet = undefined,
 
     // do we want one for each frame?
     m_descriptorAllocator: DescriptorAllocator,
@@ -674,6 +674,11 @@ fn InitGPUSceneData(allocator: Allocator) !void {
         );
 
         try frameData.m_gpuSceneDataBuffer.MapMemory(@ptrCast(&frameData.m_gpuSceneData), sizeOfSceneData);
+
+        frameData.m_gpuSceneDataDescriptorSet = try frameData.m_descriptorAllocator.Allocate(
+            rContext.m_logicalDevice,
+            rContext.m_gpuSceneDescriptorLayout,
+        );
     }
 }
 

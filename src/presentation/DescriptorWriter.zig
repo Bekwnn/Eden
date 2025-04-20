@@ -26,8 +26,8 @@ pub const DescriptorWriter = struct {
         sampler: c.VkSampler,
         layout: c.VkImageLayout,
         descriptorType: c.VkDescriptorType,
-    ) void {
-        self.m_imageInfos.append(c.VkDescriptorImageInfo{
+    ) !void {
+        try self.m_imageInfos.append(c.VkDescriptorImageInfo{
             .sampler = sampler,
             .imageView = image,
             .imageLayout = layout,
@@ -46,7 +46,7 @@ pub const DescriptorWriter = struct {
             .pNext = null,
         };
 
-        self.m_writes.append(write);
+        try self.m_writes.append(write);
     }
 
     pub fn WriteBuffer(
@@ -56,8 +56,8 @@ pub const DescriptorWriter = struct {
         size: usize,
         offset: usize,
         descriptorType: c.VkDescriptorType,
-    ) void {
-        self.m_bufferInfos.append(c.VkDescriptorBufferInfo{
+    ) !void {
+        try self.m_bufferInfos.append(c.VkDescriptorBufferInfo{
             .buffer = buffer,
             .offset = offset,
             .range = size,
@@ -67,16 +67,16 @@ pub const DescriptorWriter = struct {
         const write = c.VkWriteDescriptorSet{
             .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstBinding = binding,
-            .dstSet = c.VK_NULL_HANDLE, //write later
+            .dstSet = null, //write later when UpdateSet is called
             .dstArrayElement = 0,
             .descriptorCount = 1,
             .descriptorType = descriptorType,
-            .pBufferInfo = &descriptorBufferInfo,
+            .pBufferInfo = descriptorBufferInfo,
             .pTexelBufferView = null,
             .pNext = null,
         };
 
-        self.m_writes.append(write);
+        try self.m_writes.append(write);
     }
 
     pub fn Clear(self: *Self) void {
@@ -86,10 +86,10 @@ pub const DescriptorWriter = struct {
     }
 
     pub fn UpdateSet(self: *Self, device: c.VkDevice, set: c.VkDescriptorSet) void {
-        for (self.m_writes) |write| {
+        for (self.m_writes.items) |*write| {
             write.dstSet = set;
         }
 
-        c.vkUpdateDescriptorSets(device, @intCast(self.m_writes.items.len), &self.m_writes.items, 0, null);
+        c.vkUpdateDescriptorSets(device, @intCast(self.m_writes.items.len), @ptrCast(&self.m_writes.items[0]), 0, null);
     }
 };

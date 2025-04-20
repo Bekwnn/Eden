@@ -34,6 +34,21 @@ pub const RenderObject = struct {
                 self.m_material.m_shaderPass.m_pipeline,
             );
 
+            //bind global uniform buffer set=0
+            //TODO
+            const rContext = try RenderContext.GetInstance();
+            const frameData = rContext.GetCurrentFrame();
+            c.vkCmdBindDescriptorSets(
+                cmd,
+                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                self.m_material.m_shaderPass.m_pipelineLayout,
+                0,
+                1,
+                &frameData.m_gpuSceneDataDescriptorSet,
+                0,
+                null,
+            );
+
             //bind vertex and index buffers
             const offsets = [_]c.VkDeviceSize{0};
             const vertexBuffers = [_]c.VkBuffer{
@@ -52,21 +67,6 @@ pub const RenderObject = struct {
                 0,
                 c.VK_INDEX_TYPE_UINT32,
             );
-
-            //bind global uniform buffer set=0
-            //TODO
-            //const rContext = try RenderContext.GetInstance();
-            //const frameData = rContext.GetCurrentFrame();
-            //c.vkCmdBindDescriptorSets(
-            //    cmd,
-            //    c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-            //    self.m_material.m_shaderPass.m_pipelineLayout,
-            //    0,
-            //    1,
-            //    frameData.m_gpuSceneDataSet,
-            //    0,
-            //    null,
-            //);
 
             //bind per-material set=1
             //TODO

@@ -74,7 +74,7 @@ pub const DescriptorAllocator = struct {
 
     // TODO should maybe be able to pass a pNext
     pub fn Allocate(self: *Self, device: c.VkDevice, layout: c.VkDescriptorSetLayout) !c.VkDescriptorSet {
-        const poolToUse = self.GetPool(device);
+        var poolToUse = try self.GetPool(device);
 
         var allocInfo = c.VkDescriptorSetAllocateInfo{
             .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -85,13 +85,13 @@ pub const DescriptorAllocator = struct {
         };
 
         var descriptorSet: c.VkDescriptorSet = undefined;
-        const result = c.vkAllocateDescriptorSets(device, &allocInfo, descriptorSet);
+        const result = c.vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
 
         // allocation failed, store pool in full pools and create new one
         if (result == c.VK_ERROR_OUT_OF_POOL_MEMORY or result == c.VK_ERROR_FRAGMENTED_POOL) {
             try self.m_fullPools.append(poolToUse);
 
-            poolToUse = self.GetPool(device);
+            poolToUse = try self.GetPool(device);
             allocInfo.descriptorPool = poolToUse;
 
             // if this one fails something is wrong
@@ -106,12 +106,12 @@ pub const DescriptorAllocator = struct {
     }
 
     fn GetPool(self: *Self, device: c.VkDevice) !c.VkDescriptorPool {
-        const newPool: c.VkDescriptorPool = undefined;
+        var newPool: c.VkDescriptorPool = undefined;
         if (self.m_readyPools.items.len > 0) {
             newPool = self.m_readyPools.pop();
         } else {
-            newPool = self.CreatePool(device, self.m_setsPerPool);
-            self.m_setsPerPool *= 1.5;
+            newPool = try self.CreatePool(device, self.m_setsPerPool, self.m_poolRatios.items);
+            self.m_setsPerPool = @as(u32, @intFromFloat(@as(f32, @floatFromInt(self.m_setsPerPool)) * 1.5));
 
             // max sets per pool
             if (self.m_setsPerPool > 4092) {

@@ -143,7 +143,7 @@ fn InitializeScene() !void {
                 .x = 0.0,
                 .y = 0.0,
                 .z = -1.0,
-                .w = 0.0,
+                .w = 10.0,
             },
             .m_sunColor = Vec4{
                 .x = 1.0,

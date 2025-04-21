@@ -37,7 +37,7 @@ const vertexInputBindingDesc = c.VkVertexInputBindingDescription{
     .inputRate = c.VK_VERTEX_INPUT_RATE_VERTEX,
 };
 
-pub const VertexData = packed struct {
+pub const VertexData = extern struct {
     m_pos: Vec3,
     m_normal: Vec3,
     m_uvCoord: Vec2,

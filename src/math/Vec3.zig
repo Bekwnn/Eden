@@ -9,7 +9,7 @@ pub const xAxis = Vec3{ .x = 1.0, .y = 0.0, .z = 0.0 };
 pub const yAxis = Vec3{ .x = 0.0, .y = 1.0, .z = 0.0 };
 pub const zAxis = Vec3{ .x = 0.0, .y = 0.0, .z = 1.0 };
 
-pub const Vec3 = packed struct {
+pub const Vec3 = extern struct {
     x: f32 = 0.0,
     y: f32 = 0.0,
     z: f32 = 0.0,

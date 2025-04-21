@@ -3,7 +3,7 @@ const stdm = @import("std").math;
 
 pub const identity = Quat{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 1.0 };
 
-pub const Quat = packed struct {
+pub const Quat = extern struct {
     x: f32 = 0.0,
     y: f32 = 0.0,
     z: f32 = 0.0,

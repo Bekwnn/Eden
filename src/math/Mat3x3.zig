@@ -98,3 +98,7 @@ pub const Mat3x3 = extern struct {
         }
     }
 };
+
+//TODO testing
+//test "Eden.Math.Mat3x3" {
+//}

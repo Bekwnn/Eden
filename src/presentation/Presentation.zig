@@ -122,7 +122,9 @@ fn InitializeScene() !void {
     try currentScene.CreateCamera("default");
 
     const currentCamera = try currentScene.GetCurrentCamera();
-    currentCamera.m_pos = Vec3{ .x = 0.0, .y = 0.0, .z = -5.0 };
+
+    currentCamera.m_pos = Vec3{ .x = 0.0, .y = 0.0, .z = -25.0 };
+    currentCamera.LookAt(Vec3.zero);
 
     const cameraViewMat = currentCamera.GetViewMatrix();
     const cameraProjMat = currentCamera.GetProjectionMatrix();
@@ -132,7 +134,7 @@ fn InitializeScene() !void {
         frameData.m_gpuSceneData = scene.GPUSceneData{
             .m_view = cameraViewMat,
             .m_projection = cameraProjMat,
-            .m_viewProj = cameraViewMat.Mul(&cameraProjMat),
+            .m_viewProj = cameraProjMat.Mul(&cameraViewMat),
             .m_ambientColor = Vec4{
                 .x = 0.5,
                 .y = 0.5,

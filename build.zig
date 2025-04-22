@@ -284,6 +284,17 @@ pub fn build(b: *std.Build) !void {
 
     b.installArtifact(exe);
 
+    const test_step = b.step("test", "Run tests");
+
+    // repeat these 3 lines for each test
+    const math_tests = b.addTest(.{
+        .root_source_file = b.path("src/math/Math.zig"),
+        .optimize = optimizationMode,
+        .target = targetOptions,
+    });
+    const run_math_test = b.addRunArtifact(math_tests);
+    test_step.dependOn(&run_math_test.step);
+
     const run_exe_cmd = b.addRunArtifact(exe);
     run_exe_cmd.step.dependOn(b.getInstallStep());
 

@@ -44,12 +44,16 @@ pub const Vec3 = extern struct {
         };
     }
 
-    pub fn Dot(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Mul(self: *const Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = self.x * rhs.x,
             .y = self.y * rhs.y,
             .z = self.z * rhs.z,
         };
+    }
+
+    pub fn Dot(self: *const Vec3, rhs: Vec3) f32 {
+        return self.x * rhs.x + self.y * rhs.y + self.z * rhs.z;
     }
 
     pub fn Cross(self: *const Vec3, rhs: Vec3) Vec3 {
@@ -198,14 +202,31 @@ pub const Vec3 = extern struct {
     }
 };
 
-//TODO testing
-test "eden.math.Vec3" {
-    const debug = @import("std").debug;
-    const assert = debug.assert;
-    {
-        const v1 = Vec3{ .x = 1.0, .y = 2.0, .z = 3.0 };
-        const v2 = Vec3{ .x = 3.0, .y = 2.0, .z = 3.0 };
-        const v3 = v1.Add(v2);
-        assert(v3.x == 4.0 and v3.y == 4.0 and v3.z == 4.0);
-    }
+//testing
+//TODO can we put this in its own scope block?
+const std = @import("std");
+const testing = std.testing;
+const debug = std.debug;
+const testTolerance = 1e-6;
+test "Add" {
+    const v1 = Vec3{ .x = 1.0, .y = 2.0, .z = 3.0 };
+    const v2 = Vec3{ .x = 3.0, .y = 2.0, .z = 3.0 };
+    const v3 = v1.Add(v2);
+    try testing.expect(v3.x == 4.0 and v3.y == 4.0 and v3.z == 6.0);
+}
+
+test "Dot" {
+    const v1 = Vec3{ .x = 1, .y = 2, .z = 3 };
+    const v2 = Vec3{ .x = -1, .y = -2, .z = -3 };
+    const v1x3 = Vec3{ .x = 3, .y = 6, .z = 9 };
+    const testAResult = v1.Normalized().Dot(v2.Normalized());
+    testing.expect(em.EqualWithinTolerance(f32, testAResult, -1.0, testTolerance)) catch |err| {
+        debug.print("v1.Dot(v2): {}", .{testAResult});
+        return err;
+    };
+    const testBResult = v1.Normalized().Dot(v1x3.Normalized());
+    testing.expect(em.EqualWithinTolerance(f32, testBResult, 1.0, testTolerance)) catch |err| {
+        debug.print("v1.Dot(v1x3): {}", .{testBResult});
+        return err;
+    };
 }

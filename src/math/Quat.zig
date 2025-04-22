@@ -1,5 +1,6 @@
 const em = @import("Math.zig");
-const stdm = @import("std").math;
+const std = @import("std");
+const stdm = std.math;
 const Vec3 = em.Vec3;
 
 pub const Quat = extern struct {
@@ -16,7 +17,12 @@ pub const Quat = extern struct {
     };
 
     pub fn Equals(lhs: *const Quat, rhs: *const Quat) bool {
-        return em.EqualWithinTolerance(f32, lhs.x, rhs.x, em.f32_epsilon);
+        inline for (std.meta.fields(@TypeOf(Quat))) |field| {
+            if (field.type == @TypeOf(f32) and !em.EqualWithinTolerance(f32, lhs.x, rhs.x, em.f32_epsilon)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Roll
@@ -34,8 +40,12 @@ pub const Quat = extern struct {
         return stdm.atan(2.0 * (self.w * self.z + self.x * self.y), 1 - (2 * (self.y * self.y + self.z * self.z)));
     }
 
-    pub fn GetEulerAngles(self: *const Quat) em.Vec3 {
-        return em.Vec3{ .x = self.GetXEuler(), .y = self.GetYEuler(), .z = self.GetZEuler() };
+    pub fn GetEulerAngles(self: *const Quat) Vec3 {
+        return Vec3{
+            .x = self.GetXEuler(),
+            .y = self.GetYEuler(),
+            .z = self.GetZEuler(),
+        };
     }
 
     pub fn GetInverse(self: *const Quat) Quat {
@@ -77,7 +87,7 @@ pub const Quat = extern struct {
     }
 
     // creates a rotation around an axis
-    pub fn GetAxisRotation(axis: *const Vec3, rotationDeg: f32) Quat {
+    pub fn GetAxisRotation(axis: Vec3, rotationDeg: f32) Quat {
         const axisNorm = axis.Normalized();
         const halfAngleRad = rotationDeg * em.util.degToRad * 0.5;
         const sinHalfAngle = @sin(halfAngleRad);
@@ -90,12 +100,12 @@ pub const Quat = extern struct {
         };
     }
 
-    pub fn FromToRotationQuat(lhs: *const Quat, rhs: *const Quat) Quat {
+    pub fn FromToRotationQuat(lhs: Quat, rhs: Quat) Quat {
         return Mul(lhs.GetInverse(), rhs);
     }
 
     // pass in world up to use as ortho?
-    pub fn FromToRotationVec(from: *const Vec3, to: *const Vec3) Quat {
+    pub fn FromToRotationVec(from: Vec3, to: Vec3) Quat {
         const aNorm = from.Normalized();
         const bNorm = to.Normalized();
 
@@ -107,17 +117,17 @@ pub const Quat = extern struct {
 
         // vectors are almost exact opposite directions
         if (aDotB < -0.9999) {
-            var ortho = em.vec3.zAxis.Cross(aNorm); // do we want/need to take in a world up vector?
+            var ortho = Vec3.zAxis.Cross(aNorm); // do we want/need to take in a world up vector?
             if (ortho.Length() < 1e-6) {
                 // parallel to zAxis; choose another axis
-                ortho = em.vec3.yAxis.Cross(aNorm);
+                ortho = Vec3.yAxis.Cross(aNorm);
             }
             const axis = aNorm.Cross(ortho).Normalized();
             return Quat{
                 .x = axis.x,
                 .y = axis.y,
                 .z = axis.z,
-                .w = 0,
+                .w = 0, //w = cos(theta / 2), 180deg = pi Radians, and cos(pi/2) = 0
             };
         }
 
@@ -133,11 +143,11 @@ pub const Quat = extern struct {
         };
     }
 
-    pub fn LookAt(lookDir: *const Vec3) Quat {
+    pub fn LookAt(lookDir: Vec3) Quat {
         return Quat.FromToRotationVec(Vec3.zAxis, lookDir);
     }
 
-    pub fn Mul(lhs: *const Quat, rhs: *const Quat) Quat {
+    pub fn Mul(lhs: Quat, rhs: Quat) Quat {
         return Quat{
             .x = lhs.w * rhs.x + lhs.x * rhs.w - lhs.y * rhs.z + lhs.z * rhs.y,
             .y = lhs.w * rhs.y + lhs.x * rhs.z + lhs.y * rhs.w - lhs.z * rhs.x,
@@ -146,7 +156,7 @@ pub const Quat = extern struct {
         };
     }
 
-    pub fn Rotate(self: *const Quat, vec: *const Vec3) Vec3 {
+    pub fn Rotate(self: *const Quat, vec: Vec3) Vec3 {
         var uv = Vec3{
             .x = self.y * vec.z - self.z * vec.y,
             .y = self.z * vec.x - self.x * vec.z,

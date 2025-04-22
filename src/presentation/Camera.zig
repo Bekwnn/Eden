@@ -58,9 +58,9 @@ pub const Camera = struct {
         return 2.0 * stdmath.atan(@tan(xFoV * 0.5) * aspectRatio);
     }
 
-    //pub fn LookAt(self: *Camera, target: Vec3) void {
-    //
-    //}
+    pub fn LookAt(self: *Camera, target: Vec3) void {
+        self.m_rotation = Quat.LookAt(target.Sub(self.m_pos));
+    }
 
     pub const FrameUBO = struct {
         m_view: Mat4x4,

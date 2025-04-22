@@ -8,16 +8,6 @@ fn swap(lhs: *f32, rhs: *f32) void {
     rhs = temp;
 }
 
-pub const identity = Mat4x4{};
-pub const zero = Mat4x4{
-    .m = [4][4]f32{
-        [4]f32{ 0.0, 0.0, 0.0, 0.0 },
-        [4]f32{ 0.0, 0.0, 0.0, 0.0 },
-        [4]f32{ 0.0, 0.0, 0.0, 0.0 },
-        [4]f32{ 0.0, 0.0, 0.0, 0.0 },
-    },
-};
-
 pub const Mat4x4 = extern struct {
     m: [4][4]f32 = [4][4]f32{
         [4]f32{ 1.0, 0.0, 0.0, 0.0 },
@@ -25,6 +15,16 @@ pub const Mat4x4 = extern struct {
         [4]f32{ 0.0, 0.0, 1.0, 0.0 },
         [4]f32{ 0.0, 0.0, 0.0, 1.0 },
     },
+
+    pub const identity = Mat4x4{};
+    pub const zero = Mat4x4{
+        .m = [4][4]f32{
+            [4]f32{ 0.0, 0.0, 0.0, 0.0 },
+            [4]f32{ 0.0, 0.0, 0.0, 0.0 },
+            [4]f32{ 0.0, 0.0, 0.0, 0.0 },
+            [4]f32{ 0.0, 0.0, 0.0, 0.0 },
+        },
+    };
 
     pub fn Mul(self: *const Mat4x4, other: *const Mat4x4) Mat4x4 {
         var returnMat = Mat4x4{};
@@ -61,46 +61,46 @@ pub const Mat4x4 = extern struct {
         swap(&self.m[1][3], &self.m[3][1]);
         swap(&self.m[2][3], &self.m[3][2]);
     }
-};
 
-pub fn LookDirMat4x4(from: Vec3, direction: Vec3, up: Vec3) Mat4x4 {
-    const lookAtVec = direction.Normalized();
-    const rightVec = up.Cross(lookAtVec).Normalized();
-    const lookAtMat1 = Mat4x4{ //TODO may need transposing
-        .m = [4][4]f32{
-            [_]f32{ rightVec.x, rightVec.y, rightVec.z, 0.0 },
-            [_]f32{ up.x, up.y, up.z, 0.0 },
-            [_]f32{ lookAtVec.x, lookAtVec.y, lookAtVec.z, 0.0 },
-            [_]f32{ 0.0, 0.0, 0.0, 1.0 },
-        },
-    };
-    const lookAtMat2 = Mat4x4{
-        .m = [4][4]f32{
-            [_]f32{ 1.0, 0.0, 0.0, 0.0 },
-            [_]f32{ 0.0, 1.0, 0.0, 0.0 },
-            [_]f32{ 0.0, 0.0, 1.0, 0.0 },
-            [_]f32{ -from.x, -from.y, -from.z, 1.0 },
-        },
-    };
+    pub fn LookAt(from: Vec3, direction: Vec3, up: Vec3) Mat4x4 {
+        const lookAtVec = direction.Normalized();
+        const rightVec = up.Cross(lookAtVec).Normalized();
+        const lookAtMat1 = Mat4x4{ //TODO may need transposing
+            .m = [4][4]f32{
+                [_]f32{ rightVec.x, rightVec.y, rightVec.z, 0.0 },
+                [_]f32{ up.x, up.y, up.z, 0.0 },
+                [_]f32{ lookAtVec.x, lookAtVec.y, lookAtVec.z, 0.0 },
+                [_]f32{ 0.0, 0.0, 0.0, 1.0 },
+            },
+        };
+        const lookAtMat2 = Mat4x4{
+            .m = [4][4]f32{
+                [_]f32{ 1.0, 0.0, 0.0, 0.0 },
+                [_]f32{ 0.0, 1.0, 0.0, 0.0 },
+                [_]f32{ 0.0, 0.0, 1.0, 0.0 },
+                [_]f32{ -from.x, -from.y, -from.z, 1.0 },
+            },
+        };
 
-    return lookAtMat1.Mul(&lookAtMat2);
-}
-
-pub fn TranslationMat4x4(translation: Vec3) Mat4x4 {
-    var returnMat = identity;
-    returnMat.m[0][3] = translation.x;
-    returnMat.m[1][3] = translation.y;
-    returnMat.m[2][3] = translation.z;
-    return returnMat;
-}
-
-//TODO proper fmt usage, line breaks? etc
-pub fn DebugLogMat4x4(mat: *const Mat4x4) void {
-    for (mat.m) |row| {
-        debug.print("{{", .{});
-        for (row) |val| {
-            debug.print("{}, ", .{val});
-        }
-        debug.print("}},\n", .{});
+        return lookAtMat1.Mul(&lookAtMat2);
     }
-}
+
+    pub fn Translation(translation: Vec3) Mat4x4 {
+        var returnMat = identity;
+        returnMat.m[0][3] = translation.x;
+        returnMat.m[1][3] = translation.y;
+        returnMat.m[2][3] = translation.z;
+        return returnMat;
+    }
+
+    //TODO proper fmt usage, line breaks? etc
+    pub fn DebugLog(mat: *const Mat4x4) void {
+        for (mat.m) |row| {
+            debug.print("{{", .{});
+            for (row) |val| {
+                debug.print("{}, ", .{val});
+            }
+            debug.print("}},\n", .{});
+        }
+    }
+};

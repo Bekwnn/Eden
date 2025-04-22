@@ -3,8 +3,7 @@ const c = @import("../c.zig");
 const std = @import("std");
 const allocator = std.heap.page_allocator;
 
-const mat4x4 = @import("../math/Mat4x4.zig");
-const Mat4x4 = mat4x4.Mat4x4;
+const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 
 const Buffer = @import("Buffer.zig").Buffer;
 const Material = @import("Material.zig").Material;
@@ -22,7 +21,7 @@ pub const RenderObject = struct {
     m_material: *Material,
     m_mesh: *Mesh,
 
-    m_transform: Mat4x4 = mat4x4.identity,
+    m_transform: Mat4x4 = Mat4x4.identity,
 
     pub fn Draw(self: Self, cmd: c.VkCommandBuffer) !void {
         if (self.m_mesh.m_bufferData) |*meshBufferData| {

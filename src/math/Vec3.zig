@@ -3,16 +3,16 @@ const em = @import("MathUtil.zig");
 
 const Quat = @import("Quat.zig").Quat;
 
-pub const zero = Vec3{};
-pub const one = Vec3{ .x = 1.0, .y = 1.0, .z = 1.0 };
-pub const xAxis = Vec3{ .x = 1.0, .y = 0.0, .z = 0.0 };
-pub const yAxis = Vec3{ .x = 0.0, .y = 1.0, .z = 0.0 };
-pub const zAxis = Vec3{ .x = 0.0, .y = 0.0, .z = 1.0 };
-
 pub const Vec3 = extern struct {
     x: f32 = 0.0,
     y: f32 = 0.0,
     z: f32 = 0.0,
+
+    pub const zero = Vec3{};
+    pub const one = Vec3{ .x = 1.0, .y = 1.0, .z = 1.0 };
+    pub const xAxis = Vec3{ .x = 1.0, .y = 0.0, .z = 0.0 };
+    pub const yAxis = Vec3{ .x = 0.0, .y = 1.0, .z = 0.0 };
+    pub const zAxis = Vec3{ .x = 0.0, .y = 0.0, .z = 1.0 };
 
     pub fn Scale(self: *Vec3, scalar: f32) void {
         self.x *= scalar;
@@ -184,19 +184,19 @@ pub const Vec3 = extern struct {
         const t = qxyz.Cross(self.*).GetScaled(2.0);
         self = self.Add(t.GetScaled(q.w).Add(qxyz.Cross(t)));
     }
+
+    pub fn Vec3_xy0(v2: *const em.Vec2) Vec3 {
+        return Vec3{ v2.x, v2.y, 0.0 };
+    }
+
+    pub fn Vec3_x0y(v2: *const em.Vec2) Vec3 {
+        return Vec3{ v2.x, 0.0, v2.y };
+    }
+
+    pub fn Vec3_0xy(v2: *const em.Vec2) Vec3 {
+        return Vec3{ 0.0, v2.x, v2.y };
+    }
 };
-
-pub fn Vec3_xy0(v2: *const em.Vec2) Vec3 {
-    return Vec3{ v2.x, v2.y, 0.0 };
-}
-
-pub fn Vec3_x0y(v2: *const em.Vec2) Vec3 {
-    return Vec3{ v2.x, 0.0, v2.y };
-}
-
-pub fn Vec3_0xy(v2: *const em.Vec2) Vec3 {
-    return Vec3{ 0.0, v2.x, v2.y };
-}
 
 //TODO testing
 test "eden.math.Vec3" {

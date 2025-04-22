@@ -38,6 +38,26 @@ pub const Mat3x3 = extern struct {
         return returnMat;
     }
 
+    pub fn Rotate(self: *const Mat3x3, vec: *const Vec3) Vec3 {
+        return Vec3{
+            .x = self.m[0][0] * vec.x + self.m[0][1] * vec.y + self.m[0][2] * vec.z,
+            .y = self.m[1][0] * vec.x + self.m[1][1] * vec.y + self.m[1][2] * vec.z,
+            .z = self.m[2][0] * vec.x + self.m[2][1] * vec.y + self.m[2][2] * vec.z,
+        };
+    }
+
+    pub fn GetForwardVec(self: *const Mat3x3) Vec3 {
+        return self.Rotate(Vec3.zAxis);
+    }
+
+    pub fn GetRightVec(self: *const Mat3x3) Vec3 {
+        return self.Rotate(Vec3.xAxis);
+    }
+
+    pub fn GetUpVec(self: *const Mat3x3) Vec3 {
+        return self.Rotate(Vec3.yAxis);
+    }
+
     pub fn Transpose(self: *const Mat3x3) Mat3x3 {
         return Mat3x3{
             .m = [3][3]f32{
@@ -53,28 +73,28 @@ pub const Mat3x3 = extern struct {
         swap(&self.m[0][2], &self.m[2][0]);
         swap(&self.m[1][2], &self.m[2][1]);
     }
-};
 
-pub fn LookDirMat3x3(direction: Vec3, up: Vec3) Mat3x3 {
-    const lookAtVec = direction.Normalized();
-    const rightVec = up.Cross(lookAtVec).Normalized();
-    //TODO result may need transposing
-    return Mat3x3{
-        .m = [3][3]f32{
-            [3]f32{ rightVec.x, rightVec.y, rightVec.z },
-            [3]f32{ up.x, up.y, up.z },
-            [3]f32{ lookAtVec.x, lookAtVec.y, lookAtVec.z },
-        },
-    };
-}
-
-//TODO proper fmt usage, line breaks? etc
-pub fn DebugLogMat3x3(mat: *const Mat3x3) void {
-    for (mat.m) |row| {
-        debug.print("{{", .{});
-        for (row) |val| {
-            debug.print("{}, ", .{val});
-        }
-        debug.print("}},\n", .{});
+    pub fn LookDirMat3x3(direction: Vec3, up: Vec3) Mat3x3 {
+        const lookAtVec = direction.Normalized();
+        const rightVec = up.Cross(lookAtVec).Normalized();
+        //TODO result may need transposing
+        return Mat3x3{
+            .m = [3][3]f32{
+                [3]f32{ rightVec.x, rightVec.y, rightVec.z },
+                [3]f32{ up.x, up.y, up.z },
+                [3]f32{ lookAtVec.x, lookAtVec.y, lookAtVec.z },
+            },
+        };
     }
-}
+
+    //TODO proper fmt usage, line breaks? etc
+    pub fn DebugLogMat3x3(mat: *const Mat3x3) void {
+        for (mat.m) |row| {
+            debug.print("{{", .{});
+            for (row) |val| {
+                debug.print("{}, ", .{val});
+            }
+            debug.print("}},\n", .{});
+        }
+    }
+};

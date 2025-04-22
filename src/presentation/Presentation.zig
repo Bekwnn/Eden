@@ -21,7 +21,7 @@ const GPUSceneData = scene.GPUSceneData;
 const RenderContext = renderContext.RenderContext;
 const Scene = scene.Scene;
 
-const mat4x4 = @import("../math/Mat4x4.zig");
+const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec4 = @import("../math/Vec4.zig").Vec4;
 
@@ -187,7 +187,7 @@ fn InitializeScene() !void {
                 RenderObject{
                     .m_mesh = mesh,
                     .m_material = material,
-                    .m_transform = mat4x4.TranslationMat4x4(Vec3{
+                    .m_transform = Mat4x4.Translation(Vec3{
                         .x = @as(f32, @floatFromInt(ix)) * 2.0,
                         .y = @as(f32, @floatFromInt(iy)) * 2.0,
                         .z = 0.0,

@@ -62,27 +62,20 @@ pub const Mat4x4 = extern struct {
         swap(&self.m[2][3], &self.m[3][2]);
     }
 
-    pub fn LookAt(from: Vec3, direction: Vec3, up: Vec3) Mat4x4 {
-        const lookAtVec = direction.Normalized();
-        const rightVec = up.Cross(lookAtVec).Normalized();
-        const lookAtMat1 = Mat4x4{ //TODO may need transposing
+    pub fn LookAt(eyePos: Vec3, lookDir: Vec3, up: Vec3) Mat4x4 {
+        const lookNorm = lookDir.Normalized();
+        const rightVec = up.Cross(lookNorm).Normalized();
+        const cameraUp = lookNorm.Cross(rightVec);
+        const lookAtMat = Mat4x4{
             .m = [4][4]f32{
-                [_]f32{ rightVec.x, rightVec.y, rightVec.z, 0.0 },
-                [_]f32{ up.x, up.y, up.z, 0.0 },
-                [_]f32{ lookAtVec.x, lookAtVec.y, lookAtVec.z, 0.0 },
+                [_]f32{ rightVec.x, rightVec.y, rightVec.z, -rightVec.Dot(eyePos) },
+                [_]f32{ cameraUp.x, cameraUp.y, cameraUp.z, -cameraUp.Dot(eyePos) },
+                [_]f32{ lookNorm.x, lookNorm.y, lookNorm.z, -lookNorm.Dot(eyePos) },
                 [_]f32{ 0.0, 0.0, 0.0, 1.0 },
             },
         };
-        const lookAtMat2 = Mat4x4{
-            .m = [4][4]f32{
-                [_]f32{ 1.0, 0.0, 0.0, 0.0 },
-                [_]f32{ 0.0, 1.0, 0.0, 0.0 },
-                [_]f32{ 0.0, 0.0, 1.0, 0.0 },
-                [_]f32{ -from.x, -from.y, -from.z, 1.0 },
-            },
-        };
 
-        return lookAtMat1.Mul(&lookAtMat2);
+        return lookAtMat;
     }
 
     pub fn Translation(translation: Vec3) Mat4x4 {
@@ -106,5 +99,3 @@ pub const Mat4x4 = extern struct {
 };
 
 //TODO testing
-//test "Eden.Math.Mat4x4" {
-//}

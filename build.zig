@@ -34,7 +34,7 @@ fn copyDllToBin(allocator: std.mem.Allocator, dllDir: []const []const u8, dllNam
     try dllNameExt.appendSlice(dllName);
     try dllNameExt.appendSlice(".dll");
 
-    deleteOldDll(dllNameExt.items) catch { // this is allowed to fail
+    deleteOldDll(dllNameExt.items) catch {
         // make dir if it doesn't exist
         const workingDir = fs.cwd();
         workingDir.makeDir("zig-out") catch {}; // may already exist
@@ -284,16 +284,21 @@ pub fn build(b: *std.Build) !void {
 
     b.installArtifact(exe);
 
-    const test_step = b.step("test", "Run tests");
+    //
+    const test_files = [_][]const u8{
+        "src/math/Math.zig",
+    };
 
-    // repeat these 3 lines for each test
-    const math_tests = b.addTest(.{
-        .root_source_file = b.path("src/math/Math.zig"),
-        .optimize = optimizationMode,
-        .target = targetOptions,
-    });
-    const run_math_test = b.addRunArtifact(math_tests);
-    test_step.dependOn(&run_math_test.step);
+    const test_step = b.step("test", "Run tests");
+    for (test_files) |test_file| {
+        const test_artifact = b.addTest(.{
+            .root_source_file = b.path(test_file),
+            .optimize = optimizationMode,
+            .target = targetOptions,
+        });
+        const run_test = b.addRunArtifact(test_artifact);
+        test_step.dependOn(&run_test.step);
+    }
 
     const run_exe_cmd = b.addRunArtifact(exe);
     run_exe_cmd.step.dependOn(b.getInstallStep());

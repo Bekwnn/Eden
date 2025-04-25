@@ -54,13 +54,14 @@ pub const ShaderPass = struct {
             .primitiveRestartEnable = c.VK_FALSE,
         };
 
+        //TODO change VK_CULL_MODE_NONE to VK_CULL_MODE_BACK_BIT once we know stuff is working
         const rasterizationState = c.VkPipelineRasterizationStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
             .depthClampEnable = c.VK_FALSE,
             .rasterizerDiscardEnable = c.VK_FALSE,
             .polygonMode = polygonMode,
             .lineWidth = 1.0,
-            .cullMode = c.VK_CULL_MODE_BACK_BIT,
+            .cullMode = c.VK_CULL_MODE_NONE,
             .frontFace = c.VK_FRONT_FACE_COUNTER_CLOCKWISE,
             .depthBiasEnable = c.VK_FALSE,
             .depthBiasConstantFactor = 0.0,
@@ -82,18 +83,13 @@ pub const ShaderPass = struct {
             .flags = 0,
         };
 
-        const colorBlendAttachment = c.VkPipelineColorBlendAttachmentState{
-            .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT |
-                c.VK_COLOR_COMPONENT_G_BIT |
-                c.VK_COLOR_COMPONENT_B_BIT |
-                c.VK_COLOR_COMPONENT_A_BIT,
-            .blendEnable = c.VK_FALSE,
-        };
-
         const depthStencilState = c.VkPipelineDepthStencilStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
             .depthTestEnable = c.VK_TRUE,
             .depthWriteEnable = c.VK_TRUE,
+            .depthCompareOp = c.VK_COMPARE_OP_LESS,
+            .depthBoundsTestEnable = c.VK_FALSE,
+            .stencilTestEnable = c.VK_FALSE,
             .pNext = null,
             .flags = 0,
         };
@@ -119,6 +115,14 @@ pub const ShaderPass = struct {
             .pScissors = &scissor,
             .pNext = null,
             .flags = 0,
+        };
+
+        const colorBlendAttachment = c.VkPipelineColorBlendAttachmentState{
+            .colorWriteMask = c.VK_COLOR_COMPONENT_R_BIT |
+                c.VK_COLOR_COMPONENT_G_BIT |
+                c.VK_COLOR_COMPONENT_B_BIT |
+                c.VK_COLOR_COMPONENT_A_BIT,
+            .blendEnable = c.VK_FALSE,
         };
 
         const colorBlendingState = c.VkPipelineColorBlendStateCreateInfo{

@@ -178,26 +178,35 @@ fn InitializeScene() !void {
         Mesh.GetAttributeDescriptions(),
     );
 
+    try currentScene.m_renderables.put(
+        "Monkey_Mesh",
+        RenderObject{
+            .m_mesh = mesh,
+            .m_material = material,
+            .m_transform = Mat4x4.identity,
+        },
+    );
+    //TODO switch to this after model matrices are used
     // set up meshes
-    var ix: i8 = -1;
-    var iy: i8 = -1;
-    while (iy <= 1) : (iy += 1) {
-        while (ix <= 1) : (ix += 1) {
-            const meshName = try std.fmt.allocPrint(allocator, "Mesh_{}.{}", .{ ix, iy });
-            try currentScene.m_renderables.put(
-                meshName,
-                RenderObject{
-                    .m_mesh = mesh,
-                    .m_material = material,
-                    .m_transform = Mat4x4.Translation(Vec3{
-                        .x = @as(f32, @floatFromInt(ix)) * 2.0,
-                        .y = @as(f32, @floatFromInt(iy)) * 2.0,
-                        .z = 0.0,
-                    }),
-                },
-            );
-        }
-    }
+    //var ix: i8 = -1;
+    //var iy: i8 = -1;
+    //while (iy <= 1) : (iy += 1) {
+    //    while (ix <= 1) : (ix += 1) {
+    //        const meshName = try std.fmt.allocPrint(allocator, "Mesh_{}.{}", .{ ix, iy });
+    //        try currentScene.m_renderables.put(
+    //            meshName,
+    //            RenderObject{
+    //                .m_mesh = mesh,
+    //                .m_material = material,
+    //                .m_transform = Mat4x4.Translation(Vec3{
+    //                    .x = @as(f32, @floatFromInt(ix)) * 2.0,
+    //                    .y = @as(f32, @floatFromInt(iy)) * 2.0,
+    //                    .z = 0.0,
+    //                }),
+    //            },
+    //        );
+    //    }
+    //}
 }
 
 pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
@@ -217,7 +226,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     );
 
     const clearColor = c.VkClearValue{
-        .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
+        .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.05, 0.1, 0.15, 1.0 } },
     };
     const clearDepth = c.VkClearValue{
         .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
@@ -382,15 +391,13 @@ pub fn RenderFrame() !void {
         .pNext = null,
     };
 
-    //TODO docs.vulkan.org has the following, consider adding something similar:
-    // if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-    //      framebufferResized = false;
-    //      recreateSwapChain();
-    // else if (result != VK_SUCCESS) /*throw error*/
-    try vkUtil.CheckVkSuccess(
-        c.vkQueuePresentKHR(rContext.m_presentQueue, &presentInfo),
-        RenderLoopError.FailedToPresent,
-    );
+    const presentResult = c.vkQueuePresentKHR(rContext.m_presentQueue, &presentInfo);
+    //TODO fix RecreateSwapchain
+    if (presentResult == c.VK_ERROR_OUT_OF_DATE_KHR or presentResult == c.VK_SUBOPTIMAL_KHR) {
+        try rContext.RecreateSwapchain(swapchainAllocator);
+    } else if (presentResult != c.VK_SUCCESS) {
+        return RenderLoopError.FailedToPresent;
+    }
 
     rContext.m_currentFrame = (rContext.m_currentFrame + 1) % renderContext.FRAMES_IN_FLIGHT;
 }

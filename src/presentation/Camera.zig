@@ -7,7 +7,8 @@ const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Quat = @import("../math/Quat.zig").Quat;
 
 const defaultAspect: f32 = 16.0 / 9.0; //16:9 //TODO initialize perspective
-const defaultYFoV: f32 = 1.353540; // 110 degrees hfov -> 77.55 vfov at 16:9 -> then convert to rad
+const defaultAspectInv: f32 = 1.0 / defaultAspect;
+const defaultYFoV: f32 = 70.0 * mathutil.degToRad * defaultAspectInv;
 
 // 1.0 aspect ratio
 //const defaultAspect: comptime f32 = 1.0; //1:1
@@ -32,12 +33,11 @@ pub const Camera = struct {
     pub fn GetProjectionMatrix(self: *const Camera) Mat4x4 {
         var returnMat = Mat4x4.zero;
         const tanHalfFoVY = @tan(self.m_fovY * 0.5);
-        const frustrumDepth = self.m_farPlane - self.m_nearPlane;
         returnMat.m[0][0] = 1.0 / (tanHalfFoVY * self.m_aspectRatio);
         returnMat.m[1][1] = 1.0 / tanHalfFoVY;
-        returnMat.m[2][2] = self.m_farPlane / frustrumDepth;
-        returnMat.m[2][3] = 1.0;
-        returnMat.m[3][2] = -(self.m_farPlane * self.m_nearPlane) / frustrumDepth;
+        returnMat.m[2][2] = self.m_farPlane / (self.m_farPlane - self.m_nearPlane);
+        returnMat.m[2][3] = -(self.m_farPlane * self.m_nearPlane) / (self.m_farPlane - self.m_nearPlane);
+        returnMat.m[3][2] = 1.0;
         return returnMat;
     }
 
@@ -49,7 +49,7 @@ pub const Camera = struct {
         returnMat.m[2][2] = 1.0 / (self.m_farPlane - self.m_nearPlane);
         returnMat.m[3][0] = -(right + left) / (right - left);
         returnMat.m[3][1] = -(top + bottom) / (top - bottom);
-        returnMat.m[3][2] = -self.m_nearPlane / (self.m_farPlane - self.m_nearPlane);
+        returnMat.m[3][2] = self.m_nearPlane / (self.m_nearPlane - self.m_farPlane);
         return returnMat;
     }
 

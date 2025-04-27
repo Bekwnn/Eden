@@ -17,7 +17,6 @@ The project is likely to have temp code testing out new features during its deve
 Initial (one-time) setup:
 * grab the dependency/cimgui submodule
 * grab the dependency/cimgui/imgui submodule
-* follow the README.md in dependency/cimgui-modified-impl and copy the modified .h/.cpp files
 * run cmake on dependency/assimp and build the assimp project in RelWithDebInfo and Release modes
 
 TODO: make build.zig do as much of this initial set up as possible; try to make setup a 1-step process

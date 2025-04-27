@@ -20,7 +20,7 @@ pub usingnamespace @cImport({
     //@cDefine("CGLTF_IMPLEMENTATION", {});
     //@cInclude("cgltf/cgltf.h");
 
-    //vma
+    //vma (testing; not in use)
     //@cInclude("vma/vk_mem_alloc.h");
 
     //stb

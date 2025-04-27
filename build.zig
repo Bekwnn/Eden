@@ -251,31 +251,6 @@ pub fn build(b: *std.Build) !void {
     imgui_lib.addIncludePath(.{ .cwd_relative = vulkanPathInclude });
     exe.linkLibrary(imgui_lib);
 
-    //exe.addIncludePath(b.path("dependency/cimgui"));
-    //exe.addIncludePath(b.path("dependency/cimgui/imgui"));
-    //exe.addIncludePath(b.path("dependency/cimgui/imgui/examples"));
-    //const imgui_flags = &[_][]const u8{
-    //    "-std=c++17",
-    //    "-Wno-return-type-c-linkage",
-    //    "-fno-exceptions",
-    //    "-DIMGUI_STATIC=yes",
-    //    "-fno-threadsafe-statics",
-    //    "-fno-rtti",
-    //    "-Wno-pragma-pack",
-    //};
-    //exe.addCSourceFiles(.{
-    //    .files = &[_][]const u8{
-    //        "dependency/cimgui/cimgui.cpp",
-    //        "dependency/cimgui/imgui/imgui.cpp",
-    //        "dependency/cimgui/imgui/imgui_demo.cpp",
-    //        "dependency/cimgui/imgui/imgui_draw.cpp",
-    //        "dependency/cimgui/imgui/imgui_widgets.cpp",
-    //        "dependency/cimgui/imgui/examples/imgui_impl_sdl.cpp",
-    //        "dependency/cimgui/imgui/examples/imgui_impl_vulkan.cpp",
-    //    },
-    //    .flags = imgui_flags,
-    //});
-
     exe.addIncludePath(b.path("dependency/SDL2/include"));
     exe.addLibraryPath(b.path("dependency/SDL2/lib/x64"));
     exe.linkSystemLibrary("SDL2");

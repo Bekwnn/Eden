@@ -212,6 +212,45 @@ pub fn build(b: *std.Build) !void {
 
     exe.addIncludePath(b.path("src"));
 
+    // imgui
+    const imgui_lib = b.addStaticLibrary(.{
+        .name = "cimgui",
+        .target = targetOptions,
+        .optimize = optimizationMode,
+    });
+    imgui_lib.addIncludePath(b.path("dependency/cimgui/"));
+    imgui_lib.addIncludePath(b.path("dependency/cimgui/imgui/"));
+    imgui_lib.addIncludePath(b.path("dependency/cimgui/imgui/backends/"));
+    imgui_lib.addIncludePath(b.path("dependency/SDL2/include/"));
+    imgui_lib.linkLibC();
+    imgui_lib.linkLibCpp();
+    imgui_lib.addCSourceFiles(.{
+        .files = &.{
+            "dependency/cimgui/cimgui.cpp",
+            "dependency/cimgui/imgui/imgui.cpp",
+            "dependency/cimgui/imgui/imgui_demo.cpp",
+            "dependency/cimgui/imgui/imgui_draw.cpp",
+            "dependency/cimgui/imgui/imgui_tables.cpp",
+            "dependency/cimgui/imgui/imgui_widgets.cpp",
+            "dependency/cimgui/imgui/backends/imgui_impl_sdl2.cpp",
+            "dependency/cimgui/imgui/backends/imgui_impl_vulkan.cpp",
+        },
+        .flags = &[_][]const u8{
+            "-std=c++17",
+            "-fno-rtti",
+            "-fno-threadsafe-statics",
+            "-fno-exceptions",
+            "-fno-sanitize=undefined",
+            "-DIMGUI_STATIC=yes",
+            "-DIMGUI_IMPL_API=extern \"C\"",
+            "-Wno-return-type-c-linkage",
+            "-Wno-pragma-pack",
+        },
+    });
+    imgui_lib.addLibraryPath(.{ .cwd_relative = vulkanPathLib });
+    imgui_lib.addIncludePath(.{ .cwd_relative = vulkanPathInclude });
+    exe.linkLibrary(imgui_lib);
+
     //exe.addIncludePath(b.path("dependency/cimgui"));
     //exe.addIncludePath(b.path("dependency/cimgui/imgui"));
     //exe.addIncludePath(b.path("dependency/cimgui/imgui/examples"));
@@ -256,6 +295,7 @@ pub fn build(b: *std.Build) !void {
         exe.addLibraryPath(b.path("dependency/assimp/lib/Release"));
     }
     const assimpDllPath = if (isDebug) &[_][]const u8{ "dependency", "assimp", "bin", "RelWithDebInfo" } else &[_][]const u8{ "dependency", "assimp", "bin", "Release" };
+
     copyDllToBin(b.allocator, assimpDllPath, "assimp-vc142-mt") catch |e| {
         std.debug.print("Could not copy assimp-vc142-mt.dll, {}\n", .{e});
         @panic("Build failure.");

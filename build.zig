@@ -212,6 +212,10 @@ pub fn build(b: *std.Build) !void {
 
     exe.addIncludePath(b.path("src"));
 
+    exe.addIncludePath(b.path("dependency/SDL2/include"));
+    exe.addLibraryPath(b.path("dependency/SDL2/lib/x64"));
+    exe.linkSystemLibrary("SDL2");
+
     // imgui
     const imgui_lib = b.addStaticLibrary(.{
         .name = "cimgui",
@@ -224,9 +228,11 @@ pub fn build(b: *std.Build) !void {
     imgui_lib.addIncludePath(b.path("dependency/SDL2/include/"));
     imgui_lib.linkLibC();
     imgui_lib.linkLibCpp();
+    imgui_lib.linkSystemLibrary("vulkan-1");
     imgui_lib.addCSourceFiles(.{
         .files = &.{
             "dependency/cimgui/cimgui.cpp",
+            "dependency/cimgui/cimgui_impl.cpp",
             "dependency/cimgui/imgui/imgui.cpp",
             "dependency/cimgui/imgui/imgui_demo.cpp",
             "dependency/cimgui/imgui/imgui_draw.cpp",
@@ -250,10 +256,6 @@ pub fn build(b: *std.Build) !void {
     imgui_lib.addLibraryPath(.{ .cwd_relative = vulkanPathLib });
     imgui_lib.addIncludePath(.{ .cwd_relative = vulkanPathInclude });
     exe.linkLibrary(imgui_lib);
-
-    exe.addIncludePath(b.path("dependency/SDL2/include"));
-    exe.addLibraryPath(b.path("dependency/SDL2/lib/x64"));
-    exe.linkSystemLibrary("SDL2");
 
     //TODO this might be automatic now with newer zig? (0.13.0+)
     const sdl2DllPath = &[_][]const u8{ "dependency", "SDL2", "lib", "x64" };
@@ -299,7 +301,6 @@ pub fn build(b: *std.Build) !void {
 
     b.installArtifact(exe);
 
-    //
     const test_files = [_][]const u8{
         "src/math/Math.zig",
     };

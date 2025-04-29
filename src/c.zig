@@ -1,14 +1,17 @@
 pub usingnamespace @cImport({
+    //Vulkan
+    @cInclude("vulkan/vulkan.h");
+
     //SDL
     @cInclude("SDL.h");
     @cInclude("SDL_Vulkan.h");
 
     //IMGUI
     @cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", {});
+    @cDefine("CIMGUI_USE_VULKAN", {});
+    @cDefine("CIMGUI_USE_SDL2", {});
     @cInclude("cimgui/cimgui.h");
-
-    //Vulkan
-    @cInclude("vulkan/vulkan.h");
+    @cInclude("cimgui/cimgui_impl.h");
 
     //Assimp
     @cInclude("assimp/cimport.h");

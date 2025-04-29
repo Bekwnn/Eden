@@ -28,6 +28,7 @@ const engineVersion = c.VK_MAKE_API_VERSION(0, 0, 1, 0);
 
 pub const RenderContextError = error{
     AlreadyInitialized,
+    FailedToBeginCommandBuffer,
     FailedToCheckInstanceLayerProperties,
     FailedToCreateCommandBuffers,
     FailedToCreateCommandPool,
@@ -41,9 +42,14 @@ pub const RenderContextError = error{
     FailedToCreateRenderPass,
     FailedToCreateSemaphores,
     FailedToCreateSurface,
+    FailedToEndCommandBuffer,
     FailedToFindPhysicalDevice,
     FailedToFindSupportedFormat,
+    FailedToInitImgui,
+    FailedToQueueSubmit,
     FailedToRecordCommandBuffers,
+    FailedToResetCommandBuffer,
+    FailedToResetFence,
     FailedToWait,
     MissingValidationLayer,
     UninitializedShutdown,
@@ -112,6 +118,13 @@ pub const RenderContext = struct {
 
     m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
     m_maxDescriptorSets: u32 = 0,
+
+    // used by imgui
+    m_immediateFence: c.VkFence = undefined,
+    m_immediateCommandBuffer: c.VkCommandBuffer = undefined,
+    m_immediateCommandPool: c.VkCommandPool = undefined,
+
+    m_imguiPool: c.VkDescriptorPool = undefined,
 
     pub fn GetInstance() !*RenderContext {
         if (instance) |*inst| {
@@ -209,6 +222,9 @@ pub const RenderContext = struct {
             newInstance.m_logicalDevice,
             newInstance.m_renderPass,
         );
+
+        std.debug.print("Creating Imgui resources...\n", .{});
+        try InitImgui(window);
     }
 
     pub fn Shutdown(self: *RenderContext) void {
@@ -298,6 +314,64 @@ pub const RenderContext = struct {
         }
 
         defer self.m_swapchain.CleanupDepthAndColorImages(self.m_logicalDevice);
+    }
+
+    // usage: call BeginImmedaiteSubmit(), record to the command buffer, call FinishImmediateSubmit()
+    pub fn BeginImmediateSubmit() !c.VkCommandBuffer {
+        const rContext = RenderContext.GetInstance();
+
+        try vkUtil.CheckVkSuccess(
+            c.vkResetFences(rContext.m_logicalDevice, 1, &rContext.m_immediateFence),
+            RenderContextError.FailedToResetFence,
+        );
+        try vkUtil.CheckVkSuccess(
+            c.vkResetCommandBuffer(rContext.m_immediateCommandBuffer, 0),
+            RenderContextError.FailedToResetCommandBuffer,
+        );
+
+        const beginInfo = c.VkCommandBufferBeginInfo{
+            .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = c.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            .pInheritanceInfo = null,
+            .pNext = null,
+        };
+
+        try vkUtil.CheckVkSuccess(
+            c.vkBeginCommandBuffer(rContext.m_immediateCommandBuffer, &beginInfo),
+            RenderContextError.FailedToBeginCommandBuffer,
+        );
+
+        return rContext.m_immediateCommandBuffer;
+    }
+
+    pub fn FinishImmediateSubmit() !void {
+        const rContext = RenderContext.GetInstance();
+
+        try vkUtil.CheckVkSuccess(
+            c.vkEndCommandBuffer(rContext.m_immediateCommandBuffer),
+            RenderContextError.FailedToEndCommandBuffer,
+        );
+
+        const submitInfo = c.VkSubmitInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &rContext.m_immediateCommandBuffer,
+            .pNext = null,
+            .waitSemaphoreCount = 0,
+            .pWaitSemaphores = null,
+            .pWaitDstStageMask = null,
+            .signalSemaphoreCount = 0,
+            .pSignalSemaphores = null,
+        };
+
+        try vkUtil.CheckVkSuccess(
+            c.vkQueueSubmit(rContext.m_graphicsQueue, 1, &submitInfo, rContext.m_immediateFence),
+            RenderContextError.FailedToQueueSubmit,
+        );
+        try vkUtil.CheckVkSuccess(
+            c.vkWaitForFences(rContext.m_logicalDevice, 1, &rContext.m_immediateFence, true, 9999999999),
+            RenderContextError.FailedToWaitForFences,
+        );
     }
 };
 
@@ -404,6 +478,7 @@ fn CreateVkInstance(
     );
 }
 
+//TODO pass in a list of required/enabled extensions
 fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
     const rContext = try RenderContext.GetInstance();
     var deviceCount: u32 = 0;
@@ -421,9 +496,11 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
         RenderContextError.FailedToFindPhysicalDevice,
     );
 
+    //Create list of physical device features we want
+
     //TODO rather than just picking first suitable device, could rate/score by some scheme and pick the best
     for (deviceList) |device| {
-        if (try PhysicalDeviceIsSuitable(allocator, device, window, rContext.m_surface)) {
+        if (try PhysicalDeviceIsSuitable(allocator, device, window, rContext.m_surface, &requiredFeatures)) {
             rContext.m_physicalDevice = device;
             rContext.m_msaaSamples = try GetDeviceMaxUsableSampleCount();
             rContext.m_maxDescriptorSets = try GetDeviceMaxDescriptorSets();
@@ -434,18 +511,54 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
     return RenderContextError.NoSuitableDevice;
 }
 
-// Currently just checks if geometry shaders are supported and if the device supports VK_QUEUE_GRAPHICS_BIT
-// Mostly a proof-of-concept function; could ensure device support exists for more advanced stuff later
 const requiredDeviceExtensions = [_][*]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    c.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, // required by DEPTH_STENCIL_RESOLVE
+    c.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // required by DYNAMIC_RENDERING
+    c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 };
-fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, window: *c.SDL_Window, surface: c.VkSurfaceKHR) !bool {
-    //TODO should take in surface and check if presentation is supported (vkGetPhysicalDeviceSurfaceSupportKHR())
+var requiredFeatures13 = c.VkPhysicalDeviceVulkan13Features{
+    .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+    .pNext = null,
+    .dynamicRendering = c.VK_TRUE,
+    .synchronization2 = c.VK_TRUE,
+};
+var requiredFeatures12 = c.VkPhysicalDeviceVulkan12Features{
+    .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+    .pNext = &requiredFeatures13,
+    .bufferDeviceAddress = c.VK_TRUE,
+    .descriptorIndexing = c.VK_TRUE,
+};
+const requiredFeatures = c.VkPhysicalDeviceFeatures2{
+    .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+    .pNext = &requiredFeatures12,
+    .features = c.VkPhysicalDeviceFeatures{
+        .geometryShader = c.VK_TRUE,
+        .samplerAnisotropy = c.VK_TRUE,
+    },
+};
+fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, window: *c.SDL_Window, surface: c.VkSurfaceKHR, enabledFeatures: *const c.VkPhysicalDeviceFeatures2) !bool {
     var deviceProperties: c.VkPhysicalDeviceProperties = undefined;
     c.vkGetPhysicalDeviceProperties(device, &deviceProperties);
 
-    var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
-    c.vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+    // to query different major versions, have to create a pnext chain of device features structs
+    // deviceFeatures.features contains 1.0 features.
+    var deviceFeatures13 = c.VkPhysicalDeviceVulkan13Features{
+        .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+    };
+    var deviceFeatures12 = c.VkPhysicalDeviceVulkan12Features{
+        .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .pNext = &deviceFeatures13,
+    };
+    var deviceFeatures11 = c.VkPhysicalDeviceVulkan11Features{
+        .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+        .pNext = &deviceFeatures12,
+    };
+    var deviceFeatures = c.VkPhysicalDeviceFeatures2{
+        .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext = &deviceFeatures11,
+    };
+    c.vkGetPhysicalDeviceFeatures2(device, &deviceFeatures);
 
     var queueFamilyCount: u32 = 0;
     c.vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, null);
@@ -481,17 +594,86 @@ fn PhysicalDeviceIsSuitable(allocator: Allocator, device: c.VkPhysicalDevice, wi
     // For now, just test it supports geometry shaders as a sort of test/placeholder?
     return swapchainSupported and
         graphicsSupportExists and
-        deviceFeatures.geometryShader == c.VK_TRUE and
-        deviceFeatures.samplerAnisotropy == c.VK_TRUE;
+        try EnabledFeaturesExist(enabledFeatures, &deviceFeatures);
+}
+
+fn CheckFeatureFieldsAreSupported(
+    comptime FeatureType: type,
+    enabledFeatures: *const FeatureType,
+    physicalFeatures: *const FeatureType,
+) bool {
+    inline for (@typeInfo(FeatureType).Struct.fields) |f| {
+        if (f.type == c.VkBool32) {
+            if (@as(f.type, @field(enabledFeatures, f.name)) == c.VK_TRUE and
+                @as(f.type, @field(physicalFeatures, f.name)) != c.VK_TRUE)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// assumes features are pNext chained starting from old to new versions
+fn EnabledFeaturesExist(
+    enabledFeatures: *const c.VkPhysicalDeviceFeatures2,
+    physicalDeviceFeatures: *const c.VkPhysicalDeviceFeatures2,
+) !bool {
+    // check 1.0 features
+    if (!CheckFeatureFieldsAreSupported(c.VkPhysicalDeviceFeatures, &enabledFeatures.features, &physicalDeviceFeatures.features)) {
+        return false;
+    }
+
+    // check 1.1+ features
+    var enabledVersionFeaturesChain = enabledFeatures.pNext;
+    while (enabledVersionFeaturesChain) |enabledVersionFeatures| {
+        const enabledAs11: *c.VkPhysicalDeviceVulkan11Features = @ptrCast(@alignCast(enabledVersionFeatures));
+        var physicalVersionFeaturesChain = physicalDeviceFeatures.pNext;
+        // skip if enabledVersionFeatures has a whole version missing from its pNext chain
+        while (physicalVersionFeaturesChain) |physicalVersionFeatures| {
+            const physicalAs11: *c.VkPhysicalDeviceVulkan11Features = @ptrCast(@alignCast(physicalVersionFeatures));
+            if (enabledAs11.sType == physicalAs11.sType) {
+                break;
+            }
+            physicalVersionFeaturesChain = physicalAs11.pNext;
+        }
+
+        if (physicalVersionFeaturesChain) |physicalVersionFeatures| {
+            switch (enabledAs11.sType) {
+                inline c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+                c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+                c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+                => |structType| {
+                    const FeatureStructType = switch (structType) {
+                        c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES => c.VkPhysicalDeviceVulkan11Features,
+                        c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES => c.VkPhysicalDeviceVulkan12Features,
+                        c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES => c.VkPhysicalDeviceVulkan13Features,
+                        c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES => c.VkPhysicalDeviceVulkan14Features,
+                        else => comptime unreachable, //sType was wrong?
+                    };
+                    const enabledAsFeatureType: *FeatureStructType = @ptrCast(@alignCast(enabledVersionFeatures));
+                    const physicalAsFeatureType: *FeatureStructType = @ptrCast(@alignCast(physicalVersionFeatures));
+                    if (!CheckFeatureFieldsAreSupported(FeatureStructType, enabledAsFeatureType, physicalAsFeatureType)) {
+                        return false;
+                    }
+                },
+                else => return RenderContextError.FailedToFindPhysicalDevice, //sType was wrong?
+            }
+        } else {
+            // physical device is missing a whole version's worth of features
+            return false;
+        }
+
+        enabledVersionFeaturesChain = enabledAs11.pNext;
+    }
+
+    return true;
 }
 
 const basicQueuePriority: f32 = 1.0; //TODO real queue priorities
 fn CreateLogicalDevice(allocator: Allocator) !void {
     const rContext = try RenderContext.GetInstance();
-    //TODO just copying device features that we found on the selected physical
-    //device--in the future it should just have features we're actually using
-    var deviceFeatures: c.VkPhysicalDeviceFeatures = undefined;
-    c.vkGetPhysicalDeviceFeatures(rContext.m_physicalDevice, &deviceFeatures);
 
     var queueFamilyCount: u32 = 0;
     c.vkGetPhysicalDeviceQueueFamilyProperties(
@@ -573,13 +755,13 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
         .sType = c.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = numUniqueQueues,
         .pQueueCreateInfos = queueCreateInfos.ptr,
-        .pEnabledFeatures = &deviceFeatures,
+        .pEnabledFeatures = null, //1.0 feature struct only, pass pnext chain into pnext instead
         .enabledExtensionCount = requiredDeviceExtensions.len,
         .ppEnabledExtensionNames = &requiredDeviceExtensions,
         .enabledLayerCount = 0, //depricated, per Khronos
         .ppEnabledLayerNames = null, //depricated, per Khronos
         .flags = 0,
-        .pNext = null,
+        .pNext = &requiredFeatures,
     };
 
     try vkUtil.CheckVkSuccess(
@@ -679,6 +861,64 @@ fn InitGPUSceneData(allocator: Allocator) !void {
     }
 }
 
+fn InitImgui(window: *c.SDL_Window) !void {
+    //per vkguide: probably overkill
+    const poolSizes = [_]c.VkDescriptorPoolSize{
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 1000 },
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1000 },
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, .descriptorCount = 1000 },
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, .descriptorCount = 1000 },
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, .descriptorCount = 1000 },
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1000 },
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1000 },
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, .descriptorCount = 1000 },
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, .descriptorCount = 1000 },
+        c.VkDescriptorPoolSize{ .type = c.VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, .descriptorCount = 1000 },
+    };
+
+    const poolInfo = c.VkDescriptorPoolCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = 1000,
+        .poolSizeCount = poolSizes.len,
+        .pPoolSizes = &poolSizes,
+        .flags = 0,
+    };
+
+    const rContext = try RenderContext.GetInstance();
+    try vkUtil.CheckVkSuccess(
+        c.vkCreateDescriptorPool(rContext.m_logicalDevice, &poolInfo, null, &rContext.m_imguiPool),
+        RenderContextError.FailedToInitImgui,
+    );
+
+    //TODO handle return vals
+    _ = c.igCreateContext(null);
+
+    _ = c.ImGui_ImplSDL2_InitForVulkan(window);
+
+    var imguiInitInfo = c.ImGui_ImplVulkan_InitInfo{
+        .Instance = rContext.m_vkInstance,
+        .PhysicalDevice = rContext.m_physicalDevice,
+        .Device = rContext.m_logicalDevice,
+        .Queue = rContext.m_graphicsQueue,
+        .DescriptorPool = rContext.m_imguiPool,
+        .MinImageCount = 3,
+        .ImageCount = 3,
+        .UseDynamicRendering = true,
+        .PipelineRenderingCreateInfo = c.VkPipelineRenderingCreateInfoKHR{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = 1,
+            .pColorAttachmentFormats = &rContext.m_swapchain.m_format.format,
+        },
+        .MSAASamples = c.VK_SAMPLE_COUNT_1_BIT,
+    };
+
+    _ = c.ImGui_ImplVulkan_Init(&imguiInitInfo);
+
+    _ = c.ImGui_ImplVulkan_CreateFontsTexture();
+
+    //TODO create cleanup function, destory m_imguiPool
+}
+
 fn CreateRenderPass() !void {
     const rContext = try RenderContext.GetInstance();
     const colorAttachment = c.VkAttachmentDescription{
@@ -766,7 +1006,7 @@ fn CreateRenderPass() !void {
     );
 }
 
-//TODO shared function; should this live here?
+//TODO shared function used by swapchain.zig; should this live here?
 pub fn FindDepthFormat() !c.VkFormat {
     return FindSupportedFormat(
         &[_]c.VkFormat{ c.VK_FORMAT_D32_SFLOAT, c.VK_FORMAT_D32_SFLOAT_S8_UINT, c.VK_FORMAT_D24_UNORM_S8_UINT },
@@ -819,58 +1059,24 @@ fn CreateCommandBuffers() !void {
             ),
             RenderContextError.FailedToCreateCommandBuffers,
         );
-
-        //TODO ??? this code seems like it got lost
-        //var beginInfo = c.VkCommandBufferBeginInfo{
-        //    .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        //    .pInheritanceInfo = null,
-        //    .flags = 0,
-        //    .pNext = null,
-        //};
-        //
-        //try vkUtil.CheckVkSuccess(
-        //    c.vkBeginCommandBuffer(frameData.m_mainCommandBuffer, &beginInfo),
-        //    RenderContextError.FailedToCreateCommandBuffers,
-        //);
-        //
-        //const clearColor = c.VkClearValue{
-        //    .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.0, 0.0, 0.0, 1.0 } },
-        //};
-        //const clearDepth = c.VkClearValue{
-        //    .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
-        //};
-        //const clearValues = [_]c.VkClearValue{ clearColor, clearDepth };
-        //const renderPassInfo = c.VkRenderPassBeginInfo{
-        //    .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        //    .renderPass = rContext.m_renderPass,
-        //    .framebuffer = rContext.m_swapchain.m_frameBuffers[i],
-        //    .renderArea = c.VkRect2D{
-        //        .offset = c.VkOffset2D{
-        //            .x = 0,
-        //            .y = 0,
-        //        },
-        //        .extent = rContext.m_swapchain.m_extent,
-        //    },
-        //    .clearValueCount = 2,
-        //    .pClearValues = &clearValues,
-        //    .pNext = null,
-        //};
-        //
-        //c.vkCmdBeginRenderPass(
-        //    rContext.m_frameData[i].m_mainCommandBuffer,
-        //    &renderPassInfo,
-        //    c.VK_SUBPASS_CONTENTS_INLINE,
-        //);
-        //{
-        //    //TODO scene.RenderObjects(commandBuffers[i], renderObjects);
-        //}
-        //c.vkCmdEndRenderPass(rContext.m_frameData[i].m_mainCommandBuffer);
-        //
-        //try vkUtil.CheckVkSuccess(
-        //    c.vkEndCommandBuffer(rContext.m_frameData[i].m_mainCommandBuffer),
-        //    RenderContextError.FailedToRecordCommandBuffers,
-        //);
     }
+
+    const allocInfo = c.VkCommandBufferAllocateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = rContext.m_immediateCommandPool,
+        .level = c.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+        .pNext = null,
+    };
+
+    try vkUtil.CheckVkSuccess(
+        c.vkAllocateCommandBuffers(
+            rContext.m_logicalDevice,
+            &allocInfo,
+            &rContext.m_immediateCommandBuffer,
+        ),
+        RenderContextError.FailedToCreateCommandBuffers,
+    );
 }
 
 fn CreateCommandPool() !void {
@@ -898,6 +1104,16 @@ fn CreateCommandPool() !void {
             RenderContextError.FailedToCreateCommandPool,
         );
     }
+
+    try vkUtil.CheckVkSuccess(
+        c.vkCreateCommandPool(
+            rContext.m_logicalDevice,
+            &poolInfo,
+            null,
+            &rContext.m_immediateCommandPool,
+        ),
+        RenderContextError.FailedToCreateCommandPool,
+    );
 }
 
 fn CreateFencesAndSemaphores() !void {
@@ -928,4 +1144,9 @@ fn CreateFencesAndSemaphores() !void {
             RenderContextError.FailedToCreateFences,
         );
     }
+
+    try vkUtil.CheckVkSuccess(
+        c.vkCreateFence(rContext.m_logicalDevice, &fenceInfo, null, &rContext.m_immediateFence),
+        RenderContextError.FailedToCreateFences,
+    );
 }

@@ -1,4 +1,4 @@
-const c = @import("c.zig"); //can't use usingnamespace because of main() definition conflict
+const c = @import("c.zig");
 const std = @import("std");
 const debug = std.debug;
 
@@ -46,6 +46,7 @@ pub fn main() !void {
 pub fn MainGameLoop(window: *c.SDL_Window) !void {
     //TODO input handling
     var quit = false;
+    var stop_rendering = false;
     while (!quit) {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
@@ -60,6 +61,12 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
                     {
                         try presentation.OnWindowResized(window);
                     }
+                    if (event.window.event == c.SDL_WINDOWEVENT_MINIMIZED) {
+                        stop_rendering = true;
+                    }
+                    if (event.window.event == c.SDL_WINDOWEVENT_RESTORED) {
+                        stop_rendering = false;
+                    }
                 },
                 else => {},
             }
@@ -68,7 +75,17 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
         gameWorld.WritableInstance().Update(1.0 / 60.0);
         gameWorld.WritableInstance().FixedUpdate();
 
-        try presentation.RenderFrame();
+        if (!stop_rendering) {
+            //TODO move out imgui code to somewhere within presentation probably
+            c.ImGui_ImplVulkan_NewFrame();
+            c.ImGui_ImplSDL2_NewFrame();
+
+            c.igNewFrame();
+            c.igShowDemoWindow(null);
+            c.igRender();
+
+            try presentation.RenderFrame();
+        }
 
         c.SDL_Delay(17);
     }

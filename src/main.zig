@@ -1,6 +1,7 @@
 const c = @import("c.zig");
 const std = @import("std");
 const debug = std.debug;
+const time = std.time;
 
 const gameWorld = @import("game/GameWorld.zig");
 
@@ -38,19 +39,36 @@ pub fn main() !void {
     //presentation.Initialize(renderer);
     gameWorld.Initialize();
 
+    frameTimer = try time.Timer.start();
     try MainGameLoop(window);
 
     // teardown
 }
 
+// if we hit min FPS, we clamp the deltaT to minFPS and let the game run in slow-mo
+// if we hit max FPS, we clamp the deltaT to maxFPS and sleep for the remaining time left
+const minFPS = 10.0;
+const maxDeltaNs: u64 = @intFromFloat(@as(f32, @floatFromInt(time.ns_per_s)) / minFPS);
+const maxFPS = 240.0;
+const minDeltaNs: u64 = @intFromFloat(@as(f32, @floatFromInt(time.ns_per_s)) / maxFPS);
+var frameTimer: time.Timer = undefined;
+
 pub fn MainGameLoop(window: *c.SDL_Window) !void {
-    //TODO input handling
     var quit = false;
     var stop_rendering = false;
     while (!quit) {
+        // Update frame timer
+        const rawDeltaNs = frameTimer.lap();
+        const clampedDeltaNs = std.math.clamp(rawDeltaNs, minDeltaNs, maxDeltaNs);
+        if (rawDeltaNs < minDeltaNs) {
+            // sleep if exceeding max fps
+            time.sleep(minDeltaNs - rawDeltaNs);
+        }
+        const deltaT = @as(f32, @floatFromInt(clampedDeltaNs)) / @as(f32, @floatFromInt(time.ns_per_s));
+
+        //Input handling and window events
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event) != 0) {
-            //_ = c.ImGui_ImplSDL2_ProcessEvent(&event);
             switch (event.type) {
                 c.SDL_QUIT => {
                     quit = true;
@@ -74,7 +92,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
             _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
         }
 
-        gameWorld.WritableInstance().Update(1.0 / 60.0);
+        gameWorld.WritableInstance().Update(deltaT);
         gameWorld.WritableInstance().FixedUpdate();
 
         if (!stop_rendering) {
@@ -88,7 +106,5 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
 
             try presentation.RenderFrame();
         }
-
-        c.SDL_Delay(17);
     }
 }

@@ -21,6 +21,10 @@ test-assets/
 # Ignore compiled shaders in the compiled shader folder
 src/shaders/compiled/*.spv
 
+# Ignore Dear ImGui artifacts
+imgui.ini
+imgui*.ini
+
 # Vim ignores
 # Swap
 [._]*.s[a-v][a-z]

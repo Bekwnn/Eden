@@ -281,6 +281,8 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         //      for each render object:
         //        bindPerObjectDescriptors()
         //        draw()
+
+        c.ImGui_ImplVulkan_RenderDrawData(c.igGetDrawData(), commandBuffer, null);
     }
     c.vkCmdEndRenderPass(commandBuffer);
 

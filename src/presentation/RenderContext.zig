@@ -513,9 +513,9 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
 
 const requiredDeviceExtensions = [_][*]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    c.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, // required by DEPTH_STENCIL_RESOLVE
-    c.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // required by DYNAMIC_RENDERING
-    c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+    //c.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, // required by DEPTH_STENCIL_RESOLVE
+    //c.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // required by DYNAMIC_RENDERING
+    //c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 };
 var requiredFeatures13 = c.VkPhysicalDeviceVulkan13Features{
     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -903,13 +903,14 @@ fn InitImgui(window: *c.SDL_Window) !void {
         .DescriptorPool = rContext.m_imguiPool,
         .MinImageCount = 3,
         .ImageCount = 3,
-        .UseDynamicRendering = true,
+        .UseDynamicRendering = false,
         .PipelineRenderingCreateInfo = c.VkPipelineRenderingCreateInfoKHR{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
             .colorAttachmentCount = 1,
             .pColorAttachmentFormats = &rContext.m_swapchain.m_format.format,
         },
-        .MSAASamples = c.VK_SAMPLE_COUNT_1_BIT,
+        .MSAASamples = rContext.m_msaaSamples,
+        .RenderPass = rContext.m_renderPass,
     };
 
     _ = c.ImGui_ImplVulkan_Init(&imguiInitInfo);

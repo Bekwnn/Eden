@@ -70,6 +70,8 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
                 },
                 else => {},
             }
+
+            _ = c.ImGui_ImplSDL2_ProcessEvent(&event);
         }
 
         gameWorld.WritableInstance().Update(1.0 / 60.0);
@@ -82,7 +84,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
 
             c.igNewFrame();
             c.igShowDemoWindow(null);
-            c.igRender();
+            c.igRender(); // does not actually draw, drawing happens in RenderFrame()
 
             try presentation.RenderFrame();
         }

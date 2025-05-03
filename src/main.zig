@@ -7,7 +7,6 @@ const gameWorld = @import("game/GameWorld.zig");
 
 const presentation = @import("presentation/Presentation.zig");
 const RenderContext = @import("presentation/RenderContext.zig").RenderContext;
-const imgui = @import("presentation/ImGui.zig");
 const sdlInit = @import("presentation/SDLInit.zig");
 
 const imageFileUtil = @import("coreutil/ImageFileUtil.zig");
@@ -101,7 +100,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
             c.ImGui_ImplSDL2_NewFrame();
 
             c.igNewFrame();
-            c.igShowDemoWindow(null);
+            try presentation.ImguiFrame(deltaT, rawDeltaNs);
             c.igRender(); // does not actually draw, drawing happens in RenderFrame()
 
             try presentation.RenderFrame();

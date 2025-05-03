@@ -64,15 +64,14 @@ pub const Vec3 = extern struct {
         };
     }
 
-    // equals with a default tolerance of f32_epsilon
     pub fn Equals(self: *const Vec3, rhs: Vec3) bool {
-        return self.EqualsT(rhs, math.f32_epsilon);
+        return self.EqualsT(rhs, math.floatEps(f32));
     }
 
     pub fn EqualsT(self: *const Vec3, rhs: Vec3, tolerance: f32) bool {
-        return em.EqualWithinTolerance(f32, self.x, rhs.x, tolerance) and
-            em.EqualWithinTolerance(f32, self.y, rhs.y, tolerance) and
-            em.EqualWithinTolerance(f32, self.z, rhs.z, tolerance);
+        return math.approxEqAbs(f32, self.x, rhs.x, tolerance) and
+            math.approxEqAbs(f32, self.y, rhs.y, tolerance) and
+            math.approxEqAbs(f32, self.z, rhs.z, tolerance);
     }
 
     pub fn LengthSqrd(self: *const Vec3) f32 {
@@ -221,12 +220,12 @@ const Vec3Test = struct {
         const v2 = Vec3{ .x = -1, .y = -2, .z = -3 };
         const v1x3 = Vec3{ .x = 3, .y = 6, .z = 9 };
         const testAResult = v1.Normalized().Dot(v2.Normalized());
-        testing.expect(em.EqualWithinTolerance(f32, testAResult, -1.0, testTolerance)) catch |err| {
+        testing.expect(math.approxEqAbs(f32, testAResult, -1.0, testTolerance)) catch |err| {
             debug.print("v1.Dot(v2): {}", .{testAResult});
             return err;
         };
         const testBResult = v1.Normalized().Dot(v1x3.Normalized());
-        testing.expect(em.EqualWithinTolerance(f32, testBResult, 1.0, testTolerance)) catch |err| {
+        testing.expect(math.approxEqAbs(f32, testBResult, 1.0, testTolerance)) catch |err| {
             debug.print("v1.Dot(v1x3): {}", .{testBResult});
             return err;
         };

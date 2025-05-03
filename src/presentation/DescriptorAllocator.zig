@@ -107,8 +107,8 @@ pub const DescriptorAllocator = struct {
 
     fn GetPool(self: *Self, device: c.VkDevice) !c.VkDescriptorPool {
         var newPool: c.VkDescriptorPool = undefined;
-        if (self.m_readyPools.items.len > 0) {
-            newPool = self.m_readyPools.pop();
+        if (self.m_readyPools.pop()) |poppedPool| {
+            newPool = poppedPool;
         } else {
             newPool = try self.CreatePool(device, self.m_setsPerPool, self.m_poolRatios.items);
             self.m_setsPerPool = @as(u32, @intFromFloat(@as(f32, @floatFromInt(self.m_setsPerPool)) * 1.5));

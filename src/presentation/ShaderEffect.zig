@@ -99,7 +99,7 @@ fn ReadShaderFileAlloc(
     std.debug.print("Reading shader {s}...\n", .{relativeShaderPath});
 
     var shaderDir = std.fs.cwd();
-    var splitShaderPath = std.mem.tokenize(u8, relativeShaderPath, "\\/");
+    var splitShaderPath = std.mem.tokenizeScalar(u8, relativeShaderPath, '/');
 
     while (splitShaderPath.next()) |path| {
         shaderDir = shaderDir.openDir(path, .{}) catch |err| {

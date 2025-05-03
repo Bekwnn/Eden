@@ -11,7 +11,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
 
-pub const compTypeEnumCount: u32 = @typeInfo(EComponentType).Enum.fields.len;
+pub const compTypeEnumCount: u32 = @typeInfo(EComponentType).@"enum".fields.len;
 pub const EComponentType = enum {
     Health,
     Input,

@@ -51,20 +51,6 @@ const RenderLoopError = error{
     FailedToWaitForInFlightFence,
 };
 
-//var imguiIO: ?*c.ImGuiIO = null;
-//
-//fn ImguiInit() void {
-//    imguiIO = c.igGetIO();
-//    if (imguiIO) |io| {
-//        var text_pixels: [*c]u8 = undefined;
-//        var text_w: i32 = undefined;
-//        var text_h: i32 = undefined;
-//        c.ImFontAtlas_GetTexDataAsRGBA32(io.Fonts, &text_pixels, &text_w, &text_h, null);
-//    } else {
-//        @panic("imguiIO is null");
-//    }
-//}
-
 pub fn OnWindowResized(window: *c.SDL_Window) !void {
     var rContext = try RenderContext.GetInstance();
     var width: c_int = 0;
@@ -89,9 +75,6 @@ pub fn Initialize(
         applicationName,
         applicationVersion,
     );
-
-    //TODO get imgui working again
-    //ImguiInit();
 
     try AssetInventory.Initialize();
     try InitializeScene();
@@ -186,27 +169,22 @@ fn InitializeScene() !void {
             .m_transform = Mat4x4.identity,
         },
     );
-    //TODO switch to this after model matrices are used
-    // set up meshes
-    //var ix: i8 = -1;
-    //var iy: i8 = -1;
-    //while (iy <= 1) : (iy += 1) {
-    //    while (ix <= 1) : (ix += 1) {
-    //        const meshName = try std.fmt.allocPrint(allocator, "Mesh_{}.{}", .{ ix, iy });
-    //        try currentScene.m_renderables.put(
-    //            meshName,
-    //            RenderObject{
-    //                .m_mesh = mesh,
-    //                .m_material = material,
-    //                .m_transform = Mat4x4.Translation(Vec3{
-    //                    .x = @as(f32, @floatFromInt(ix)) * 2.0,
-    //                    .y = @as(f32, @floatFromInt(iy)) * 2.0,
-    //                    .z = 0.0,
-    //                }),
-    //            },
-    //        );
-    //    }
-    //}
+}
+
+// TODO remove params, make them accessible elsewhere
+pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
+    var camera = try currentScene.GetCurrentCamera();
+    _ = c.igBegin("My Editor Window", null, c.ImGuiWindowFlags_None);
+    _ = c.igText(
+        "Actual FPS: %.1f, Uncapped FPS: %.1f",
+        1.0 / deltaT,
+        @as(f32, @floatFromInt(std.time.ns_per_s)) / @as(f32, @floatFromInt(rawDeltaNs)),
+    );
+    _ = c.igText("Camera Pos");
+    _ = c.igSliderFloat("X", &camera.m_pos.x, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
+    _ = c.igSliderFloat("Y", &camera.m_pos.y, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
+    _ = c.igSliderFloat("Z", &camera.m_pos.z, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
+    c.igEnd();
 }
 
 pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
@@ -250,8 +228,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
-        // bind scene data
-        // updating and binding this data should probably be broken up into two steps, but for now doing both works
         try UpdateUniformSceneBuffer();
 
         var writer = DescriptorWriter.init(allocator);
@@ -298,6 +274,15 @@ pub fn UpdateUniformSceneBuffer() !void {
 
     // update time vec
     currentFrameData.m_gpuSceneData.m_time = GPUSceneData.CreateTimeVec(curTime);
+
+    // update camera
+    var camera = try currentScene.GetCurrentCamera();
+    camera.LookAt(if (!camera.m_pos.Equals(Vec3.zero)) Vec3.zero else Vec3.xAxis);
+    const view = camera.GetViewMatrix();
+    const proj = camera.GetProjectionMatrix();
+    currentFrameData.m_gpuSceneData.m_view = view;
+    currentFrameData.m_gpuSceneData.m_projection = proj;
+    currentFrameData.m_gpuSceneData.m_viewProj = proj.Mul(&view);
 
     // update uniform buffer
     if (currentFrameData.m_gpuSceneDataBuffer.m_mappedData) |mappedData| {

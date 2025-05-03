@@ -407,7 +407,7 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
             std.debug.print("Unable to find validation layer \"{s}\"\n", .{validationLayer});
             std.debug.print("Layers found:\n", .{});
             for (detectedLayerProperties) |detectedLayer| {
-                var trailingWhitespaceStripped = std.mem.tokenize(u8, &detectedLayer.layerName, " ");
+                var trailingWhitespaceStripped = std.mem.tokenizeScalar(u8, &detectedLayer.layerName, ' ');
                 std.debug.print("\"{s}\"\n", .{trailingWhitespaceStripped.next().?});
             }
             return RenderContextError.MissingValidationLayer;
@@ -513,9 +513,9 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
 
 const requiredDeviceExtensions = [_][*]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    //c.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, // required by DEPTH_STENCIL_RESOLVE
-    //c.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // required by DYNAMIC_RENDERING
-    //c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+        //c.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, // required by DEPTH_STENCIL_RESOLVE
+        //c.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // required by DYNAMIC_RENDERING
+        //c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 };
 var requiredFeatures13 = c.VkPhysicalDeviceVulkan13Features{
     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -602,7 +602,7 @@ fn CheckFeatureFieldsAreSupported(
     enabledFeatures: *const FeatureType,
     physicalFeatures: *const FeatureType,
 ) bool {
-    inline for (@typeInfo(FeatureType).Struct.fields) |f| {
+    inline for (@typeInfo(FeatureType).@"struct".fields) |f| {
         if (f.type == c.VkBool32) {
             if (@as(f.type, @field(enabledFeatures, f.name)) == c.VK_TRUE and
                 @as(f.type, @field(physicalFeatures, f.name)) != c.VK_TRUE)

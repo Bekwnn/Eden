@@ -25,19 +25,19 @@ pub const Quat = extern struct {
         return true;
     }
 
-    // Roll
+    // Pitch - returns Radians
     pub fn GetXEuler(self: *const Quat) f32 {
-        return stdm.atan(2.0 * (self.y * self.z + self.x * self.w), 1 - (2 * (self.x * self.x + self.y * self.y)));
+        return stdm.atan2(2.0 * (self.y * self.z + self.x * self.w), 1 - (2 * (self.x * self.x + self.y * self.y)));
     }
 
-    // Pitch
+    // Roll - returns Radians
     pub fn GetYEuler(self: *const Quat) f32 {
         return stdm.asin(2.0 * (self.x * self.z - self.y * self.w));
     }
 
-    // Yaw
+    // Yaw - returns Radians
     pub fn GetZEuler(self: *const Quat) f32 {
-        return stdm.atan(2.0 * (self.w * self.z + self.x * self.y), 1 - (2 * (self.y * self.y + self.z * self.z)));
+        return stdm.atan2(2.0 * (self.w * self.z + self.x * self.y), 1 - (2 * (self.y * self.y + self.z * self.z)));
     }
 
     pub fn GetEulerAngles(self: *const Quat) Vec3 {
@@ -45,6 +45,22 @@ pub const Quat = extern struct {
             .x = self.GetXEuler(),
             .y = self.GetYEuler(),
             .z = self.GetZEuler(),
+        };
+    }
+
+    pub fn FromEulerAngles(rollRad: f32, pitchRad: f32, yawRad: f32) Quat {
+        const cosRoll = @cos(rollRad * 0.5);
+        const sinRoll = @sin(rollRad * 0.5);
+        const cosPitch = @cos(pitchRad * 0.5);
+        const sinPitch = @sin(pitchRad * 0.5);
+        const cosYaw = @cos(yawRad * 0.5);
+        const sinYaw = @sin(yawRad * 0.5);
+
+        return Quat{
+            .x = sinRoll * cosPitch * cosYaw - cosRoll * sinPitch * sinYaw,
+            .y = cosRoll * sinPitch * cosYaw + sinRoll * cosPitch * sinYaw,
+            .z = cosRoll * cosPitch * sinYaw - sinRoll * sinPitch * cosYaw,
+            .w = cosRoll * cosPitch * cosYaw + sinRoll * sinPitch * sinYaw,
         };
     }
 

@@ -24,10 +24,11 @@ pub const Camera = struct {
     m_nearPlane: f32 = 0.1,
     m_farPlane: f32 = 100.0,
 
-    pub fn GetViewMatrix(self: *const Camera) Mat4x4 {
-        const viewDirection = Vec3.zAxis.RotatedByQuat(self.m_rotation);
-        const lookAtMat = Mat4x4.LookAt(self.m_pos, viewDirection, Vec3.yAxis);
-        return lookAtMat;
+    pub fn GetViewMatrix(self: *const Camera) !Mat4x4 {
+        const cameraTranslation = Mat4x4.Translation(self.m_pos);
+        const cameraRotation = Mat4x4.FromQuat(self.m_rotation);
+        const cameraModelMat = cameraTranslation.Mul(&cameraRotation);
+        return cameraModelMat.Inverse() catch @panic("!");
     }
 
     pub fn GetProjectionMatrix(self: *const Camera) Mat4x4 {

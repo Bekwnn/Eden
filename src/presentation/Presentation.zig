@@ -24,6 +24,8 @@ const Scene = scene.Scene;
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec4 = @import("../math/Vec4.zig").Vec4;
+const Quat = @import("../math/Quat.zig").Quat;
+const em = @import("../math/Math.zig");
 
 const game = @import("../game/GameWorld.zig");
 const GameWorld = @import("../game/GameWorld.zig").GameWorld;
@@ -109,7 +111,7 @@ fn InitializeScene() !void {
     currentCamera.m_pos = Vec3{ .x = 0.0, .y = 0.0, .z = -25.0 };
     currentCamera.LookAt(Vec3.zero);
 
-    const cameraViewMat = currentCamera.GetViewMatrix();
+    const cameraViewMat = try currentCamera.GetViewMatrix();
     const cameraProjMat = currentCamera.GetProjectionMatrix();
 
     const rContext = try RenderContext.GetInstance();
@@ -173,6 +175,8 @@ fn InitializeScene() !void {
 
 // TODO remove params, make them accessible elsewhere
 pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
+    //_ = c.igShowDemoWindow(null);
+
     var camera = try currentScene.GetCurrentCamera();
     _ = c.igBegin("My Editor Window", null, c.ImGuiWindowFlags_None);
     _ = c.igText(
@@ -180,10 +184,35 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
         1.0 / deltaT,
         @as(f32, @floatFromInt(std.time.ns_per_s)) / @as(f32, @floatFromInt(rawDeltaNs)),
     );
+
     _ = c.igText("Camera Pos");
+    c.igSetNextItemWidth(150.0);
     _ = c.igSliderFloat("X", &camera.m_pos.x, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
+
+    c.igSetNextItemWidth(150.0);
+    c.igSameLine(0.0, 2.0);
     _ = c.igSliderFloat("Y", &camera.m_pos.y, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
+
+    c.igSetNextItemWidth(150.0);
+    c.igSameLine(0.0, 2.0);
     _ = c.igSliderFloat("Z", &camera.m_pos.z, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
+
+    const rotateLeft = c.igButton("<", c.ImVec2{ .x = 20.0, .y = 20.0 });
+    c.igSameLine(0.0, 2.0);
+    const rotateRight = c.igButton(">", c.ImVec2{ .x = 20.0, .y = 20.0 });
+    _ = c.igText("Camera Rotation: %.2f", camera.m_rotation.GetZEuler() * em.util.radToDeg);
+    _ = c.igText(
+        "Camera Quat: {x:%.3f, y:%.3f, z:%.3f, w:%.3f}",
+        camera.m_rotation.x,
+        camera.m_rotation.y,
+        camera.m_rotation.z,
+        camera.m_rotation.w,
+    );
+    if (rotateLeft) {
+        camera.m_rotation = camera.m_rotation.Mul(Quat.GetAxisRotation(Vec3.zAxis, -5.0));
+    } else if (rotateRight) {
+        camera.m_rotation = camera.m_rotation.Mul(Quat.GetAxisRotation(Vec3.zAxis, 5.0));
+    }
     c.igEnd();
 }
 
@@ -277,8 +306,8 @@ pub fn UpdateUniformSceneBuffer() !void {
 
     // update camera
     var camera = try currentScene.GetCurrentCamera();
-    camera.LookAt(if (!camera.m_pos.Equals(Vec3.zero)) Vec3.zero else Vec3.xAxis);
-    const view = camera.GetViewMatrix();
+    //camera.LookAt(if (!camera.m_pos.Equals(Vec3.zero)) Vec3.zero else Vec3.xAxis);
+    const view = try camera.GetViewMatrix();
     const proj = camera.GetProjectionMatrix();
     currentFrameData.m_gpuSceneData.m_view = view;
     currentFrameData.m_gpuSceneData.m_projection = proj;

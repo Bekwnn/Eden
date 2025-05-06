@@ -25,6 +25,7 @@ pub const Camera = struct {
     m_farPlane: f32 = 100.0,
 
     pub fn GetViewMatrix(self: *const Camera) !Mat4x4 {
+        //TODO this is not at all efficient, instead manually create the view matrix
         const cameraTranslation = Mat4x4.Translation(self.m_pos);
         const cameraRotation = Mat4x4.FromQuat(self.m_rotation);
         const cameraModelMat = cameraTranslation.Mul(&cameraRotation);

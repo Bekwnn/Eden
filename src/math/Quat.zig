@@ -18,7 +18,7 @@ pub const Quat = extern struct {
 
     pub fn Equals(lhs: *const Quat, rhs: *const Quat) bool {
         inline for (std.meta.fields(@TypeOf(Quat))) |field| {
-            if (field.type == @TypeOf(f32) and !em.EqualWithinTolerance(f32, lhs.x, rhs.x, em.f32_epsilon)) {
+            if (field.type == @TypeOf(f32) and !stdm.approxEqAbs(f32, lhs.x, rhs.x, stdm.floatEps(f32))) {
                 return false;
             }
         }
@@ -26,25 +26,32 @@ pub const Quat = extern struct {
     }
 
     // Pitch - returns Radians
-    pub fn GetXEuler(self: *const Quat) f32 {
-        return stdm.atan2(2.0 * (self.y * self.z + self.x * self.w), 1 - (2 * (self.x * self.x + self.y * self.y)));
+    pub fn GetPitch(self: *const Quat) f32 {
+        return stdm.asin(2.0 * (self.y * self.w - self.z * self.x));
     }
 
     // Roll - returns Radians
-    pub fn GetYEuler(self: *const Quat) f32 {
-        return stdm.asin(2.0 * (self.x * self.z - self.y * self.w));
+    pub fn GetRoll(self: *const Quat) f32 {
+        return stdm.atan2(
+            2.0 * (self.z * self.y + self.w * self.x),
+            1.0 - 2.0 * (self.x * self.x + self.y * self.y),
+        );
     }
 
     // Yaw - returns Radians
-    pub fn GetZEuler(self: *const Quat) f32 {
-        return stdm.atan2(2.0 * (self.w * self.z + self.x * self.y), 1 - (2 * (self.y * self.y + self.z * self.z)));
+    pub fn GetYaw(self: *const Quat) f32 {
+        return stdm.atan2(
+            2.0 * (self.w * self.z + self.x * self.y),
+            -1.0 + 2.0 * (self.w * self.w + self.x * self.x),
+        );
     }
 
+    // x=Roll, y=Pitch, z=Yaw in Radians
     pub fn GetEulerAngles(self: *const Quat) Vec3 {
         return Vec3{
-            .x = self.GetXEuler(),
-            .y = self.GetYEuler(),
-            .z = self.GetZEuler(),
+            .x = self.GetRoll(),
+            .y = self.GetPitch(),
+            .z = self.GetYaw(),
         };
     }
 
@@ -208,15 +215,21 @@ pub const Quat = extern struct {
     }
 
     pub fn GetUpVec(self: *const Quat) Vec3 {
-        return self.Rotate(Vec3.xAxis);
+        return self.Rotate(Vec3.yAxis);
     }
 
-    //TODO
     //pub fn AngleBetween(lhs: *const Quat, rhs: *const Quat) f32 {}
-
-    //TODO lerp
 
     //TODO slerp
 };
 
-//TODO testing
+test {
+    const r1Euler = Vec3{
+        .x = 10.0 * em.util.degToRad,
+        .y = 25.0 * em.util.degToRad,
+        .z = 45.0 * em.util.degToRad,
+    };
+    const r1 = Quat.FromEulerAngles(r1Euler.x, r1Euler.y, r1Euler.z);
+    const r1RecreatedEuler = r1.GetEulerAngles();
+    try std.testing.expect(r1Euler.Equals(r1RecreatedEuler));
+}

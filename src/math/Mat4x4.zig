@@ -1,4 +1,6 @@
-const debug = @import("std").debug;
+const std = @import("std");
+const debug = std.debug;
+
 const Vec3 = @import("Vec3.zig").Vec3;
 const Quat = @import("Quat.zig").Quat;
 
@@ -26,6 +28,21 @@ pub const Mat4x4 = extern struct {
             [4]f32{ 0.0, 0.0, 0.0, 0.0 },
         },
     };
+
+    pub fn Equals(self: *const Mat4x4, other: *const Mat4x4) bool {
+        return self.EqualsT(other, std.math.floatEps(f32));
+    }
+
+    pub fn EqualsT(self: *const Mat4x4, other: *const Mat4x4, tolerance: f32) bool {
+        for (self.m, other.m) |selfRow, otherRow| {
+            for (selfRow, otherRow) |selfVal, otherVal| {
+                if (!std.math.approxEqAbs(f32, selfVal, otherVal, tolerance)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
     pub fn Mul(self: *const Mat4x4, other: *const Mat4x4) Mat4x4 {
         var returnMat = Mat4x4{};
@@ -192,3 +209,17 @@ pub const Mat4x4 = extern struct {
 };
 
 //TODO testing
+test {
+    // random matrix with a det != 0
+    const m1 = Mat4x4{
+        .m = [4][4]f32{
+            [_]f32{ 1.0, 1.0, 3.0, 4.0 },
+            [_]f32{ 0.0, 1.0, 2.0, 0.5 },
+            [_]f32{ 0.0, 0.0, 1.0, 2.0 },
+            [_]f32{ 0.5, 0.0, 0.0, 1.0 },
+        },
+    };
+    const m1Inv = try m1.Inverse();
+    const result = m1.Mul(&m1Inv);
+    try std.testing.expect(result.Equals(&Mat4x4.identity));
+}

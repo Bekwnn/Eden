@@ -17,4 +17,6 @@ layout(location = 2) in vec2 vertexTexCoord;
 void main()
 {
     gl_position = viewProjection * vec4(vertexPosition, 1.0);
+
+    gl_Position.y = -gl_Position.y;
 }

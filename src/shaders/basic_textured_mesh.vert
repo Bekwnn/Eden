@@ -20,7 +20,5 @@ void main()
 {
     gl_Position = viewProjection * vec4(vertexPosition, 1.0);
     fragTexCoord = vertexTexCoord;
-
-    gl_Position.y = -gl_Position.y;
 }
 

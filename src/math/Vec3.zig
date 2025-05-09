@@ -1,7 +1,8 @@
-const math = @import("std").math;
-const em = @import("MathUtil.zig");
+const std = @import("std");
+const math = std.math;
 
 const Quat = @import("Quat.zig").Quat;
+const Vec2 = @import("Vec2.zig").Vec2;
 
 pub const Vec3 = extern struct {
     x: f32 = 0.0,
@@ -25,6 +26,14 @@ pub const Vec3 = extern struct {
             .x = self.x * scalar,
             .y = self.y * scalar,
             .z = self.z * scalar,
+        };
+    }
+
+    pub fn Negate(self: *const Vec3) Vec3 {
+        return Vec3{
+            .x = -self.x,
+            .y = -self.y,
+            .z = -self.z,
         };
     }
 
@@ -188,22 +197,25 @@ pub const Vec3 = extern struct {
         self = self.Add(t.GetScaled(q.w).Add(qxyz.Cross(t)));
     }
 
-    pub fn Vec3_xy0(v2: *const em.Vec2) Vec3 {
+    pub fn Vec3_xy0(v2: *const Vec2) Vec3 {
         return Vec3{ v2.x, v2.y, 0.0 };
     }
 
-    pub fn Vec3_x0y(v2: *const em.Vec2) Vec3 {
+    pub fn Vec3_x0y(v2: *const Vec2) Vec3 {
         return Vec3{ v2.x, 0.0, v2.y };
     }
 
-    pub fn Vec3_0xy(v2: *const em.Vec2) Vec3 {
+    pub fn Vec3_0xy(v2: *const Vec2) Vec3 {
         return Vec3{ 0.0, v2.x, v2.y };
+    }
+
+    pub fn DebugLog(self: *const Vec3) void {
+        std.debug.print("({d:.2}, {d:.2}, {d:.2})", .{ self.x, self.y, self.z });
     }
 };
 
 //testing
 const Vec3Test = struct {
-    const std = @import("std");
     const testing = std.testing;
     const debug = std.debug;
     const testTolerance = 1e-6;

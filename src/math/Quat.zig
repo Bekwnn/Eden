@@ -25,49 +25,55 @@ pub const Quat = extern struct {
         return true;
     }
 
+    // Yaw - returns Radians
+    pub fn GetYaw(self: *const Quat) f32 {
+        return stdm.atan2(
+            2.0 * (self.w * self.y + self.x * self.z),
+            1.0 - 2.0 * (self.y * self.y + self.x * self.x),
+        );
+    }
+
     // Pitch - returns Radians
     pub fn GetPitch(self: *const Quat) f32 {
-        return stdm.asin(2.0 * (self.y * self.w - self.z * self.x));
+        const sinPitch = 2.0 * (self.w * self.x - self.y * self.z);
+        if (@abs(sinPitch) >= 1.0) {
+            return if (sinPitch > 0.0) std.math.pi / 2.0 else -std.math.pi / 2.0;
+        } else {
+            return stdm.asin(sinPitch);
+        }
     }
 
     // Roll - returns Radians
     pub fn GetRoll(self: *const Quat) f32 {
         return stdm.atan2(
-            2.0 * (self.z * self.y + self.w * self.x),
-            1.0 - 2.0 * (self.x * self.x + self.y * self.y),
-        );
-    }
-
-    // Yaw - returns Radians
-    pub fn GetYaw(self: *const Quat) f32 {
-        return stdm.atan2(
             2.0 * (self.w * self.z + self.x * self.y),
-            -1.0 + 2.0 * (self.w * self.w + self.x * self.x),
+            1.0 - 2.0 * (self.x * self.x + self.z * self.z),
         );
     }
 
-    // x=Roll, y=Pitch, z=Yaw in Radians
+    // x=Pitch, y=Yaw, z=Roll in Radians
     pub fn GetEulerAngles(self: *const Quat) Vec3 {
         return Vec3{
-            .x = self.GetRoll(),
-            .y = self.GetPitch(),
-            .z = self.GetYaw(),
+            .x = self.GetPitch(),
+            .y = self.GetYaw(),
+            .z = self.GetRoll(),
         };
     }
 
-    pub fn FromEulerAngles(rollRad: f32, pitchRad: f32, yawRad: f32) Quat {
-        const cosRoll = @cos(rollRad * 0.5);
-        const sinRoll = @sin(rollRad * 0.5);
-        const cosPitch = @cos(pitchRad * 0.5);
-        const sinPitch = @sin(pitchRad * 0.5);
-        const cosYaw = @cos(yawRad * 0.5);
-        const sinYaw = @sin(yawRad * 0.5);
+    pub fn FromEulerAngles(yawRad: f32, pitchRad: f32, rollRad: f32) Quat {
+        const cosY = @cos(yawRad * 0.5);
+        const sinY = @sin(yawRad * 0.5);
+        const cosX = @cos(pitchRad * 0.5);
+        const sinX = @sin(pitchRad * 0.5);
+        const cosZ = @cos(rollRad * 0.5);
+        const sinZ = @sin(rollRad * 0.5);
 
+        // YXZ yaw, pitch, roll rotation order
         return Quat{
-            .x = sinRoll * cosPitch * cosYaw - cosRoll * sinPitch * sinYaw,
-            .y = cosRoll * sinPitch * cosYaw + sinRoll * cosPitch * sinYaw,
-            .z = cosRoll * cosPitch * sinYaw - sinRoll * sinPitch * cosYaw,
-            .w = cosRoll * cosPitch * cosYaw + sinRoll * sinPitch * sinYaw,
+            .x = cosY * sinX * cosZ + sinY * cosX * sinZ,
+            .y = sinY * cosX * cosZ - cosY * sinX * sinZ,
+            .z = cosY * cosX * sinZ - sinY * sinX * cosZ,
+            .w = cosY * cosX * cosZ + sinY * sinX * sinZ,
         };
     }
 
@@ -110,9 +116,9 @@ pub const Quat = extern struct {
     }
 
     // creates a rotation around an axis
-    pub fn GetAxisRotation(axis: Vec3, rotationDeg: f32) Quat {
+    pub fn GetAxisRotation(axis: Vec3, rotationRad: f32) Quat {
         const axisNorm = axis.Normalized();
-        const halfAngleRad = rotationDeg * em.util.degToRad * 0.5;
+        const halfAngleRad = rotationRad * 0.5;
         const sinHalfAngle = @sin(halfAngleRad);
         const cosHalfAngle = @cos(halfAngleRad);
         return Quat{
@@ -170,7 +176,7 @@ pub const Quat = extern struct {
         return Quat.FromToRotationVec(Vec3.zAxis, lookDir);
     }
 
-    pub fn Mul(lhs: Quat, rhs: Quat) Quat {
+    pub fn Mul(lhs: *const Quat, rhs: Quat) Quat {
         return Quat{
             .x = lhs.w * rhs.x + lhs.x * rhs.w - lhs.y * rhs.z + lhs.z * rhs.y,
             .y = lhs.w * rhs.y + lhs.x * rhs.z + lhs.y * rhs.w - lhs.z * rhs.x,
@@ -225,11 +231,50 @@ pub const Quat = extern struct {
 
 test {
     const r1Euler = Vec3{
-        .x = 10.0 * em.util.degToRad,
-        .y = 25.0 * em.util.degToRad,
-        .z = 45.0 * em.util.degToRad,
+        .x = 10.0 * std.math.rad_per_deg,
+        .y = 25.0 * std.math.rad_per_deg,
+        .z = 45.0 * std.math.rad_per_deg,
     };
-    const r1 = Quat.FromEulerAngles(r1Euler.x, r1Euler.y, r1Euler.z);
+    const r1 = Quat.FromEulerAngles(r1Euler.y, r1Euler.x, r1Euler.z);
     const r1RecreatedEuler = r1.GetEulerAngles();
-    try std.testing.expect(r1Euler.Equals(r1RecreatedEuler));
+    std.testing.expect(r1Euler.Equals(r1RecreatedEuler)) catch |err| {
+        std.debug.print("\nr1Euler: ", .{});
+        r1Euler.DebugLog();
+        std.debug.print("\nr1RecreatedEuler: ", .{});
+        r1RecreatedEuler.DebugLog();
+        return err;
+    };
+
+    const roll180 = Quat.FromEulerAngles(0.0, 0.0, std.math.pi);
+    const rollRotatedVec = roll180.Rotate(Vec3.one);
+    const rollExpectedVec = Vec3{ .x = -1.0, .y = -1.0, .z = 1.0 };
+    std.testing.expect(rollRotatedVec.Equals(rollExpectedVec)) catch |err| {
+        std.debug.print("\nrollRotatedVec: ", .{});
+        rollRotatedVec.DebugLog();
+        std.debug.print("\nrollExpectedVec: ", .{});
+        rollExpectedVec.DebugLog();
+        return err;
+    };
+
+    const pitch180 = Quat.FromEulerAngles(0.0, std.math.pi, 0.0);
+    const pitchRotatedVec = pitch180.Rotate(Vec3.one);
+    const pitchExpectedVec = Vec3{ .x = 1.0, .y = -1.0, .z = -1.0 };
+    std.testing.expect(pitchRotatedVec.Equals(pitchExpectedVec)) catch |err| {
+        std.debug.print("\npitchRotatedVec: ", .{});
+        pitchRotatedVec.DebugLog();
+        std.debug.print("\npitchExpectedVec: ", .{});
+        pitchExpectedVec.DebugLog();
+        return err;
+    };
+
+    const yaw180 = Quat.FromEulerAngles(std.math.pi, 0.0, 0.0);
+    const yawRotatedVec = yaw180.Rotate(Vec3.one);
+    const yawExpectedVec = Vec3{ .x = -1.0, .y = 1.0, .z = -1.0 };
+    std.testing.expect(yawRotatedVec.Equals(yawExpectedVec)) catch |err| {
+        std.debug.print("\nyawRotatedVec: ", .{});
+        yawRotatedVec.DebugLog();
+        std.debug.print("\nyawExpectedVec: ", .{});
+        yawExpectedVec.DebugLog();
+        return err;
+    };
 }

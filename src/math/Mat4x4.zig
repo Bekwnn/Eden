@@ -60,6 +60,15 @@ pub const Mat4x4 = extern struct {
         return returnMat;
     }
 
+    // Pretends it's a vec4 with w=1, then tosses the w away at the end
+    pub fn MulVec3(self: *const Mat4x4, other: *const Vec3) Vec3 {
+        return Vec3{
+            .x = self.m[0][0] * other.x + self.m[0][1] * other.y + self.m[0][2] * other.z + self.m[0][3],
+            .y = self.m[1][0] * other.x + self.m[1][1] * other.y + self.m[1][2] * other.z + self.m[1][3],
+            .z = self.m[2][0] * other.x + self.m[2][1] * other.y + self.m[2][2] * other.z + self.m[2][3],
+        };
+    }
+
     pub fn Transpose(self: *const Mat4x4) Mat4x4 {
         return Mat4x4{
             .m = [4][4]f32{
@@ -94,6 +103,25 @@ pub const Mat4x4 = extern struct {
         };
 
         return lookAtMat;
+    }
+
+    pub fn GetPitch(self: *const Mat4x4) f32 {
+        return std.math.asin(self.m[1][0]);
+    }
+    pub fn GetYaw(self: *const Mat4x4) f32 {
+        return std.math.atan2(-self.m[2][0], self.m[0][0]);
+    }
+    pub fn GetRoll(self: *const Mat4x4) f32 {
+        return std.math.atan2(-self.m[1][2], self.m[1][1]);
+    }
+
+    //x=Pitch, y=Yaw, z=Roll in Radians
+    pub fn GetEulerAngles() Vec3 {
+        return Vec3{
+            .x = GetPitch(),
+            .y = GetYaw(),
+            .z = GetRoll(),
+        };
     }
 
     pub fn Translation(translation: Vec3) Mat4x4 {
@@ -188,7 +216,7 @@ pub const Mat4x4 = extern struct {
     pub fn FromQuat(q: Quat) Mat4x4 {
         return Mat4x4{
             .m = [4][4]f32{
-                [4]f32{ 1.0 - 2.0 * (q.y * q.y + q.y * q.y), 2.0 * (q.x * q.y - q.z * q.w), 2.0 * (q.x * q.z + q.y * q.w), 0.0 },
+                [4]f32{ 1.0 - 2.0 * (q.y * q.y + q.z * q.z), 2.0 * (q.x * q.y - q.z * q.w), 2.0 * (q.x * q.z + q.y * q.w), 0.0 },
                 [4]f32{ 2.0 * (q.x * q.y + q.z * q.w), 1.0 - 2.0 * (q.x * q.x + q.z * q.z), 2.0 * (q.y * q.z - q.x * q.w), 0.0 },
                 [4]f32{ 2.0 * (q.x * q.z - q.y * q.w), 2.0 * (q.y * q.z + q.x * q.w), 1.0 - 2.0 * (q.x * q.x + q.y * q.y), 0.0 },
                 [4]f32{ 0.0, 0.0, 0.0, 1.0 },
@@ -208,8 +236,8 @@ pub const Mat4x4 = extern struct {
     }
 };
 
-//TODO testing
 test {
+    // Inverse testing
     // random matrix with a det != 0
     const m1 = Mat4x4{
         .m = [4][4]f32{
@@ -222,4 +250,39 @@ test {
     const m1Inv = try m1.Inverse();
     const result = m1.Mul(&m1Inv);
     try std.testing.expect(result.Equals(&Mat4x4.identity));
+
+    // Transpose testing
+    const m2 = Mat4x4{
+        .m = [4][4]f32{
+            [_]f32{ 1.0, 0.0, 1.0, 4.0 },
+            [_]f32{ 0.0, 2.0, 0.0, 2.0 },
+            [_]f32{ 0.0, 0.0, 3.0, 0.0 },
+            [_]f32{ 0.5, 0.0, 0.0, 4.0 },
+        },
+    };
+    const transpose = Mat4x4{
+        .m = [4][4]f32{
+            [_]f32{ 1.0, 0.0, 0.0, 0.5 },
+            [_]f32{ 0.0, 2.0, 0.0, 0.0 },
+            [_]f32{ 1.0, 0.0, 3.0, 0.0 },
+            [_]f32{ 4.0, 2.0, 0.0, 4.0 },
+        },
+    };
+    const m2t = m2.Transpose();
+    const m2tt = m2t.Transpose();
+    try std.testing.expect(m2t.Equals(&transpose));
+    try std.testing.expect(m2tt.Equals(&m2));
+
+    // quat conversion
+    const q1 = Quat.FromEulerAngles(0.0, std.math.pi, 0.0);
+    const mFromQ = Mat4x4.FromQuat(q1);
+    const oneVec180 = mFromQ.MulVec3(&Vec3.one);
+    const expectedVec = Vec3{ .x = -1.0, .y = 1.0, .z = -1.0 };
+    std.testing.expect(oneVec180.Equals(expectedVec)) catch |err| {
+        std.debug.print("\noneVec180: ", .{});
+        oneVec180.DebugLog();
+        std.debug.print("\nexpectedVec: ", .{});
+        expectedVec.DebugLog();
+        return err;
+    };
 }

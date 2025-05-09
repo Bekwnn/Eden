@@ -113,13 +113,15 @@ fn InitializeScene() !void {
 
     const cameraViewMat = try currentCamera.GetViewMatrix();
     const cameraProjMat = currentCamera.GetProjectionMatrix();
+    const cameraViewProj = cameraProjMat.Mul(&cameraViewMat);
 
+    //TODO should we include the clipspace mat?
     const rContext = try RenderContext.GetInstance();
     for (&rContext.m_frameData) |*frameData| {
         frameData.m_gpuSceneData = scene.GPUSceneData{
-            .m_view = cameraViewMat,
-            .m_projection = cameraProjMat,
-            .m_viewProj = cameraProjMat.Mul(&cameraViewMat),
+            .m_view = cameraViewMat.Transpose(),
+            .m_projection = cameraProjMat.Transpose(),
+            .m_viewProj = Camera.gl2VkClipSpace.Mul(&cameraViewProj).Transpose(),
             .m_ambientColor = Vec4{
                 .x = 0.5,
                 .y = 0.5,
@@ -200,7 +202,7 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
     const rotateLeft = c.igButton("<", c.ImVec2{ .x = 20.0, .y = 20.0 });
     c.igSameLine(0.0, 2.0);
     const rotateRight = c.igButton(">", c.ImVec2{ .x = 20.0, .y = 20.0 });
-    _ = c.igText("Camera Rotation: %.2f", camera.m_rotation.GetZEuler() * em.util.radToDeg);
+    _ = c.igText("Camera Rotation: %.2f", camera.m_rotation.GetYaw() * std.math.deg_per_rad);
     _ = c.igText(
         "Camera Quat: {x:%.3f, y:%.3f, z:%.3f, w:%.3f}",
         camera.m_rotation.x,
@@ -308,10 +310,12 @@ pub fn UpdateUniformSceneBuffer() !void {
     var camera = try currentScene.GetCurrentCamera();
     //camera.LookAt(if (!camera.m_pos.Equals(Vec3.zero)) Vec3.zero else Vec3.xAxis);
     const view = try camera.GetViewMatrix();
-    const proj = camera.GetOrthoMatrix(-10.0, 10.0, -10.0, 10.0);
-    currentFrameData.m_gpuSceneData.m_view = view;
-    currentFrameData.m_gpuSceneData.m_projection = proj;
-    currentFrameData.m_gpuSceneData.m_viewProj = proj.Mul(&view);
+    //const view = Mat4x4.Translation(camera.m_pos.Negate());
+    //const proj = camera.GetOrthoMatrix(-10.0, 10.0, -10.0, 10.0);
+    const proj = camera.GetProjectionMatrix();
+    currentFrameData.m_gpuSceneData.m_view = view.Transpose();
+    currentFrameData.m_gpuSceneData.m_projection = proj.Transpose();
+    currentFrameData.m_gpuSceneData.m_viewProj = proj.Mul(&view).Transpose();
 
     // update uniform buffer
     if (currentFrameData.m_gpuSceneDataBuffer.m_mappedData) |mappedData| {

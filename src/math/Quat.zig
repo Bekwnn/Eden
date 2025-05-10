@@ -95,6 +95,10 @@ pub const Quat = extern struct {
         return self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w;
     }
 
+    pub fn IsNormalized(self: *const Quat) bool {
+        return std.math.approxEqRel(f32, self.LengthSqrd(), 1.0, std.math.floatEps(f32));
+    }
+
     pub fn Normalized(self: *const Quat) Quat {
         const length = self.Length();
         if (length == 0.0) @panic("Normalizing quaternion with length 0");
@@ -121,12 +125,14 @@ pub const Quat = extern struct {
         const halfAngleRad = rotationRad * 0.5;
         const sinHalfAngle = @sin(halfAngleRad);
         const cosHalfAngle = @cos(halfAngleRad);
-        return Quat{
+        var returnQuat = Quat{
             .x = axisNorm.x * sinHalfAngle,
             .y = axisNorm.y * sinHalfAngle,
             .z = axisNorm.z * sinHalfAngle,
             .w = cosHalfAngle,
         };
+        returnQuat.NormalizeSelf();
+        return returnQuat;
     }
 
     pub fn FromToRotationQuat(lhs: Quat, rhs: Quat) Quat {
@@ -139,19 +145,19 @@ pub const Quat = extern struct {
         const bNorm = to.Normalized();
 
         const aDotB = aNorm.Dot(bNorm);
-        if (aDotB > 0.9999) {
+        if (aDotB >= 1.0 - std.math.floatEps(f32)) {
             // from and to directions are roughly equal
             return identity;
         }
 
         // vectors are almost exact opposite directions
-        if (aDotB < -0.9999) {
-            var ortho = Vec3.zAxis.Cross(aNorm); // do we want/need to take in a world up vector?
-            if (ortho.Length() < 1e-6) {
-                // parallel to zAxis; choose another axis
-                ortho = Vec3.yAxis.Cross(aNorm);
+        if (aDotB <= -1.0 + std.math.floatEps(f32)) {
+            var axis = Vec3.yAxis.Cross(aNorm); // do we want/need to take in a world up vector?
+            if (axis.Length() < 1e-6) {
+                // parallel to yAxis; choose another axis
+                axis = Vec3.xAxis.Cross(aNorm);
             }
-            const axis = aNorm.Cross(ortho).Normalized();
+            axis.NormalizeSelf();
             return Quat{
                 .x = axis.x,
                 .y = axis.y,
@@ -160,16 +166,19 @@ pub const Quat = extern struct {
             };
         }
 
+        // left-handed
         const axis = aNorm.Cross(bNorm);
-        const s = @sqrt((1 + aDotB) * 2.0);
+        const s = @sqrt((1.0 + aDotB) * 2.0);
         const invS = 1.0 / s;
 
-        return Quat{
+        var returnQuat = Quat{
             .x = axis.x * invS,
             .y = axis.y * invS,
             .z = axis.z * invS,
             .w = s * 0.5,
         };
+        returnQuat.NormalizeSelf();
+        return returnQuat;
     }
 
     pub fn LookAt(lookDir: Vec3) Quat {
@@ -186,30 +195,14 @@ pub const Quat = extern struct {
     }
 
     pub fn Rotate(self: *const Quat, vec: Vec3) Vec3 {
-        var uv = Vec3{
-            .x = self.y * vec.z - self.z * vec.y,
-            .y = self.z * vec.x - self.x * vec.z,
-            .z = self.x * vec.y - self.y * vec.x,
+        const qv = Vec3{
+            .x = self.x,
+            .y = self.y,
+            .z = self.z,
         };
-        var uuv = Vec3{
-            .x = self.y * uv.z - self.z * uv.y,
-            .y = self.z * uv.x - self.x * uv.z,
-            .z = self.x * uv.y - self.y * uv.x,
-        };
-
-        uv.x *= 2.0 * self.w;
-        uv.y *= 2.0 * self.w;
-        uv.z *= 2.0 * self.w;
-
-        uuv.x *= 2.0;
-        uuv.y *= 2.0;
-        uuv.z *= 2.0;
-
-        return Vec3{
-            .x = vec.x + uv.x + uuv.x,
-            .y = vec.y + uv.y + uuv.y,
-            .z = vec.z + uv.z + uuv.z,
-        };
+        const uv = qv.Cross(vec);
+        const uuv = qv.Cross(uv);
+        return vec.Add(uv.GetScaled(2.0 * self.w)).Add(uuv.GetScaled(2.0));
     }
 
     pub fn GetForwardVec(self: *const Quat) Vec3 {
@@ -227,54 +220,114 @@ pub const Quat = extern struct {
     //pub fn AngleBetween(lhs: *const Quat, rhs: *const Quat) f32 {}
 
     //TODO slerp
+    //
+
+    pub fn DebugLog(self: *const Quat, label: []const u8) void {
+        std.debug.print("{s}: ({d:.2}, {d:.2}, {d:.2}, {d:.2})", .{ label, self.x, self.y, self.z, self.w });
+    }
 };
 
-test {
-    const r1Euler = Vec3{
-        .x = 10.0 * std.math.rad_per_deg,
-        .y = 25.0 * std.math.rad_per_deg,
-        .z = 45.0 * std.math.rad_per_deg,
-    };
-    const r1 = Quat.FromEulerAngles(r1Euler.y, r1Euler.x, r1Euler.z);
-    const r1RecreatedEuler = r1.GetEulerAngles();
-    std.testing.expect(r1Euler.Equals(r1RecreatedEuler)) catch |err| {
-        std.debug.print("\nr1Euler: ", .{});
-        r1Euler.DebugLog();
-        std.debug.print("\nr1RecreatedEuler: ", .{});
-        r1RecreatedEuler.DebugLog();
-        return err;
-    };
+test "EulerAngles" {
+    {
+        const r1Euler = Vec3{
+            .x = 10.0 * std.math.rad_per_deg,
+            .y = 25.0 * std.math.rad_per_deg,
+            .z = 45.0 * std.math.rad_per_deg,
+        };
+        const r1 = Quat.FromEulerAngles(r1Euler.y, r1Euler.x, r1Euler.z);
+        const r1RecreatedEuler = r1.GetEulerAngles();
+        std.testing.expect(r1Euler.Equals(r1RecreatedEuler)) catch |err| {
+            r1Euler.DebugLog("r1Euler");
+            r1RecreatedEuler.DebugLog("r1RecreatedEuler");
+            return err;
+        };
+    }
 
-    const roll180 = Quat.FromEulerAngles(0.0, 0.0, std.math.pi);
-    const rollRotatedVec = roll180.Rotate(Vec3.one);
-    const rollExpectedVec = Vec3{ .x = -1.0, .y = -1.0, .z = 1.0 };
-    std.testing.expect(rollRotatedVec.Equals(rollExpectedVec)) catch |err| {
-        std.debug.print("\nrollRotatedVec: ", .{});
-        rollRotatedVec.DebugLog();
-        std.debug.print("\nrollExpectedVec: ", .{});
-        rollExpectedVec.DebugLog();
-        return err;
-    };
+    {
+        const roll180 = Quat.FromEulerAngles(0.0, 0.0, std.math.pi);
+        const rollRotatedVec = roll180.Rotate(Vec3.one);
+        const rollExpectedVec = Vec3{ .x = -1.0, .y = -1.0, .z = 1.0 };
+        std.testing.expect(rollRotatedVec.Equals(rollExpectedVec)) catch |err| {
+            rollRotatedVec.DebugLog("rollRotatedVec");
+            rollExpectedVec.DebugLog("rollExpectedVec");
+            return err;
+        };
+    }
 
-    const pitch180 = Quat.FromEulerAngles(0.0, std.math.pi, 0.0);
-    const pitchRotatedVec = pitch180.Rotate(Vec3.one);
-    const pitchExpectedVec = Vec3{ .x = 1.0, .y = -1.0, .z = -1.0 };
-    std.testing.expect(pitchRotatedVec.Equals(pitchExpectedVec)) catch |err| {
-        std.debug.print("\npitchRotatedVec: ", .{});
-        pitchRotatedVec.DebugLog();
-        std.debug.print("\npitchExpectedVec: ", .{});
-        pitchExpectedVec.DebugLog();
-        return err;
-    };
+    {
+        const pitch180 = Quat.FromEulerAngles(0.0, std.math.pi, 0.0);
+        const pitchRotatedVec = pitch180.Rotate(Vec3.one);
+        const pitchExpectedVec = Vec3{ .x = 1.0, .y = -1.0, .z = -1.0 };
+        std.testing.expect(pitchRotatedVec.Equals(pitchExpectedVec)) catch |err| {
+            pitchRotatedVec.DebugLog("pitchRotatedVec");
+            pitchExpectedVec.DebugLog("pitchExpectedVec");
+            return err;
+        };
+    }
 
-    const yaw180 = Quat.FromEulerAngles(std.math.pi, 0.0, 0.0);
-    const yawRotatedVec = yaw180.Rotate(Vec3.one);
-    const yawExpectedVec = Vec3{ .x = -1.0, .y = 1.0, .z = -1.0 };
-    std.testing.expect(yawRotatedVec.Equals(yawExpectedVec)) catch |err| {
-        std.debug.print("\nyawRotatedVec: ", .{});
-        yawRotatedVec.DebugLog();
-        std.debug.print("\nyawExpectedVec: ", .{});
-        yawExpectedVec.DebugLog();
-        return err;
-    };
+    {
+        const yaw180 = Quat.FromEulerAngles(std.math.pi, 0.0, 0.0);
+        const yawRotatedVec = yaw180.Rotate(Vec3.one);
+        const yawExpectedVec = Vec3{ .x = -1.0, .y = 1.0, .z = -1.0 };
+        std.testing.expect(yawRotatedVec.Equals(yawExpectedVec)) catch |err| {
+            yawRotatedVec.DebugLog("yawRotatedVec");
+            yawExpectedVec.DebugLog("yawExpectedVec");
+            return err;
+        };
+    }
+}
+
+test "LookAt" {
+    {
+        const lookAtXAxis = Quat.LookAt(Vec3.xAxis);
+        const xAxis = lookAtXAxis.GetForwardVec();
+        std.testing.expect(xAxis.Equals(Vec3.xAxis)) catch |err| {
+            lookAtXAxis.DebugLog("lookAtXAxisQuat");
+            xAxis.DebugLog("recomputedXAxis");
+            return err;
+        };
+    }
+
+    {
+        const lookAtYAxis = Quat.LookAt(Vec3.yAxis);
+        const yAxis = lookAtYAxis.GetForwardVec();
+        std.testing.expect(yAxis.Equals(Vec3.yAxis)) catch |err| {
+            lookAtYAxis.DebugLog("lookAtYAxisQuat");
+            yAxis.DebugLog("recomputedYAxis");
+            return err;
+        };
+    }
+
+    {
+        const lookAtZAxis = Quat.LookAt(Vec3.zAxis);
+        const zAxis = lookAtZAxis.GetForwardVec();
+        std.testing.expect(zAxis.Equals(Vec3.zAxis)) catch |err| {
+            lookAtZAxis.DebugLog("lookAtZAxisQuat");
+            zAxis.DebugLog("recomputedZAxis");
+            return err;
+        };
+    }
+
+    {
+        const lookAtOneVec = Quat.LookAt(Vec3.one);
+        std.testing.expect(lookAtOneVec.IsNormalized()) catch |err| {
+            lookAtOneVec.DebugLog("lookAtOneVecQuat");
+            std.debug.print("\nmagnitude: {d:.2}\n", .{lookAtOneVec.Length()});
+            return err;
+        };
+        const oneVec = lookAtOneVec.GetForwardVec();
+        std.testing.expect(oneVec.IsNormalized()) catch |err| {
+            oneVec.DebugLog("lookAtOneVec.GetForward()");
+            std.debug.print("\n", .{});
+            return err;
+        };
+        std.testing.expect(oneVec.Equals(Vec3.one.Normalized())) catch |err| {
+            lookAtOneVec.DebugLog("lookAtOneVecQuat");
+            std.debug.print("\n", .{});
+            oneVec.DebugLog("lookAtOneVec.GetForward()");
+            std.debug.print("\n", .{});
+            Vec3.one.Normalized().DebugLog("Vec3.one.Normalized()");
+            return err;
+        };
+    }
 }

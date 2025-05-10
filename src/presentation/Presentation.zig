@@ -308,7 +308,7 @@ pub fn UpdateUniformSceneBuffer() !void {
 
     // update camera
     var camera = try currentScene.GetCurrentCamera();
-    //camera.LookAt(if (!camera.m_pos.Equals(Vec3.zero)) Vec3.zero else Vec3.xAxis);
+    camera.LookAt(if (!camera.m_pos.Equals(Vec3.zero)) Vec3.zero else Vec3.xAxis);
     const view = try camera.GetViewMatrix();
     //const view = Mat4x4.Translation(camera.m_pos.Negate());
     //const proj = camera.GetOrthoMatrix(-10.0, 10.0, -10.0, 10.0);

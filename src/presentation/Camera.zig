@@ -71,6 +71,7 @@ pub const Camera = struct {
     }
 
     pub fn LookAt(self: *Camera, target: Vec3) void {
-        self.m_rotation = Quat.LookAt(target.Sub(self.m_pos));
+        //self.m_rotation = Quat.LookAt(target.Sub(self.m_pos));
+        self.m_rotation = Quat.LookAt(self.m_pos.Sub(target));
     }
 };

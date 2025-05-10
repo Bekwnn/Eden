@@ -15,20 +15,6 @@ pub const Vec3 = extern struct {
     pub const yAxis = Vec3{ .x = 0.0, .y = 1.0, .z = 0.0 };
     pub const zAxis = Vec3{ .x = 0.0, .y = 0.0, .z = 1.0 };
 
-    pub fn Scale(self: *Vec3, scalar: f32) void {
-        self.x *= scalar;
-        self.y *= scalar;
-        self.z *= scalar;
-    }
-
-    pub fn GetScaled(self: *const Vec3, scalar: f32) Vec3 {
-        return Vec3{
-            .x = self.x * scalar,
-            .y = self.y * scalar,
-            .z = self.z * scalar,
-        };
-    }
-
     pub fn Negate(self: *const Vec3) Vec3 {
         return Vec3{
             .x = -self.x,
@@ -99,7 +85,34 @@ pub const Vec3 = extern struct {
         return self.Sub(rhs).Length();
     }
 
+    pub fn Scale(self: *Vec3, scalar: f32) void {
+        self.x *= scalar;
+        self.y *= scalar;
+        self.z *= scalar;
+    }
+
+    pub fn GetScaled(self: *const Vec3, scalar: f32) Vec3 {
+        return Vec3{
+            .x = self.x * scalar,
+            .y = self.y * scalar,
+            .z = self.z * scalar,
+        };
+    }
+
     //TODO panics in debug build only maybe?
+    pub fn ScaleToSize(self: *Vec3, size: f32) void {
+        const length = self.Length();
+        if (length == 0.0) @panic("Trying to scale up a vector with length 0");
+        const scaleAmount = size / length;
+        self.Scale(scaleAmount);
+    }
+
+    pub fn GetScaledToSize(self: *Vec3, size: f32) Vec3 {
+        const length = self.Length();
+        if (length == 0.0) @panic("Trying to scale up a vector with length 0");
+        const scaleAmount = size / length;
+        return self.GetScaled(scaleAmount);
+    }
 
     pub fn ClampToMinSize(self: *Vec3, size: f32) void {
         const lengthSqrd = self.LengthSqrd();
@@ -153,18 +166,8 @@ pub const Vec3 = extern struct {
         }
     }
 
-    pub fn ScaleToSize(self: *Vec3, size: f32) void {
-        const length = self.Length();
-        if (length == 0.0) @panic("Trying to scale up a vector with length 0");
-        const scaleAmount = size / length;
-        self.Scale(scaleAmount);
-    }
-
-    pub fn GetScaledToSize(self: *Vec3, size: f32) Vec3 {
-        const length = self.Length();
-        if (length == 0.0) @panic("Trying to scale up a vector with length 0");
-        const scaleAmount = size / length;
-        return self.GetScaled(scaleAmount);
+    pub fn IsNormalized(self: *const Vec3) bool {
+        return std.math.approxEqRel(f32, self.LengthSqrd(), 1.0, std.math.floatEps(f32));
     }
 
     pub fn Normalized(self: *const Vec3) Vec3 {
@@ -209,8 +212,8 @@ pub const Vec3 = extern struct {
         return Vec3{ 0.0, v2.x, v2.y };
     }
 
-    pub fn DebugLog(self: *const Vec3) void {
-        std.debug.print("({d:.2}, {d:.2}, {d:.2})", .{ self.x, self.y, self.z });
+    pub fn DebugLog(self: *const Vec3, label: []const u8) void {
+        std.debug.print("{s}: ({d:.2}, {d:.2}, {d:.2})", .{ label, self.x, self.y, self.z });
     }
 };
 

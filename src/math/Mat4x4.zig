@@ -274,15 +274,19 @@ test {
     try std.testing.expect(m2tt.Equals(&m2));
 
     // quat conversion
-    const q1 = Quat.FromEulerAngles(0.0, std.math.pi, 0.0);
+    const q1 = Quat.FromEulerAngles(std.math.pi, 0.0, 0.0);
     const mFromQ = Mat4x4.FromQuat(q1);
-    const oneVec180 = mFromQ.MulVec3(&Vec3.one);
+    const oneVec180m = mFromQ.MulVec3(&Vec3.one);
+    const oneVec180q = q1.Rotate(Vec3.one);
     const expectedVec = Vec3{ .x = -1.0, .y = 1.0, .z = -1.0 };
-    std.testing.expect(oneVec180.Equals(expectedVec)) catch |err| {
-        std.debug.print("\noneVec180: ", .{});
-        oneVec180.DebugLog();
-        std.debug.print("\nexpectedVec: ", .{});
-        expectedVec.DebugLog();
+    std.testing.expect(oneVec180q.Equals(expectedVec)) catch |err| {
+        oneVec180q.DebugLog("oneVec180quat");
+        expectedVec.DebugLog("expectedVec");
+        return err;
+    };
+    std.testing.expect(oneVec180m.Equals(expectedVec)) catch |err| {
+        oneVec180m.DebugLog("oneVec180mat");
+        expectedVec.DebugLog("expectedVec");
         return err;
     };
 }

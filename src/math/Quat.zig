@@ -155,6 +155,7 @@ pub const Quat = extern struct {
             var axis = Vec3.yAxis.Cross(aNorm); // do we want/need to take in a world up vector?
             if (axis.Length() < 1e-6) {
                 // parallel to yAxis; choose another axis
+                std.debug.print("not up axis!", .{});
                 axis = Vec3.xAxis.Cross(aNorm);
             }
             axis.NormalizeSelf();

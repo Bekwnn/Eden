@@ -25,11 +25,17 @@ pub const Camera = struct {
 
     pub fn GetViewMatrix(self: *const Camera) !Mat4x4 {
         //TODO this is not at all efficient, instead manually create the view matrix
-        const cameraTranslation = Mat4x4.Translation(self.m_pos);
-        //return cameraTranslation.Inverse() catch @panic("!");
-        const cameraRotation = Mat4x4.FromQuat(self.m_rotation);
-        const cameraModelMat = cameraTranslation.Mul(&cameraRotation);
-        return cameraModelMat.Inverse() catch @panic("!");
+        const forward = self.m_rotation.GetForwardVec();
+        const right = self.m_up.Cross(forward).Normalized();
+        const upAxis = right.Cross(forward).Normalized(); //differs from m_up
+        return Mat4x4{
+            .m = [4][4]f32{
+                [4]f32{ right.x, right.y, right.z, -right.Dot(self.m_pos) },
+                [4]f32{ upAxis.x, upAxis.y, upAxis.z, -upAxis.Dot(self.m_pos) },
+                [4]f32{ forward.x, forward.y, forward.z, -forward.Dot(self.m_pos) },
+                [4]f32{ 0.0, 0.0, 0.0, 1.0 },
+            },
+        };
     }
 
     pub fn GetProjectionMatrix(self: *const Camera) Mat4x4 {

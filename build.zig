@@ -69,21 +69,55 @@ fn cleanCompiledShaders() !void {
 }
 
 const shaderDirName = "src\\shaders";
-const compiledShaderDirName = "src\\shaders\\compiled"; //TODO: output shaders to build location/bin?
+const compiledShaderDirName = "src\\shaders\\compiled";
+
+//TODO building shaders should maybe occur as a secondary step since adding system command like this
+// results in build failures if the shader doesn't compile. Ideally we want to instead have a runtime
+// crash or detect a shader error and use a bright pink error shader material or something.
+fn buildAllShaders(b: *std.Build, exe: anytype, shouldDebugLog: bool) !void {
+    const cwd = std.fs.cwd();
+    var shaderDir = (try cwd.openDir(shaderDirName, std.fs.Dir.OpenOptions{ .iterate = true })).iterate();
+    while (try shaderDir.next()) |dirItem| {
+        if (dirItem.kind == std.fs.Dir.Entry.Kind.file) {
+            // skip vim files
+            // TODO would be nice if there was instead some pattern matching .gitignore type file in the directory
+            // or a list of valid shader file extensions
+            if (std.mem.startsWith(u8, dirItem.name, ".") or std.mem.endsWith(u8, dirItem.name, "~")) {
+                continue;
+            }
+
+            const relativeIn = try std.fmt.allocPrint(b.allocator, "{s}\\{s}", .{ shaderDirName, dirItem.name });
+
+            const newStrSize = std.mem.replacementSize(u8, dirItem.name, ".", "-");
+            const compiledName = try b.allocator.alloc(u8, newStrSize);
+            defer b.allocator.free(compiledName);
+            _ = std.mem.replace(u8, dirItem.name, ".", "-", compiledName);
+            const relativeOut = try std.fmt.allocPrint(
+                b.allocator,
+                "{s}\\{s}.spv",
+                .{ compiledShaderDirName, compiledName },
+            );
+
+            if (shouldDebugLog) {
+                std.debug.print("relative shader path: {s}\n", .{relativeIn});
+                std.debug.print("relative compiled shader path: {s}\n", .{relativeOut});
+            }
+
+            // example glslc usage: glslc -o oceanshader-vert.spv oceanshader.vert
+            const glslc_cmd = b.addSystemCommand(&[_][]const u8{
+                "glslc",
+                "-o",
+                relativeOut,
+                relativeIn,
+            });
+            exe.step.dependOn(&glslc_cmd.step);
+        }
+    }
+}
 
 // ex usage: buildVKShaders(b, exe, "oceanshader", "vert");
 // will compile "shaders/oceanshader.vert" to "shaders/compiled/oceanshader-vert.spv"
-fn buildVKShaders(b: *std.Build, exe: anytype, shaderName: []const u8, shaderExt: []const u8, shouldDebugLog: bool) !void {
-
-    // TODO iterate over shaders directory and compile
-    // .vert .frag .geom .tesc .tese .comp
-    // to shaders/compiled .spv automatically (shaders/compiled should be skipped)
-
-    // TODO if a shader has a compile error, replace it with an error shader that renders all pink
-
-    // TODO create a directory for excluded shaders which are not compiled; it will allow for you to have wip shaders or to move shaders which currently have errors/bugs
-
-    // For now, call this per file
+fn buildVKShader(b: *std.Build, exe: anytype, shaderName: []const u8, shaderExt: []const u8, shouldDebugLog: bool) !void {
     var inFileName = ArrayList(u8).init(b.allocator);
     try inFileName.appendSlice(shaderName);
     try inFileName.appendSlice(".");
@@ -324,8 +358,5 @@ pub fn build(b: *std.Build) !void {
 
     const logShaderCompilation = true;
     try cleanCompiledShaders();
-    try buildVKShaders(b, exe, "basic", "vert", logShaderCompilation);
-    try buildVKShaders(b, exe, "basic", "frag", logShaderCompilation);
-    try buildVKShaders(b, exe, "basic_mesh", "vert", logShaderCompilation);
-    try buildVKShaders(b, exe, "basic_mesh", "frag", logShaderCompilation);
+    try buildAllShaders(b, exe, logShaderCompilation);
 }

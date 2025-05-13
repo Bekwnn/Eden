@@ -199,6 +199,8 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
     c.igSameLine(0.0, 2.0);
     _ = c.igSliderFloat("Z", &camera.m_pos.z, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
 
+    _ = c.igCheckbox("LookAtZero", &lookAtZero);
+
     const rotateLeft = c.igButton("<", c.ImVec2{ .x = 20.0, .y = 20.0 });
     c.igSameLine(0.0, 2.0);
     const rotateRight = c.igButton(">", c.ImVec2{ .x = 20.0, .y = 20.0 });
@@ -299,6 +301,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     );
 }
 
+var lookAtZero = true;
 pub fn UpdateUniformSceneBuffer() !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
@@ -308,9 +311,12 @@ pub fn UpdateUniformSceneBuffer() !void {
 
     // update camera
     var camera = try currentScene.GetCurrentCamera();
-    camera.LookAt(if (!camera.m_pos.Equals(Vec3.zero)) Vec3.zero else Vec3.xAxis);
+    if (lookAtZero) {
+        camera.LookAt(if (!camera.m_pos.Equals(Vec3.zero)) Vec3.zero else Vec3.zAxis);
+    } else {
+        camera.m_rotation = Quat.identity;
+    }
     const view = try camera.GetViewMatrix();
-    //const view = Mat4x4.Translation(camera.m_pos.Negate());
     //const proj = camera.GetOrthoMatrix(-10.0, 10.0, -10.0, 10.0);
     const proj = camera.GetProjectionMatrix();
     currentFrameData.m_gpuSceneData.m_view = view.Transpose();

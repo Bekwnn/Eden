@@ -7,6 +7,7 @@ const allocator = std.heap.page_allocator;
 
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const Camera = @import("Camera.zig").Camera;
+const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
 const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
 const Material = @import("Material.zig").Material;
 const Mesh = @import("Mesh.zig").Mesh;
@@ -15,6 +16,7 @@ const RenderObject = @import("RenderObject.zig").RenderObject;
 const scene = @import("Scene.zig");
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
+const Texture = @import("Texture.zig").Texture;
 const vkUtil = @import("VulkanUtil.zig");
 
 const GPUSceneData = scene.GPUSceneData;
@@ -99,9 +101,18 @@ fn InitializeScene() !void {
         debug.print("Error creating mesh: {}\n", .{meshErr});
         return meshErr;
     };
+    const texture = inventory.CreateTexture("uv_test", "test-assets\\test.png") catch |texErr| {
+        debug.print("Error creating texture: {}\n", .{texErr});
+        return texErr;
+    };
+    _ = texture;
     const material = inventory.CreateMaterial("monkey_mat") catch |materialErr| {
         debug.print("Error creating material: {}\n", .{materialErr});
         return materialErr;
+    };
+    const materialInst = inventory.CreateMaterialInstance("monkey_mat_inst", material) catch |matInstError| {
+        debug.print("Error creating material instance: {}\n", .{matInstError});
+        return matInstError;
     };
 
     try currentScene.CreateCamera("default");
@@ -150,11 +161,29 @@ fn InitializeScene() !void {
     }
 
     debug.print("Building ShaderEffect...\n", .{});
-    const testShaderEffect = try ShaderEffect.CreateBasicShader(
+    var testShaderEffect = try ShaderEffect.CreateBasicShader(
         allocator,
-        "src\\shaders\\compiled\\basic_mesh-vert.spv",
-        "src\\shaders\\compiled\\basic_mesh-frag.spv",
+        "src\\shaders\\compiled\\basic_textured_mesh-vert.spv",
+        "src\\shaders\\compiled\\basic_textured_mesh-frag.spv",
     );
+
+    var matLayoutBuilder = DescriptorLayoutBuilder.init(allocator);
+    testShaderEffect.m_shaderDescriptorSetLayout = try matLayoutBuilder.Build(
+        rContext.m_logicalDevice,
+        c.VK_SHADER_STAGE_ALL_GRAPHICS,
+    );
+    var instLayoutBuilder = DescriptorLayoutBuilder.init(allocator);
+    try instLayoutBuilder.AddBinding(0, c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    testShaderEffect.m_instanceDescriptorSetLayout = try instLayoutBuilder.Build(
+        rContext.m_logicalDevice,
+        c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    );
+    var objLayoutBuilder = DescriptorLayoutBuilder.init(allocator);
+    testShaderEffect.m_objectDescriptorSetLayout = try objLayoutBuilder.Build(
+        rContext.m_logicalDevice,
+        c.VK_SHADER_STAGE_ALL_GRAPHICS,
+    );
+
     debug.print("Building ShaderPass...\n", .{});
     material.m_shaderPass = try ShaderPass.BuildShaderPass(
         allocator,
@@ -165,12 +194,14 @@ fn InitializeScene() !void {
         Mesh.GetAttributeDescriptions(),
     );
 
+    const currentFrame = rContext.GetCurrentFrame();
     try currentScene.m_renderables.put(
         "Monkey_Mesh",
         RenderObject{
             .m_mesh = mesh,
-            .m_material = material,
+            .m_materialInstance = materialInst,
             .m_transform = Mat4x4.identity,
+            .m_objectDescriptorSet = currentFrame.m_emptyDescriptorSet,
         },
     );
 }

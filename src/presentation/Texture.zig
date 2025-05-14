@@ -50,7 +50,10 @@ pub const Texture = struct {
             TextureError.FailedToMapMemory,
         );
 
-        @memcpy(data, image.m_imageData);
+        @memcpy(
+            @as([*]u8, @ptrCast(data))[0..imageSize],
+            @as([*]const u8, @ptrCast(image.m_imageData))[0..imageSize],
+        );
         c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
 
         try CreateImage(
@@ -229,7 +232,7 @@ pub fn CreateImage(
 }
 
 fn CalcTextureMipLevels(width: u32, height: u32) u32 {
-    return @as(u32, std.math.floor(std.math.log2(@as(f32, std.math.max(width, height))))) + 1;
+    return @as(u32, @intFromFloat(@floor(@log2(@as(f32, @floatFromInt(@max(width, height))))))) + 1;
 }
 
 //TODO generating mip maps should be done offline; possibly as a build step/function?

@@ -88,6 +88,8 @@ pub const FrameData = struct {
     m_gpuSceneDataBuffer: Buffer = undefined,
     m_gpuSceneDataDescriptorSet: c.VkDescriptorSet = undefined,
 
+    m_emptyDescriptorSet: c.VkDescriptorSet = undefined,
+
     // do we want one for each frame?
     m_descriptorAllocator: DescriptorAllocator,
 };
@@ -112,6 +114,9 @@ pub const RenderContext = struct {
     // descriptor set 0 data shared across shaders/materials
     // includes some fundamental scene data like global lights, view and projection matrix
     m_gpuSceneDescriptorLayout: c.VkDescriptorSetLayout = undefined,
+
+    // used anytime we want to bind an empty descriptor set due to lack of
+    m_emptyDescriptorSetLayout: c.VkDescriptorSetLayout = undefined,
 
     m_frameData: [FRAMES_IN_FLIGHT]FrameData = undefined,
     m_currentFrame: u32 = 0,
@@ -837,11 +842,18 @@ fn CreateDescriptorAllocators(allocator: Allocator) !void {
 
 fn InitGPUSceneData(allocator: Allocator) !void {
     var rContext = try RenderContext.GetInstance();
-    var builder = DescriptorLayoutBuilder.init(allocator);
-    try builder.AddBinding(0, c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    rContext.m_gpuSceneDescriptorLayout = try builder.Build(
+
+    var gpuLayoutBuilder = DescriptorLayoutBuilder.init(allocator);
+    try gpuLayoutBuilder.AddBinding(0, c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    rContext.m_gpuSceneDescriptorLayout = try gpuLayoutBuilder.Build(
         rContext.m_logicalDevice,
         c.VK_SHADER_STAGE_VERTEX_BIT | c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    );
+
+    var emptyBuilder = DescriptorLayoutBuilder.init(allocator);
+    rContext.m_emptyDescriptorSetLayout = try emptyBuilder.Build(
+        rContext.m_logicalDevice,
+        c.VK_SHADER_STAGE_ALL_GRAPHICS,
     );
 
     const sizeOfSceneData = @sizeOf(@TypeOf(rContext.m_frameData[0].m_gpuSceneData));
@@ -857,6 +869,11 @@ fn InitGPUSceneData(allocator: Allocator) !void {
         frameData.m_gpuSceneDataDescriptorSet = try frameData.m_descriptorAllocator.Allocate(
             rContext.m_logicalDevice,
             rContext.m_gpuSceneDescriptorLayout,
+        );
+
+        frameData.m_emptyDescriptorSet = try frameData.m_descriptorAllocator.Allocate(
+            rContext.m_logicalDevice,
+            rContext.m_emptyDescriptorSetLayout,
         );
     }
 }

@@ -208,7 +208,8 @@ pub fn build(b: *std.Build) !void {
     const buildConfigFileName = b.option(
         []const u8,
         "configFile",
-        "Specify a build config file. Default searches for \"DefaultBuildConfig.json\". Any build config json files in root will be ignored by git tracking.",
+        "Specify a build config file. Default searches for \"DefaultBuildConfig.json\". " ++
+            "Any build config json files in root will be ignored by git tracking.",
     ) orelse "DefaultBuildConfig.json";
     const buildConfig = try LoadBuildConfig(b, buildConfigFileName);
 
@@ -305,7 +306,17 @@ pub fn build(b: *std.Build) !void {
     } else {
         exe.addLibraryPath(b.path("dependency/assimp/lib/Release"));
     }
-    const assimpDllPath = if (isDebug) &[_][]const u8{ "dependency", "assimp", "bin", "RelWithDebInfo" } else &[_][]const u8{ "dependency", "assimp", "bin", "Release" };
+    const assimpDllPath = if (isDebug) &[_][]const u8{
+        "dependency",
+        "assimp",
+        "bin",
+        "RelWithDebInfo",
+    } else &[_][]const u8{
+        "dependency",
+        "assimp",
+        "bin",
+        "Release",
+    };
 
     copyDllToBin(b.allocator, assimpDllPath, "assimp-vc142-mt") catch |e| {
         std.debug.print("Could not copy assimp-vc142-mt.dll, {}\n", .{e});

@@ -54,14 +54,13 @@ pub const ShaderPass = struct {
             .primitiveRestartEnable = c.VK_FALSE,
         };
 
-        //TODO change VK_CULL_MODE_NONE to VK_CULL_MODE_BACK_BIT once we know stuff is working
         const rasterizationState = c.VkPipelineRasterizationStateCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
             .depthClampEnable = c.VK_FALSE,
             .rasterizerDiscardEnable = c.VK_FALSE,
             .polygonMode = polygonMode,
             .lineWidth = 1.0,
-            .cullMode = c.VK_CULL_MODE_NONE,
+            .cullMode = c.VK_CULL_MODE_BACK_BIT,
             .frontFace = c.VK_FRONT_FACE_COUNTER_CLOCKWISE,
             .depthBiasEnable = c.VK_FALSE,
             .depthBiasConstantFactor = 0.0,

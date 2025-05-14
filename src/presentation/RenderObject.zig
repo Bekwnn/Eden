@@ -7,6 +7,7 @@ const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 
 const Buffer = @import("Buffer.zig").Buffer;
 const Material = @import("Material.zig").Material;
+const MaterialInstance = @import("MaterialInstance.zig").MaterialInstance;
 const Mesh = @import("Mesh.zig").Mesh;
 const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
@@ -18,8 +19,9 @@ pub const RenderObjError = error{
 pub const RenderObject = struct {
     const Self = @This();
 
-    m_material: *Material,
+    m_materialInstance: *MaterialInstance,
     m_mesh: *Mesh,
+    m_objectDescriptorSet: ?c.VkDescriptorSet = null,
 
     m_transform: Mat4x4 = Mat4x4.identity,
 
@@ -30,20 +32,25 @@ pub const RenderObject = struct {
             c.vkCmdBindPipeline(
                 cmd,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.m_material.m_shaderPass.m_pipeline,
+                self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipeline,
             );
 
-            //bind global uniform buffer set=0
-            //TODO
+            //TODO bind per material and global descriptor sets outside this inner call
             const rContext = try RenderContext.GetInstance();
             const frameData = rContext.GetCurrentFrame();
+            const descriptorSets = [_]c.VkDescriptorSet{
+                frameData.m_gpuSceneDataDescriptorSet,
+                self.m_materialInstance.m_parentMaterial.m_materialDescriptorSet orelse frameData.m_emptyDescriptorSet,
+                self.m_materialInstance.m_instanceDescriptorSet orelse frameData.m_emptyDescriptorSet,
+                self.m_objectDescriptorSet orelse frameData.m_emptyDescriptorSet,
+            };
             c.vkCmdBindDescriptorSets(
                 cmd,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.m_material.m_shaderPass.m_pipelineLayout,
+                self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
                 0,
-                1,
-                &frameData.m_gpuSceneDataDescriptorSet,
+                @intCast(descriptorSets.len),
+                &descriptorSets,
                 0,
                 null,
             );
@@ -66,14 +73,6 @@ pub const RenderObject = struct {
                 0,
                 c.VK_INDEX_TYPE_UINT32,
             );
-
-            //bind per-material set=1
-            //TODO
-            //c.vkCmdBindDescriptorSets();
-
-            //bind per-object set=2
-            //TODO
-            //c.vkCmdBindDescriptorSets();
 
             c.vkCmdDrawIndexed(
                 cmd,

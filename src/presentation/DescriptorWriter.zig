@@ -1,8 +1,8 @@
-const c = @import("../c.zig");
-
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
+
+const c = @import("../c.zig");
 
 pub const DescriptorWriter = struct {
     const Self = @This();
@@ -37,11 +37,11 @@ pub const DescriptorWriter = struct {
         const write = c.VkWriteDescriptorSet{
             .sType = c.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstBinding = binding,
-            .dstSet = c.VK_NULL_HANDLE, //write later
+            .dstSet = null, //write later when UpdateSet is called
             .dstArrayElement = 0,
             .descriptorCount = 1,
             .descriptorType = descriptorType,
-            .pBufferInfo = &imageInfo,
+            .pImageInfo = imageInfo,
             .pTexelBufferView = null,
             .pNext = null,
         };

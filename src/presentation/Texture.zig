@@ -1,12 +1,11 @@
 //manages a texture asset for vulkan
-const c = @import("../c.zig");
 const std = @import("std");
-const vkUtil = @import("VulkanUtil.zig");
 
-const RenderContext = @import("RenderContext.zig").RenderContext;
-const Buffer = @import("Buffer.zig").Buffer;
-
+const c = @import("../c.zig");
 const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
+const Buffer = @import("Buffer.zig").Buffer;
+const RenderContext = @import("RenderContext.zig").RenderContext;
+const vkUtil = @import("VulkanUtil.zig");
 
 pub const TextureError = error{
     BadMipmapFormat,
@@ -23,6 +22,7 @@ pub const Texture = struct {
     m_image: c.VkImage,
     m_memory: c.VkDeviceMemory,
     m_imageView: c.VkImageView,
+    m_sampler: ?c.VkSampler = null,
     m_mipLevels: u32,
 
     pub fn CreateTexture(

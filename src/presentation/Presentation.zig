@@ -1,10 +1,17 @@
-const c = @import("../c.zig");
-
 const std = @import("std");
 const debug = std.debug;
 const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
 
+const c = @import("../c.zig");
+const filePathUtils = @import("../coreutil/FilePathUtils.zig");
+const game = @import("../game/GameWorld.zig");
+const GameWorld = @import("../game/GameWorld.zig").GameWorld;
+const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
+const em = @import("../math/Math.zig");
+const Quat = @import("../math/Quat.zig").Quat;
+const Vec3 = @import("../math/Vec3.zig").Vec3;
+const Vec4 = @import("../math/Vec4.zig").Vec4;
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const Camera = @import("Camera.zig").Camera;
 const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
@@ -12,27 +19,15 @@ const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
 const Material = @import("Material.zig").Material;
 const Mesh = @import("Mesh.zig").Mesh;
 const renderContext = @import("RenderContext.zig");
+const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
 const scene = @import("Scene.zig");
+const GPUSceneData = scene.GPUSceneData;
+const Scene = scene.Scene;
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
 const Texture = @import("Texture.zig").Texture;
 const vkUtil = @import("VulkanUtil.zig");
-
-const GPUSceneData = scene.GPUSceneData;
-const RenderContext = renderContext.RenderContext;
-const Scene = scene.Scene;
-
-const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
-const Vec3 = @import("../math/Vec3.zig").Vec3;
-const Vec4 = @import("../math/Vec4.zig").Vec4;
-const Quat = @import("../math/Quat.zig").Quat;
-const em = @import("../math/Math.zig");
-
-const game = @import("../game/GameWorld.zig");
-const GameWorld = @import("../game/GameWorld.zig").GameWorld;
-
-const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 
 var curTime: f32 = 0.0;
 const circleTime: f32 = 1.0 / (2.0 * std.math.pi);
@@ -94,6 +89,8 @@ pub fn Shutdown() void {
     rContext.Shutdown();
 }
 
+//TODO this needs to live somewhere, probably in AssetInventory
+var testShaderEffect: ShaderEffect = undefined;
 fn InitializeScene() !void {
     // init hardcoded test currentScene:
     var inventory = try AssetInventory.GetInstance();
@@ -101,11 +98,10 @@ fn InitializeScene() !void {
         debug.print("Error creating mesh: {}\n", .{meshErr});
         return meshErr;
     };
-    const texture = inventory.CreateTexture("uv_test", "test-assets\\test.png") catch |texErr| {
+    _ = inventory.CreateTexture("uv_test", "test-assets\\test.png") catch |texErr| {
         debug.print("Error creating texture: {}\n", .{texErr});
         return texErr;
     };
-    _ = texture;
     const material = inventory.CreateMaterial("monkey_mat") catch |materialErr| {
         debug.print("Error creating material: {}\n", .{materialErr});
         return materialErr;
@@ -161,28 +157,19 @@ fn InitializeScene() !void {
     }
 
     debug.print("Building ShaderEffect...\n", .{});
-    var testShaderEffect = try ShaderEffect.CreateBasicShader(
+    testShaderEffect = try ShaderEffect.CreateBasicShader(
         allocator,
         "src\\shaders\\compiled\\basic_textured_mesh-vert.spv",
         "src\\shaders\\compiled\\basic_textured_mesh-frag.spv",
     );
 
-    var matLayoutBuilder = DescriptorLayoutBuilder.init(allocator);
-    testShaderEffect.m_shaderDescriptorSetLayout = try matLayoutBuilder.Build(
-        rContext.m_logicalDevice,
-        c.VK_SHADER_STAGE_ALL_GRAPHICS,
-    );
     var instLayoutBuilder = DescriptorLayoutBuilder.init(allocator);
-    try instLayoutBuilder.AddBinding(0, c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    try instLayoutBuilder.AddBinding(1, c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
     testShaderEffect.m_instanceDescriptorSetLayout = try instLayoutBuilder.Build(
         rContext.m_logicalDevice,
         c.VK_SHADER_STAGE_FRAGMENT_BIT,
     );
-    var objLayoutBuilder = DescriptorLayoutBuilder.init(allocator);
-    testShaderEffect.m_objectDescriptorSetLayout = try objLayoutBuilder.Build(
-        rContext.m_logicalDevice,
-        c.VK_SHADER_STAGE_ALL_GRAPHICS,
-    );
+    instLayoutBuilder.Clear();
 
     debug.print("Building ShaderPass...\n", .{});
     material.m_shaderPass = try ShaderPass.BuildShaderPass(
@@ -194,14 +181,12 @@ fn InitializeScene() !void {
         Mesh.GetAttributeDescriptions(),
     );
 
-    const currentFrame = rContext.GetCurrentFrame();
     try currentScene.m_renderables.put(
         "Monkey_Mesh",
         RenderObject{
             .m_mesh = mesh,
             .m_materialInstance = materialInst,
             .m_transform = Mat4x4.identity,
-            .m_objectDescriptorSet = currentFrame.m_emptyDescriptorSet,
         },
     );
 }
@@ -292,6 +277,10 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
+        // TODO
+        try currentFrame.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
+        try rContext.AllocateCurrentFrameGlobalDescriptors();
+
         try UpdateUniformSceneBuffer();
 
         var writer = DescriptorWriter.init(allocator);
@@ -306,6 +295,23 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
         var renderableIter = currentScene.m_renderables.iterator();
         while (renderableIter.next()) |renderableEntry| {
+            //TODO temp testing location
+            try renderableEntry.value_ptr.AllocateDescriptors(&currentFrame.m_descriptorAllocator);
+
+            if (renderableEntry.value_ptr.m_materialInstance.m_instanceDescriptorSet) |matInstDescSet| {
+                var inventory = try AssetInventory.GetInstance();
+                const tex = inventory.GetTexture("uv_test") orelse @panic("!");
+                var renderableWriter = DescriptorWriter.init(allocator);
+                try renderableWriter.WriteImage(
+                    0,
+                    tex.m_imageView,
+                    rContext.m_defaultSamplerLinear,
+                    c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                );
+                renderableWriter.UpdateSet(rContext.m_logicalDevice, matInstDescSet);
+            }
+
             renderableEntry.value_ptr.Draw(commandBuffer) catch |err| {
                 std.debug.print("Error {} drawing {s}\n", .{ err, renderableEntry.key_ptr });
             };

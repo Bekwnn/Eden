@@ -191,15 +191,9 @@ fn CreatePipelineLayout(shaderEffect: *const ShaderEffect, allocator: Allocator)
 
     var setLayouts = ArrayList(c.VkDescriptorSetLayout).init(allocator);
     try setLayouts.append(rContext.m_gpuSceneDescriptorLayout);
-    if (shaderEffect.m_shaderDescriptorSetLayout) |layout| {
-        try setLayouts.append(layout);
-    }
-    if (shaderEffect.m_instanceDescriptorSetLayout) |layout| {
-        try setLayouts.append(layout);
-    }
-    if (shaderEffect.m_objectDescriptorSetLayout) |layout| {
-        try setLayouts.append(layout);
-    }
+    try setLayouts.append(shaderEffect.m_shaderDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout);
+    try setLayouts.append(shaderEffect.m_instanceDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout);
+    try setLayouts.append(shaderEffect.m_objectDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout);
 
     //TODO push constants
     const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{

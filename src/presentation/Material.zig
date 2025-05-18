@@ -1,5 +1,4 @@
 const c = @import("../c.zig");
-
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
 
 pub const Material = struct {

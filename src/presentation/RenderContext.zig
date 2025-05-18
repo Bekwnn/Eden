@@ -1,15 +1,12 @@
-const c = @import("../c.zig");
-
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
+const c = @import("../c.zig");
 const DeletionQueue = @import("../coreutil/DeletionQueue.zig").DeletionQueue;
-
 const Buffer = @import("Buffer.zig").Buffer;
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
-const FrameUBO = @import("Camera.zig").FrameUBO;
 const GPUSceneData = @import("Scene.zig").GPUSceneData;
 const Mesh = @import("Mesh.zig").Mesh;
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
@@ -40,6 +37,7 @@ pub const RenderContextError = error{
     FailedToCreateLogicDevice,
     FailedToCreatePipelineLayout,
     FailedToCreateRenderPass,
+    FailedToCreateSampler,
     FailedToCreateSemaphores,
     FailedToCreateSurface,
     FailedToEndCommandBuffer,
@@ -90,7 +88,7 @@ pub const FrameData = struct {
 
     m_emptyDescriptorSet: c.VkDescriptorSet = undefined,
 
-    // do we want one for each frame?
+    // for dynamic data; cleared each frame
     m_descriptorAllocator: DescriptorAllocator,
 };
 
@@ -123,6 +121,9 @@ pub const RenderContext = struct {
 
     m_msaaSamples: c.VkSampleCountFlagBits = c.VK_SAMPLE_COUNT_1_BIT,
     m_maxDescriptorSets: u32 = 0,
+
+    m_defaultSamplerNearest: c.VkSampler = undefined,
+    m_defaultSamplerLinear: c.VkSampler = undefined,
 
     // used by imgui
     m_immediateFence: c.VkFence = undefined,
@@ -215,6 +216,9 @@ pub const RenderContext = struct {
         std.debug.print("Creating gpu scene data...\n", .{});
         try InitGPUSceneData(allocator);
 
+        std.debug.print("Creating default samplers...\n", .{});
+        try InitDefaultSamplers();
+
         std.debug.print("Creating color depth resources...\n", .{});
         try newInstance.m_swapchain.CreateColorAndDepthResources(
             newInstance.m_logicalDevice,
@@ -258,6 +262,20 @@ pub const RenderContext = struct {
 
     pub fn GetCurrentFrame(self: *RenderContext) *FrameData {
         return &self.m_frameData[self.m_currentFrame % FRAMES_IN_FLIGHT];
+    }
+
+    pub fn AllocateCurrentFrameGlobalDescriptors(self: *RenderContext) !void {
+        const currentFrame = self.GetCurrentFrame();
+
+        currentFrame.m_gpuSceneDataDescriptorSet = try currentFrame.m_descriptorAllocator.Allocate(
+            self.m_logicalDevice,
+            self.m_gpuSceneDescriptorLayout,
+        );
+
+        currentFrame.m_emptyDescriptorSet = try currentFrame.m_descriptorAllocator.Allocate(
+            self.m_logicalDevice,
+            self.m_emptyDescriptorSetLayout,
+        );
     }
 
     //TODO move to swapchain
@@ -865,17 +883,42 @@ fn InitGPUSceneData(allocator: Allocator) !void {
         );
 
         try frameData.m_gpuSceneDataBuffer.MapMemory(@ptrCast(&frameData.m_gpuSceneData), sizeOfSceneData);
-
-        frameData.m_gpuSceneDataDescriptorSet = try frameData.m_descriptorAllocator.Allocate(
-            rContext.m_logicalDevice,
-            rContext.m_gpuSceneDescriptorLayout,
-        );
-
-        frameData.m_emptyDescriptorSet = try frameData.m_descriptorAllocator.Allocate(
-            rContext.m_logicalDevice,
-            rContext.m_emptyDescriptorSetLayout,
-        );
     }
+}
+
+fn InitDefaultSamplers() !void {
+    //TODO destroy samplers on shutdown
+    var rContext = try RenderContext.GetInstance();
+
+    const nearestCreateInfo = c.VkSamplerCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = c.VK_FILTER_NEAREST,
+        .minFilter = c.VK_FILTER_NEAREST,
+    };
+    try vkUtil.CheckVkSuccess(
+        c.vkCreateSampler(
+            rContext.m_logicalDevice,
+            &nearestCreateInfo,
+            null,
+            &rContext.m_defaultSamplerNearest,
+        ),
+        RenderContextError.FailedToCreateSampler,
+    );
+
+    const linearCreateInfo = c.VkSamplerCreateInfo{
+        .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = c.VK_FILTER_LINEAR,
+        .minFilter = c.VK_FILTER_LINEAR,
+    };
+    try vkUtil.CheckVkSuccess(
+        c.vkCreateSampler(
+            rContext.m_logicalDevice,
+            &linearCreateInfo,
+            null,
+            &rContext.m_defaultSamplerLinear,
+        ),
+        RenderContextError.FailedToCreateSampler,
+    );
 }
 
 fn InitImgui(window: *c.SDL_Window) !void {

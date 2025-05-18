@@ -1,15 +1,12 @@
-const c = @import("../c.zig");
 const std = @import("std");
-
-const Vec3 = @import("../math/Vec3.zig").Vec3;
-const Vec2 = @import("../math/Vec2.zig").Vec2;
-
-const RenderContext = @import("RenderContext.zig").RenderContext;
-
 const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
 
+const c = @import("../c.zig");
+const Vec2 = @import("../math/Vec2.zig").Vec2;
+const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Buffer = @import("Buffer.zig").Buffer;
+const RenderContext = @import("RenderContext.zig").RenderContext;
 
 const vertexDataDesc = [_]c.VkVertexInputAttributeDescription{
     c.VkVertexInputAttributeDescription{

@@ -303,7 +303,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
                 const tex = inventory.GetTexture("uv_test") orelse @panic("!");
                 var renderableWriter = DescriptorWriter.init(allocator);
                 try renderableWriter.WriteImage(
-                    0,
+                    1,
                     tex.m_imageView,
                     rContext.m_defaultSamplerLinear,
                     c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,

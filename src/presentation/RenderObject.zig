@@ -1,15 +1,14 @@
 const std = @import("std");
 const allocator = std.heap.page_allocator;
 
-const c = @import("../c.zig");
-const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Buffer = @import("Buffer.zig").Buffer;
+const c = @import("../c.zig");
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
+const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Material = @import("Material.zig").Material;
 const MaterialInstance = @import("MaterialInstance.zig").MaterialInstance;
 const Mesh = @import("Mesh.zig").Mesh;
-const renderContext = @import("RenderContext.zig");
-const RenderContext = renderContext.RenderContext;
+const RenderContext = @import("RenderContext.zig").RenderContext;
 
 pub const RenderObjError = error{
     NoMeshBufferData,
@@ -24,60 +23,28 @@ pub const RenderObject = struct {
 
     m_transform: Mat4x4 = Mat4x4.identity,
 
-    pub fn AllocateDescriptors(self: *Self, dAllocator: *DescriptorAllocator) !void {
+    pub fn AllocateDescriptorSet(
+        self: *Self,
+        dAllocator: *DescriptorAllocator,
+        layout: c.VkDescriptorSetLayout,
+    ) !void {
         const rContext = try RenderContext.GetInstance();
-
-        const matDescLayout = self.m_materialInstance.GetMaterialDescriptorSetLayout();
-        if (matDescLayout) |descLayout| {
-            self.m_materialInstance.m_parentMaterial.m_materialDescriptorSet = try dAllocator.Allocate(
-                rContext.m_logicalDevice,
-                descLayout,
-            );
-        }
-        const instDescLayout = self.m_materialInstance.GetInstanceDescriptorSetLayout();
-        if (instDescLayout) |descLayout| {
-            self.m_materialInstance.m_instanceDescriptorSet = try dAllocator.Allocate(
-                rContext.m_logicalDevice,
-                descLayout,
-            );
-        }
-        const objDescLayout = self.m_materialInstance.GetObjectDescriptorSetLayout();
-        if (objDescLayout) |descLayout| {
-            self.m_objectDescriptorSet = try dAllocator.Allocate(
-                rContext.m_logicalDevice,
-                descLayout,
-            );
-        }
+        self.m_objectDescriptorSet = try dAllocator.Allocate(rContext.m_logicalDevice, layout);
     }
 
     pub fn Draw(self: *Self, cmd: c.VkCommandBuffer) !void {
         if (self.m_mesh.m_bufferData) |*meshBufferData| {
             //bind pipeline
             //TODO sort render objs by material and move this out
-            c.vkCmdBindPipeline(
-                cmd,
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipeline,
-            );
-
-            //TODO bind per material and global descriptor sets outside this inner call
             const rContext = try RenderContext.GetInstance();
             const frameData = rContext.GetCurrentFrame();
-            const matInst = self.m_materialInstance;
-            const descriptorSets = [_]c.VkDescriptorSet{
-                frameData.m_gpuSceneDataDescriptorSet,
-                matInst.m_parentMaterial.m_materialDescriptorSet orelse frameData.m_emptyDescriptorSet,
-                matInst.m_instanceDescriptorSet orelse frameData.m_emptyDescriptorSet,
-                self.m_objectDescriptorSet orelse frameData.m_emptyDescriptorSet,
-            };
-
             c.vkCmdBindDescriptorSets(
                 cmd,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
-                0,
-                @intCast(descriptorSets.len),
-                &descriptorSets,
+                3,
+                1,
+                &(self.m_objectDescriptorSet orelse frameData.m_emptyDescriptorSet),
                 0,
                 null,
             );

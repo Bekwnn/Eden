@@ -1,11 +1,22 @@
 const c = @import("../c.zig");
 const Material = @import("Material.zig").Material;
+const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
+const RenderContext = @import("RenderContext.zig").RenderContext;
 
 pub const MaterialInstance = struct {
     const Self = @This();
 
     m_parentMaterial: *Material,
     m_instanceDescriptorSet: ?c.VkDescriptorSet = null,
+
+    pub fn AllocateDescriptorSet(
+        self: *Self,
+        dAllocator: *DescriptorAllocator,
+        layout: c.VkDescriptorSetLayout,
+    ) !void {
+        const rContext = try RenderContext.GetInstance();
+        self.m_instanceDescriptorSet = try dAllocator.Allocate(rContext.m_logicalDevice, layout);
+    }
 
     // these should maybe return empty descriptor set layout instead of null
 

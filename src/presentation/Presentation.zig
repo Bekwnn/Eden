@@ -3,30 +3,32 @@ const debug = std.debug;
 const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
 
+const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const c = @import("../c.zig");
+const Camera = @import("Camera.zig").Camera;
+const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
+const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
+const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
+const em = @import("../math/Math.zig");
 const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 const game = @import("../game/GameWorld.zig");
 const GameWorld = @import("../game/GameWorld.zig").GameWorld;
+const GPUSceneData = scene.GPUSceneData;
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
-const em = @import("../math/Math.zig");
-const Quat = @import("../math/Quat.zig").Quat;
-const Vec3 = @import("../math/Vec3.zig").Vec3;
-const Vec4 = @import("../math/Vec4.zig").Vec4;
-const AssetInventory = @import("AssetInventory.zig").AssetInventory;
-const Camera = @import("Camera.zig").Camera;
-const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
-const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
 const Material = @import("Material.zig").Material;
+const MaterialInstance = @import("MaterialInstance.zig").MaterialInstance;
 const Mesh = @import("Mesh.zig").Mesh;
+const Quat = @import("../math/Quat.zig").Quat;
 const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
 const scene = @import("Scene.zig");
-const GPUSceneData = scene.GPUSceneData;
 const Scene = scene.Scene;
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
 const Texture = @import("Texture.zig").Texture;
+const Vec3 = @import("../math/Vec3.zig").Vec3;
+const Vec4 = @import("../math/Vec4.zig").Vec4;
 const vkUtil = @import("VulkanUtil.zig");
 
 var curTime: f32 = 0.0;
@@ -277,9 +279,10 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
-        // TODO
         try currentFrame.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
         try rContext.AllocateCurrentFrameGlobalDescriptors();
+
+        try AllocateMaterialDescriptorSets(&currentFrame.m_descriptorAllocator);
 
         try UpdateUniformSceneBuffer();
 
@@ -294,9 +297,65 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         writer.UpdateSet(rContext.m_logicalDevice, currentFrame.m_gpuSceneDataDescriptorSet);
 
         var renderableIter = currentScene.m_renderables.iterator();
+        var previousParentMaterial: ?*Material = null;
+        var previousMaterialInstance: ?*MaterialInstance = null;
         while (renderableIter.next()) |renderableEntry| {
-            //TODO temp testing location
-            try renderableEntry.value_ptr.AllocateDescriptors(&currentFrame.m_descriptorAllocator);
+            var matInstance = renderableEntry.value_ptr.m_materialInstance;
+
+            //TODO move out handling binding somewhere else
+            c.vkCmdBindPipeline(
+                commandBuffer,
+                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                matInstance.m_parentMaterial.m_shaderPass.m_pipeline,
+            );
+
+            if (previousParentMaterial != @as(?*Material, @ptrCast(matInstance.m_parentMaterial))) {
+                // currently binding shader globals with material params, could bind shader globals separately
+                const descriptorSets = [_]c.VkDescriptorSet{
+                    currentFrame.m_gpuSceneDataDescriptorSet,
+                    matInstance.m_parentMaterial.m_materialDescriptorSet orelse currentFrame.m_emptyDescriptorSet,
+                };
+                c.vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    matInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+                    0,
+                    @intCast(descriptorSets.len),
+                    &descriptorSets,
+                    0,
+                    null,
+                );
+                previousParentMaterial = matInstance.m_parentMaterial;
+            }
+
+            if (previousMaterialInstance != @as(?*MaterialInstance, @ptrCast(matInstance))) {
+                c.vkCmdBindDescriptorSets(
+                    commandBuffer,
+                    c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    matInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+                    2,
+                    1,
+                    &(matInstance.m_instanceDescriptorSet orelse currentFrame.m_emptyDescriptorSet),
+                    0,
+                    null,
+                );
+                previousMaterialInstance = matInstance;
+            }
+
+            if (matInstance.GetObjectDescriptorSetLayout()) |objLayout| {
+                try renderableEntry.value_ptr.AllocateDescriptorSet(&currentFrame.m_descriptorAllocator, objLayout);
+            }
+
+            c.vkCmdBindDescriptorSets(
+                commandBuffer,
+                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                matInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+                3,
+                1,
+                &(renderableEntry.value_ptr.m_objectDescriptorSet orelse currentFrame.m_emptyDescriptorSet),
+                0,
+                null,
+            );
 
             if (renderableEntry.value_ptr.m_materialInstance.m_instanceDescriptorSet) |matInstDescSet| {
                 var inventory = try AssetInventory.GetInstance();
@@ -339,7 +398,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 }
 
 var lookAtZero = true;
-pub fn UpdateUniformSceneBuffer() !void {
+fn UpdateUniformSceneBuffer() !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
 
@@ -369,6 +428,31 @@ pub fn UpdateUniformSceneBuffer() !void {
         );
     } else {
         return RenderLoopError.FailedToUpdateSceneUniforms;
+    }
+}
+
+fn AllocateMaterialDescriptorSets(dAllocator: *DescriptorAllocator) !void {
+    const rContext = try RenderContext.GetInstance();
+    const inventory = try AssetInventory.GetInstance();
+
+    var materialIter = inventory.m_materials.iterator();
+    while (materialIter.next()) |*mat| {
+        if (mat.value_ptr.m_shaderPass.m_shaderEffect.m_shaderDescriptorSetLayout) |matLayout| {
+            mat.value_ptr.m_materialDescriptorSet = try dAllocator.Allocate(
+                rContext.m_logicalDevice,
+                matLayout,
+            );
+        }
+    }
+
+    var materialInstIter = inventory.m_materialInstances.iterator();
+    while (materialInstIter.next()) |*matInst| {
+        if (matInst.value_ptr.m_parentMaterial.m_shaderPass.m_shaderEffect.m_instanceDescriptorSetLayout) |instLayout| {
+            matInst.value_ptr.m_instanceDescriptorSet = try dAllocator.Allocate(
+                rContext.m_logicalDevice,
+                instLayout,
+            );
+        }
     }
 }
 

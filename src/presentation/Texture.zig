@@ -22,7 +22,6 @@ pub const Texture = struct {
     m_image: c.VkImage,
     m_memory: c.VkDeviceMemory,
     m_imageView: c.VkImageView,
-    m_sampler: ?c.VkSampler = null,
     m_mipLevels: u32,
 
     pub fn CreateTexture(

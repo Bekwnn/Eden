@@ -14,6 +14,7 @@ const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 const game = @import("../game/GameWorld.zig");
 const GameWorld = @import("../game/GameWorld.zig").GameWorld;
 const GPUSceneData = scene.GPUSceneData;
+const input = @import("../Input.zig");
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Material = @import("Material.zig").Material;
 const MaterialInstance = @import("MaterialInstance.zig").MaterialInstance;
@@ -453,23 +454,24 @@ fn UpdateCameraMovement(deltaTime: f32) !void {
             camera.m_rotation = Quat.FromEulerAngles(cameraEulers.y - deltaYaw, cameraEulers.x - deltaPitch, 0.0);
 
             var movementVec = Vec3.zero;
-            const keybState = c.SDL_GetKeyboardState(null);
-            if (keybState[c.SDL_SCANCODE_W] != 0) {
+            if (input.GetKeyState(c.SDL_SCANCODE_W, null)) {
                 movementVec.z -= 1.0; //why is +Z not forward?
             }
-            if (keybState[c.SDL_SCANCODE_D] != 0) {
-                movementVec.x += 1.0;
-            }
-            if (keybState[c.SDL_SCANCODE_E] != 0) {
-                movementVec.y += 1.0;
-            }
-            if (keybState[c.SDL_SCANCODE_S] != 0) {
+            if (input.GetKeyState(c.SDL_SCANCODE_S, null)) {
                 movementVec.z += 1.0;
             }
-            if (keybState[c.SDL_SCANCODE_A] != 0) {
+
+            if (input.GetKeyState(c.SDL_SCANCODE_D, null)) {
+                movementVec.x += 1.0;
+            }
+            if (input.GetKeyState(c.SDL_SCANCODE_A, null)) {
                 movementVec.x -= 1.0;
             }
-            if (keybState[c.SDL_SCANCODE_Q] != 0) {
+
+            if (input.GetKeyState(c.SDL_SCANCODE_E, null)) {
+                movementVec.y += 1.0;
+            }
+            if (input.GetKeyState(c.SDL_SCANCODE_Q, null)) {
                 movementVec.y -= 1.0;
             }
 

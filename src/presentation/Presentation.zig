@@ -31,10 +31,10 @@ const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec4 = @import("../math/Vec4.zig").Vec4;
 const vkUtil = @import("VulkanUtil.zig");
 
+//TODO curTime should exist on a global of some kind
 var curTime: f32 = 0.0;
-const circleTime: f32 = 1.0 / (2.0 * std.math.pi);
-const circleRadius: f32 = 0.5;
 
+//TODO move scene out
 var currentScene = Scene{};
 
 const RenderLoopError = error{
@@ -120,7 +120,7 @@ fn InitializeScene() !void {
     currentCamera.m_pos = Vec3{ .x = 0.0, .y = 0.0, .z = -25.0 };
     currentCamera.LookAt(Vec3.zero);
 
-    const cameraViewMat = try currentCamera.GetViewMatrix();
+    const cameraViewMat = currentCamera.GetViewMatrix();
     const cameraProjMat = currentCamera.GetProjectionMatrix();
     const cameraViewProj = cameraProjMat.Mul(&cameraViewMat);
 
@@ -132,15 +132,15 @@ fn InitializeScene() !void {
             .m_projection = cameraProjMat.Transpose(),
             .m_viewProj = Camera.gl2VkClipSpace.Mul(&cameraViewProj).Transpose(),
             .m_ambientColor = Vec4{
-                .x = 0.5,
-                .y = 0.5,
-                .z = 0.5,
+                .x = 0.2,
+                .y = 0.2,
+                .z = 0.2,
                 .w = 1.0,
             },
             .m_sunDirection = Vec4{
                 .x = 0.0,
-                .y = 0.0,
-                .z = -1.0,
+                .y = -1.0,
+                .z = 0.0,
                 .w = 10.0,
             },
             .m_sunColor = Vec4{
@@ -193,7 +193,7 @@ fn InitializeScene() !void {
     );
 }
 
-// TODO remove params, make them accessible elsewhere
+// TODO remove time params, make them accessible elsewhere
 pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
     //_ = c.igShowDemoWindow(null);
 
@@ -205,36 +205,27 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
         @as(f32, @floatFromInt(std.time.ns_per_s)) / @as(f32, @floatFromInt(rawDeltaNs)),
     );
 
-    _ = c.igText("Camera Pos");
+    _ = c.igText("Camera Pos: (%.2f, %.2f, %.2f)", camera.m_pos.x, camera.m_pos.y, camera.m_pos.z);
     c.igSetNextItemWidth(150.0);
-    _ = c.igSliderFloat("X", &camera.m_pos.x, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
+    _ = c.igSliderFloat("Camera Speed", &movespeed, 1.0, 75.0, "%.2f", c.ImGuiSliderFlags_None);
 
-    c.igSetNextItemWidth(150.0);
-    c.igSameLine(0.0, 2.0);
-    _ = c.igSliderFloat("Y", &camera.m_pos.y, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
-
-    c.igSetNextItemWidth(150.0);
-    c.igSameLine(0.0, 2.0);
-    _ = c.igSliderFloat("Z", &camera.m_pos.z, -30.0, 30.0, "%.2f", c.ImGuiSliderFlags_None);
-
-    _ = c.igCheckbox("LookAtZero", &lookAtZero);
-
-    const rotateLeft = c.igButton("<", c.ImVec2{ .x = 20.0, .y = 20.0 });
-    c.igSameLine(0.0, 2.0);
-    const rotateRight = c.igButton(">", c.ImVec2{ .x = 20.0, .y = 20.0 });
-    _ = c.igText("Camera Rotation: %.2f", camera.m_rotation.GetYaw() * std.math.deg_per_rad);
+    //const rotateLeft = c.igButton("<", c.ImVec2{ .x = 20.0, .y = 20.0 });
+    //c.igSameLine(0.0, 2.0);
+    //const rotateRight = c.igButton(">", c.ImVec2{ .x = 20.0, .y = 20.0 });
+    const cameraEulers = camera.m_rotation.GetEulerAngles();
     _ = c.igText(
-        "Camera Quat: {x:%.3f, y:%.3f, z:%.3f, w:%.3f}",
+        "Camera (Pitch, Yaw, Roll): (%.2f, %.2f, %.2f)",
+        cameraEulers.x * std.math.deg_per_rad,
+        cameraEulers.y * std.math.deg_per_rad,
+        cameraEulers.z * std.math.deg_per_rad,
+    );
+    _ = c.igText(
+        "Camera Quat: (x:%.3f, y:%.3f, z:%.3f, w:%.3f)",
         camera.m_rotation.x,
         camera.m_rotation.y,
         camera.m_rotation.z,
         camera.m_rotation.w,
     );
-    if (rotateLeft) {
-        camera.m_rotation = camera.m_rotation.Mul(Quat.GetAxisRotation(Vec3.zAxis, -5.0));
-    } else if (rotateRight) {
-        camera.m_rotation = camera.m_rotation.Mul(Quat.GetAxisRotation(Vec3.zAxis, 5.0));
-    }
     c.igEnd();
 }
 
@@ -376,17 +367,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
             };
         }
 
-        //for each render type (shadow, opaque, transparent, post process, etc)
-        //  bindGlobalDescriptors()
-        //  for each material:
-        //    bindPipeline()
-        //    bindPerMaterialDescriptors()
-        //    for each material instance:
-        //      bindPerInstanceDescriptors()
-        //      for each render object:
-        //        bindPerObjectDescriptors()
-        //        draw()
-
         c.ImGui_ImplVulkan_RenderDrawData(c.igGetDrawData(), commandBuffer, null);
     }
     c.vkCmdEndRenderPass(commandBuffer);
@@ -397,7 +377,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     );
 }
 
-var lookAtZero = true;
 fn UpdateUniformSceneBuffer() !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
@@ -406,14 +385,8 @@ fn UpdateUniformSceneBuffer() !void {
     currentFrameData.m_gpuSceneData.m_time = GPUSceneData.CreateTimeVec(curTime);
 
     // update camera
-    var camera = try currentScene.GetCurrentCamera();
-    if (lookAtZero) {
-        camera.LookAt(if (!camera.m_pos.Equals(Vec3.zero)) Vec3.zero else Vec3.zAxis);
-    } else {
-        camera.m_rotation = Quat.identity;
-    }
-    const view = try camera.GetViewMatrix();
-    //const proj = camera.GetOrthoMatrix(-10.0, 10.0, -10.0, 10.0);
+    const camera = try currentScene.GetCurrentCamera();
+    const view = camera.GetViewMatrix();
     const proj = camera.GetProjectionMatrix();
     currentFrameData.m_gpuSceneData.m_view = view.Transpose();
     currentFrameData.m_gpuSceneData.m_projection = proj.Transpose();
@@ -456,12 +429,74 @@ fn AllocateMaterialDescriptorSets(dAllocator: *DescriptorAllocator) !void {
     }
 }
 
-pub fn RenderFrame() !void {
+//TODO temp function for camera movement
+const degPer100Pixels: f32 = 0.25;
+var movespeed: f32 = 20.0;
+var rMouseButtonHeld = false;
+var prevMouseX: i32 = 0;
+var prevMouseY: i32 = 0;
+fn UpdateCameraMovement(deltaTime: f32) !void {
+    var relativeMouseX: i32 = 0;
+    var relativeMouseY: i32 = 0;
+    const mouseState = c.SDL_GetMouseState(&relativeMouseX, &relativeMouseY);
+    if (mouseState & c.SDL_BUTTON_RMASK != 0) {
+        if (!rMouseButtonHeld) {
+            // start tracking mouse pos on frame 0, update rotation on subsequent frames
+            rMouseButtonHeld = true;
+        } else {
+            const deltaMouseX = relativeMouseX - prevMouseX;
+            const deltaMouseY = relativeMouseY - prevMouseY;
+            var camera = try currentScene.GetCurrentCamera();
+            const deltaYaw = @as(f32, @floatFromInt(deltaMouseX)) * degPer100Pixels * std.math.rad_per_deg;
+            const deltaPitch = @as(f32, @floatFromInt(deltaMouseY)) * degPer100Pixels * std.math.rad_per_deg;
+            const cameraEulers = camera.m_rotation.GetEulerAngles();
+            camera.m_rotation = Quat.FromEulerAngles(cameraEulers.y - deltaYaw, cameraEulers.x - deltaPitch, 0.0);
+
+            var movementVec = Vec3.zero;
+            const keybState = c.SDL_GetKeyboardState(null);
+            if (keybState[c.SDL_SCANCODE_W] != 0) {
+                movementVec.z -= 1.0; //why is +Z not forward?
+            }
+            if (keybState[c.SDL_SCANCODE_D] != 0) {
+                movementVec.x += 1.0;
+            }
+            if (keybState[c.SDL_SCANCODE_E] != 0) {
+                movementVec.y += 1.0;
+            }
+            if (keybState[c.SDL_SCANCODE_S] != 0) {
+                movementVec.z += 1.0;
+            }
+            if (keybState[c.SDL_SCANCODE_A] != 0) {
+                movementVec.x -= 1.0;
+            }
+            if (keybState[c.SDL_SCANCODE_Q] != 0) {
+                movementVec.y -= 1.0;
+            }
+
+            if (!movementVec.Equals(Vec3.zero)) {
+                movementVec.NormalizeSelf();
+                movementVec.Scale(movespeed * deltaTime);
+            }
+
+            camera.m_pos = camera.m_pos.Add(camera.m_rotation.Rotate(movementVec));
+        }
+
+        prevMouseX = relativeMouseX;
+        prevMouseY = relativeMouseY;
+    } else {
+        rMouseButtonHeld = false;
+    }
+}
+
+pub fn RenderFrame(deltaTime: f32) !void {
     const swapchainAllocator = std.heap.page_allocator;
 
-    curTime += game.deltaTime;
+    curTime += deltaTime;
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
+
+    //TODO move input logic
+    try UpdateCameraMovement(deltaTime);
 
     // 1sec = 1e9 nanoseconds
     const timeoutns = 1000000000;

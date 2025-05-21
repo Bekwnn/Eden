@@ -103,7 +103,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
             try presentation.ImguiFrame(deltaT, rawDeltaNs);
             c.igRender(); // does not actually draw, drawing happens in RenderFrame()
 
-            try presentation.RenderFrame();
+            try presentation.RenderFrame(deltaT);
         }
     }
 }

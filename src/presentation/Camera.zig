@@ -23,8 +23,7 @@ pub const Camera = struct {
     m_nearPlane: f32 = 0.1,
     m_farPlane: f32 = 100.0,
 
-    pub fn GetViewMatrix(self: *const Camera) !Mat4x4 {
-        //TODO this is not at all efficient, instead manually create the view matrix
+    pub fn GetViewMatrix(self: *const Camera) Mat4x4 {
         const forward = self.m_rotation.GetForwardVec();
         const right = self.m_up.Cross(forward).Normalized();
         const upAxis = right.Cross(forward).Normalized(); //differs from m_up

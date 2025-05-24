@@ -38,6 +38,8 @@ pub const ShaderEffect = struct {
     // set 3 per render object layout
     m_objectDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
 
+    m_pushConstantRange: ?c.VkPushConstantRange = null,
+
     pub const ShaderStage = struct {
         m_shader: c.VkShaderModule,
         m_flags: c.VkShaderStageFlagBits,

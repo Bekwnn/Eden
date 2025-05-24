@@ -162,8 +162,8 @@ fn InitializeScene() !void {
     debug.print("Building ShaderEffect...\n", .{});
     testShaderEffect = try ShaderEffect.CreateBasicShader(
         allocator,
-        "src\\shaders\\compiled\\basic_textured_mesh-vert.spv",
-        "src\\shaders\\compiled\\basic_textured_mesh-frag.spv",
+        "src\\shaders\\compiled\\basic_push_textured_mesh-vert.spv",
+        "src\\shaders\\compiled\\basic_push_textured_mesh-frag.spv",
     );
 
     var instLayoutBuilder = DescriptorLayoutBuilder.init(allocator);
@@ -184,14 +184,22 @@ fn InitializeScene() !void {
         Mesh.GetAttributeDescriptions(),
     );
 
-    try currentScene.m_renderables.put(
-        "Monkey_Mesh",
-        RenderObject{
-            .m_mesh = mesh,
-            .m_materialInstance = materialInst,
-            .m_transform = Mat4x4.identity,
-        },
-    );
+    for (0..3) |i| {
+        const name = try std.fmt.allocPrint(allocator, "Monkey_Mesh_{d}", .{i});
+        defer allocator.free(name);
+        try currentScene.m_renderables.put(
+            name,
+            RenderObject{
+                .m_mesh = mesh,
+                .m_materialInstance = materialInst,
+                .m_transform = Mat4x4.Translation(Vec3{
+                    .x = -5.0 + (@as(f32, @floatFromInt(i)) * 5.0),
+                    .y = 0.0,
+                    .z = 0.0,
+                }).Transpose(),
+            },
+        );
+    }
 }
 
 // TODO remove time params, make them accessible elsewhere

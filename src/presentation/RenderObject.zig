@@ -49,6 +49,15 @@ pub const RenderObject = struct {
                 null,
             );
 
+            c.vkCmdPushConstants(
+                cmd,
+                self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+                c.VK_SHADER_STAGE_VERTEX_BIT,
+                0,
+                @sizeOf(Mat4x4),
+                &self.m_transform,
+            );
+
             //bind vertex and index buffers
             const offsets = [_]c.VkDeviceSize{0};
             const vertexBuffers = [_]c.VkBuffer{

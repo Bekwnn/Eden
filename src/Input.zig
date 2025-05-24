@@ -35,13 +35,13 @@ pub fn GetModifierDown(keybState: [*c]const u8, modifier: ModifierKey) bool {
 }
 
 pub fn GetKeyState(keyscanCode: u32, modifier: ?ModifierKey) bool {
+    const keybState = c.SDL_GetKeyboardState(null);
     if (modifier) |mod| {
-        if (!GetModifierDown(mod)) {
+        if (!GetModifierDown(keybState, mod)) {
             return false;
         }
     }
 
-    const keybState = c.SDL_GetKeyboardState(null);
     if (keybState[keyscanCode] == 0) {
         return false;
     }

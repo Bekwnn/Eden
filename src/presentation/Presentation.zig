@@ -174,6 +174,12 @@ fn InitializeScene() !void {
     );
     instLayoutBuilder.Clear();
 
+    testShaderEffect.m_pushConstantRange = c.VkPushConstantRange{
+        .offset = 0,
+        .size = @sizeOf(Mat4x4),
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    };
+
     debug.print("Building ShaderPass...\n", .{});
     material.m_shaderPass = try ShaderPass.BuildShaderPass(
         allocator,
@@ -286,15 +292,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
         try UpdateUniformSceneBuffer();
 
-        var writer = DescriptorWriter.init(allocator);
-        try writer.WriteBuffer(
-            0,
-            currentFrame.m_gpuSceneDataBuffer.m_buffer,
-            @sizeOf(@TypeOf(currentFrame.m_gpuSceneData)),
-            0,
-            c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        );
-        writer.UpdateSet(rContext.m_logicalDevice, currentFrame.m_gpuSceneDataDescriptorSet);
+        try WriteDescriptors();
 
         var renderableIter = currentScene.m_renderables.iterator();
         var previousParentMaterial: ?*Material = null;
@@ -309,7 +307,9 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
                 matInstance.m_parentMaterial.m_shaderPass.m_pipeline,
             );
 
-            if (previousParentMaterial != @as(?*Material, @ptrCast(matInstance.m_parentMaterial))) {
+            if (previousParentMaterial == null or
+                (previousParentMaterial != null and previousParentMaterial.? != matInstance.m_parentMaterial))
+            {
                 // currently binding shader globals with material params, could bind shader globals separately
                 const descriptorSets = [_]c.VkDescriptorSet{
                     currentFrame.m_gpuSceneDataDescriptorSet,
@@ -328,7 +328,9 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
                 previousParentMaterial = matInstance.m_parentMaterial;
             }
 
-            if (previousMaterialInstance != @as(?*MaterialInstance, @ptrCast(matInstance))) {
+            if (previousMaterialInstance == null or
+                (previousMaterialInstance != null and previousMaterialInstance.? != matInstance))
+            {
                 c.vkCmdBindDescriptorSets(
                     commandBuffer,
                     c.VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -357,20 +359,6 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
                 null,
             );
 
-            if (renderableEntry.value_ptr.m_materialInstance.m_instanceDescriptorSet) |matInstDescSet| {
-                var inventory = try AssetInventory.GetInstance();
-                const tex = inventory.GetTexture("uv_test") orelse @panic("!");
-                var renderableWriter = DescriptorWriter.init(allocator);
-                try renderableWriter.WriteImage(
-                    1,
-                    tex.m_imageView,
-                    rContext.m_defaultSamplerLinear,
-                    c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                );
-                renderableWriter.UpdateSet(rContext.m_logicalDevice, matInstDescSet);
-            }
-
             renderableEntry.value_ptr.Draw(commandBuffer) catch |err| {
                 std.debug.print("Error {} drawing {s}\n", .{ err, renderableEntry.key_ptr });
             };
@@ -384,6 +372,37 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         c.vkEndCommandBuffer(commandBuffer),
         RenderLoopError.FailedToEndCommandBuffer,
     );
+}
+
+fn WriteDescriptors() !void {
+    const rContext = try RenderContext.GetInstance();
+    const currentFrame = rContext.GetCurrentFrame();
+
+    var writer = DescriptorWriter.init(allocator);
+    try writer.WriteBuffer(
+        0,
+        currentFrame.m_gpuSceneDataBuffer.m_buffer,
+        @sizeOf(@TypeOf(currentFrame.m_gpuSceneData)),
+        0,
+        c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    );
+    writer.UpdateSet(rContext.m_logicalDevice, currentFrame.m_gpuSceneDataDescriptorSet);
+
+    //TODO how do we set a specific texture asset as a parameter to a material layout, or handle material params in general?
+    const inventory = try AssetInventory.GetInstance();
+    const materialInst = inventory.GetMaterialInst("monkey_mat_inst") orelse @panic("!");
+    if (materialInst.m_instanceDescriptorSet) |*instDescSet| {
+        const uvTestTexture = inventory.GetTexture("uv_test") orelse @panic("!");
+        var renderableWriter = DescriptorWriter.init(allocator);
+        try renderableWriter.WriteImage(
+            1,
+            uvTestTexture.m_imageView,
+            rContext.m_defaultSamplerLinear,
+            c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        );
+        renderableWriter.UpdateSet(rContext.m_logicalDevice, instDescSet.*);
+    }
 }
 
 fn UpdateUniformSceneBuffer() !void {
@@ -414,32 +433,25 @@ fn UpdateUniformSceneBuffer() !void {
 }
 
 fn AllocateMaterialDescriptorSets(dAllocator: *DescriptorAllocator) !void {
-    const rContext = try RenderContext.GetInstance();
     const inventory = try AssetInventory.GetInstance();
 
     var materialIter = inventory.m_materials.iterator();
     while (materialIter.next()) |*mat| {
         if (mat.value_ptr.m_shaderPass.m_shaderEffect.m_shaderDescriptorSetLayout) |matLayout| {
-            mat.value_ptr.m_materialDescriptorSet = try dAllocator.Allocate(
-                rContext.m_logicalDevice,
-                matLayout,
-            );
+            try mat.value_ptr.AllocateDescriptorSet(dAllocator, matLayout);
         }
     }
 
     var materialInstIter = inventory.m_materialInstances.iterator();
     while (materialInstIter.next()) |*matInst| {
         if (matInst.value_ptr.m_parentMaterial.m_shaderPass.m_shaderEffect.m_instanceDescriptorSetLayout) |instLayout| {
-            matInst.value_ptr.m_instanceDescriptorSet = try dAllocator.Allocate(
-                rContext.m_logicalDevice,
-                instLayout,
-            );
+            try matInst.value_ptr.AllocateDescriptorSet(dAllocator, instLayout);
         }
     }
 }
 
 //TODO temp function for camera movement
-const degPer100Pixels: f32 = 0.25;
+const degPerPixel: f32 = 0.25;
 var movespeed: f32 = 20.0;
 var rMouseButtonHeld = false;
 var prevMouseX: i32 = 0;
@@ -456,8 +468,8 @@ fn UpdateCameraMovement(deltaTime: f32) !void {
             const deltaMouseX = relativeMouseX - prevMouseX;
             const deltaMouseY = relativeMouseY - prevMouseY;
             var camera = try currentScene.GetCurrentCamera();
-            const deltaYaw = @as(f32, @floatFromInt(deltaMouseX)) * degPer100Pixels * std.math.rad_per_deg;
-            const deltaPitch = @as(f32, @floatFromInt(deltaMouseY)) * degPer100Pixels * std.math.rad_per_deg;
+            const deltaYaw = @as(f32, @floatFromInt(deltaMouseX)) * degPerPixel * std.math.rad_per_deg;
+            const deltaPitch = @as(f32, @floatFromInt(deltaMouseY)) * degPerPixel * std.math.rad_per_deg;
             const cameraEulers = camera.m_rotation.GetEulerAngles();
             camera.m_rotation = Quat.FromEulerAngles(cameraEulers.y - deltaYaw, cameraEulers.x - deltaPitch, 0.0);
 

@@ -1,8 +1,13 @@
 #version 460
 
+layout(set = 2, binding = 1) uniform Uniform0 {
+    vec4 color;
+} uniform0; 
+
+
 layout(location = 0) out vec4 outColor;
 
 void main()
 {
-    outColor = vec4(0.8, 0.8, 0.8, 1.0);
+    outColor = uniform0.color;
 }

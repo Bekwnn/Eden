@@ -19,12 +19,14 @@ pub const TextureError = error{
 
 //TODO should it be renamed to something else?
 pub const Texture = struct {
+    m_name: []const u8,
     m_image: c.VkImage,
     m_memory: c.VkDeviceMemory,
     m_imageView: c.VkImageView,
     m_mipLevels: u32,
 
     pub fn CreateTexture(
+        name: []const u8,
         imagePath: []const u8,
     ) !Texture {
         const rContext = try RenderContext.GetInstance();
@@ -34,6 +36,8 @@ pub const Texture = struct {
         defer image.FreeImage();
 
         var newTexture: Texture = undefined;
+        newTexture.m_name = name;
+
         newTexture.m_mipLevels = CalcTextureMipLevels(image.m_width, image.m_height);
         const imageSize: c.VkDeviceSize = image.m_width * image.m_height * 4;
         var stagingBuffer = try Buffer.CreateBuffer(

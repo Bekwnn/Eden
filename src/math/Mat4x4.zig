@@ -11,6 +11,12 @@ fn swap(lhs: *f32, rhs: *f32) void {
     rhs = temp;
 }
 
+// Row major
+// For transforms matrix uses the following format:
+// r11*Sx, r12*Sy, r13*Sz, tx
+// r21*Sx, r22*Sy, r23*Sz, ty
+// r31*Sx, r32*Sy, r33*Sz, tz
+//      0,      0,      0,  1
 pub const Mat4x4 = extern struct {
     m: [4][4]f32 = [4][4]f32{
         [4]f32{ 1.0, 0.0, 0.0, 0.0 },
@@ -60,7 +66,8 @@ pub const Mat4x4 = extern struct {
         return returnMat;
     }
 
-    // Pretends it's a vec4 with w=1, then tosses the w away at the end
+    //TODO Pretends it's a vec4 with w=1, then tosses the w away at the end
+    // but need to divide by w? or something
     pub fn MulVec3(self: *const Mat4x4, other: *const Vec3) Vec3 {
         return Vec3{
             .x = self.m[0][0] * other.x + self.m[0][1] * other.y + self.m[0][2] * other.z + self.m[0][3],
@@ -222,6 +229,45 @@ pub const Mat4x4 = extern struct {
                 [4]f32{ 0.0, 0.0, 0.0, 1.0 },
             },
         };
+    }
+
+    pub fn GetTranslation(self: *const Mat4x4) Vec3 {
+        return Vec3{
+            .x = self.m[0][3],
+            .y = self.m[1][3],
+            .z = self.m[2][3],
+        };
+    }
+
+    pub fn SetTranslation(self: *Mat4x4, translation: Vec3) void {
+        self.m[0][3] = translation.x;
+        self.m[1][3] = translation.y;
+        self.m[2][3] = translation.z;
+    }
+
+    pub fn GetScale(self: *const Mat4x4) Vec3 {
+        return Vec3{
+            .x = @sqrt(self.m[0][0] * self.m[0][0] + self.m[1][0] * self.m_[1][0] + self.m[2][0] * self.m[2][0]),
+            .y = @sqrt(self.m[0][1] * self.m[0][1] + self.m[1][1] * self.m_[1][1] + self.m[2][1] * self.m[2][1]),
+            .z = @sqrt(self.m[0][2] * self.m[0][2] + self.m[1][2] * self.m_[1][2] + self.m[2][2] * self.m[2][2]),
+        };
+    }
+
+    pub fn SetScale(self: *Mat4x4, scale: Vec3) void {
+        const curScale = self.GetScale();
+
+        // normalize and apply new scale
+        self.m[0][0] = (self.m[0][0] / curScale.x) * scale.x;
+        self.m[1][0] = (self.m[1][0] / curScale.x) * scale.x;
+        self.m[2][0] = (self.m[2][0] / curScale.x) * scale.x;
+
+        self.m[0][1] = (self.m[0][1] / curScale.y) * scale.y;
+        self.m[1][1] = (self.m[1][1] / curScale.y) * scale.y;
+        self.m[2][1] = (self.m[2][1] / curScale.y) * scale.y;
+
+        self.m[0][2] = (self.m[0][2] / curScale.z) * scale.z;
+        self.m[1][2] = (self.m[1][2] / curScale.z) * scale.z;
+        self.m[2][2] = (self.m[2][2] / curScale.z) * scale.z;
     }
 
     //TODO proper fmt usage, line breaks? etc

@@ -21,6 +21,7 @@ var instance: ?AssetInventory = null;
 const InventoryError = error{
     AlreadyInitialized,
     NotInitialized,
+    AssetNotFound,
 };
 
 // TODO we index by unique string names, but also store the name as part of the data, could we fix that so the field isn't
@@ -47,12 +48,15 @@ pub const AssetInventory = struct {
         instance = AssetInventory{};
     }
 
+    // Takes ownership of name slice
     pub fn CreateMaterial(
         self: *AssetInventory,
         name: []const u8,
     ) !*Material {
         //TODO init pipeline
-        try self.m_materials.put(name, Material{});
+        try self.m_materials.put(name, Material{
+            .m_name = name,
+        });
         const entry = self.m_materials.getPtr(name);
         return entry orelse @panic("Material just created does not exist in hash map");
     }
@@ -61,12 +65,21 @@ pub const AssetInventory = struct {
         return self.m_materials.getPtr(name);
     }
 
+    //TODO deinit material
+    pub fn DeleteMaterial(self: *AssetInventory, name: []const u8) !void {
+        if (!self.m_materials.remove(name)) {
+            return InventoryError.AssetNotFound;
+        }
+    }
+
+    // Takes ownership of name slice
     pub fn CreateMaterialInstance(
         self: *AssetInventory,
         name: []const u8,
         parentMaterial: *Material,
     ) !*MaterialInstance {
         try self.m_materialInstances.put(name, MaterialInstance{
+            .m_name = name,
             .m_parentMaterial = parentMaterial,
         });
         const entry = self.m_materialInstances.getPtr(name);
@@ -77,6 +90,14 @@ pub const AssetInventory = struct {
         return self.m_materialInstances.getPtr(name);
     }
 
+    //TODO deinit material inst
+    pub fn DeleteMaterialInst(self: *AssetInventory, name: []const u8) !void {
+        if (!self.m_materialInstances.remove(name)) {
+            return InventoryError.AssetNotFound;
+        }
+    }
+
+    // Takes ownership of name slice
     pub fn CreateMesh(
         self: *AssetInventory,
         name: []const u8,
@@ -84,7 +105,7 @@ pub const AssetInventory = struct {
     ) !*Mesh {
         const meshPath = try filePathUtils.CwdToAbsolute(allocator, filePath);
         defer allocator.free(meshPath);
-        //TODO avoid unnecessary copyingo on creation
+        //TODO avoid unnecessary copying on creation
         var importResult = assetImport.ImportMesh(meshPath, name);
         if (importResult) |*mesh| {
             try mesh.*.InitMesh();
@@ -100,13 +121,28 @@ pub const AssetInventory = struct {
         return self.m_meshes.getPtr(name);
     }
 
+    //TODO deinit mesh
+    pub fn DeleteMesh(self: *AssetInventory, name: []const u8) !void {
+        if (!self.m_meshes.remove(name)) {
+            return InventoryError.AssetNotFound;
+        }
+    }
+
+    // Takes ownership of name slice
     pub fn CreateTexture(self: *AssetInventory, name: []const u8, imagePath: []const u8) !*Texture {
-        const texture = try Texture.CreateTexture(imagePath);
+        const texture = try Texture.CreateTexture(name, imagePath);
         try self.m_textures.put(name, texture);
         return self.m_textures.getPtr(name) orelse @panic("Texture just created does not exist in hash map");
     }
 
     pub fn GetTexture(self: *AssetInventory, name: []const u8) ?*Texture {
         return self.m_textures.getPtr(name);
+    }
+
+    //TODO deinit texture
+    pub fn DeleteTexture(self: *AssetInventory, name: []const u8) !void {
+        if (!self.m_textures.remove(name)) {
+            return InventoryError.AssetNotFound;
+        }
     }
 };

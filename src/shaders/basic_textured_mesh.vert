@@ -10,6 +10,10 @@ layout(std140, set = 0, binding = 0) uniform SceneData {
     vec4 time; //(t/10, t, t*2, t*3)
 } sceneUbo;
 
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+} pushConstants;
+
 layout(location = 0) in vec3 vertexPosition;
 layout(location = 1) in vec3 vertexNormal;
 layout(location = 2) in vec2 vertexTexCoord;
@@ -18,7 +22,7 @@ layout(location = 0) out vec2 fragTexCoord;
 
 void main()
 {
-    gl_Position = sceneUbo.viewProjection * vec4(vertexPosition, 1.0);
+    gl_Position = sceneUbo.viewProjection * pushConstants.model * vec4(vertexPosition, 1.0);
     fragTexCoord = vertexTexCoord;
 }
 

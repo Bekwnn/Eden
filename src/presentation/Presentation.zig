@@ -4,8 +4,10 @@ const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
 
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
+const Buffer = @import("Buffer.zig").Buffer;
 const c = @import("../c.zig");
 const Camera = @import("Camera.zig").Camera;
+const ColorRGBA = @import("../math/Color.zig").ColorRGBA;
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
 const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
@@ -93,7 +95,15 @@ pub fn Shutdown() void {
 }
 
 //TODO this needs to live somewhere, probably in AssetInventory
-var testShaderEffect: ShaderEffect = undefined;
+var texturedShaderEffect: ShaderEffect = undefined;
+var coloredShaderEffect: ShaderEffect = undefined;
+var coloredShaderBuffer: Buffer = undefined;
+var shaderColor = ColorRGBA{
+    .r = 0.0,
+    .g = 0.6,
+    .b = 0.6,
+    .a = 1.0,
+};
 fn InitializeScene() !void {
     // init hardcoded test currentScene:
     var inventory = try AssetInventory.GetInstance();
@@ -101,15 +111,24 @@ fn InitializeScene() !void {
         debug.print("Error creating mesh: {}\n", .{meshErr});
         return meshErr;
     };
+
     _ = inventory.CreateTexture("uv_test", "test-assets\\test.png") catch |texErr| {
         debug.print("Error creating texture: {}\n", .{texErr});
         return texErr;
     };
-    const material = inventory.CreateMaterial("monkey_mat") catch |materialErr| {
+    const texMaterial = inventory.CreateMaterial("textured_mat") catch |materialErr| {
         debug.print("Error creating material: {}\n", .{materialErr});
         return materialErr;
     };
-    const materialInst = inventory.CreateMaterialInstance("monkey_mat_inst", material) catch |matInstError| {
+    const texMaterialInst = inventory.CreateMaterialInstance("textured_mat_inst", texMaterial) catch |matInstError| {
+        debug.print("Error creating material instance: {}\n", .{matInstError});
+        return matInstError;
+    };
+    const coloredMat = inventory.CreateMaterial("colored_mat") catch |materialErr| {
+        debug.print("Error creating material: {}\n", .{materialErr});
+        return materialErr;
+    };
+    const coloredMatInst = inventory.CreateMaterialInstance("colored_mat_inst", coloredMat) catch |matInstError| {
         debug.print("Error creating material instance: {}\n", .{matInstError});
         return matInstError;
     };
@@ -159,52 +178,96 @@ fn InitializeScene() !void {
         };
     }
 
-    debug.print("Building ShaderEffect...\n", .{});
-    testShaderEffect = try ShaderEffect.CreateBasicShader(
+    // textured shader
+    debug.print("Building basic_textured_mesh ShaderEffect...\n", .{});
+    texturedShaderEffect = try ShaderEffect.CreateBasicShader(
         allocator,
-        "src\\shaders\\compiled\\basic_push_textured_mesh-vert.spv",
-        "src\\shaders\\compiled\\basic_push_textured_mesh-frag.spv",
+        "src\\shaders\\compiled\\basic_textured_mesh-vert.spv",
+        "src\\shaders\\compiled\\basic_textured_mesh-frag.spv",
     );
 
-    var instLayoutBuilder = DescriptorLayoutBuilder.init(allocator);
-    try instLayoutBuilder.AddBinding(1, c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-    testShaderEffect.m_instanceDescriptorSetLayout = try instLayoutBuilder.Build(
+    var texDescriptorLayoutbuilder = DescriptorLayoutBuilder.init(allocator);
+    try texDescriptorLayoutbuilder.AddBinding(1, c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+    texturedShaderEffect.m_instanceDescriptorSetLayout = try texDescriptorLayoutbuilder.Build(
         rContext.m_logicalDevice,
         c.VK_SHADER_STAGE_FRAGMENT_BIT,
     );
-    instLayoutBuilder.Clear();
+    texDescriptorLayoutbuilder.Clear();
 
-    testShaderEffect.m_pushConstantRange = c.VkPushConstantRange{
+    texturedShaderEffect.m_pushConstantRange = c.VkPushConstantRange{
         .offset = 0,
         .size = @sizeOf(Mat4x4),
         .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
     };
 
-    debug.print("Building ShaderPass...\n", .{});
-    material.m_shaderPass = try ShaderPass.BuildShaderPass(
+    debug.print("Building basic_textured_mesh ShaderPass...\n", .{});
+    texMaterial.m_shaderPass = try ShaderPass.BuildShaderPass(
         allocator,
-        &testShaderEffect,
+        &texturedShaderEffect,
         c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         c.VK_POLYGON_MODE_FILL,
         Mesh.GetBindingDescription(),
         Mesh.GetAttributeDescriptions(),
     );
 
-    for (0..3) |i| {
-        const name = try std.fmt.allocPrint(allocator, "Monkey_Mesh_{d}", .{i});
-        defer allocator.free(name);
-        try currentScene.m_renderables.put(
-            name,
-            RenderObject{
-                .m_mesh = mesh,
-                .m_materialInstance = materialInst,
-                .m_transform = Mat4x4.Translation(Vec3{
-                    .x = -5.0 + (@as(f32, @floatFromInt(i)) * 5.0),
-                    .y = 0.0,
-                    .z = 0.0,
-                }).Transpose(),
-            },
-        );
+    // basic shader
+    debug.print("Building basic_mesh ShaderEffect...\n", .{});
+    coloredShaderEffect = try ShaderEffect.CreateBasicShader(
+        allocator,
+        "src\\shaders\\compiled\\basic_mesh-vert.spv",
+        "src\\shaders\\compiled\\basic_mesh-frag.spv",
+    );
+
+    var coloredDescriptorLayoutbuilder = DescriptorLayoutBuilder.init(allocator);
+    try coloredDescriptorLayoutbuilder.AddBinding(1, c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    coloredShaderEffect.m_instanceDescriptorSetLayout = try coloredDescriptorLayoutbuilder.Build(
+        rContext.m_logicalDevice,
+        c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    );
+    coloredDescriptorLayoutbuilder.Clear();
+
+    coloredShaderEffect.m_pushConstantRange = c.VkPushConstantRange{
+        .offset = 0,
+        .size = @sizeOf(Mat4x4),
+        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
+    };
+
+    coloredShaderBuffer = try Buffer.CreateBuffer(
+        @sizeOf(ColorRGBA),
+        c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    );
+
+    try coloredShaderBuffer.MapMemory(@ptrCast(&shaderColor), @sizeOf(ColorRGBA));
+
+    debug.print("Building basic_mesh ShaderPass...\n", .{});
+    coloredMat.m_shaderPass = try ShaderPass.BuildShaderPass(
+        allocator,
+        &coloredShaderEffect,
+        c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        c.VK_POLYGON_MODE_FILL,
+        Mesh.GetBindingDescription(),
+        Mesh.GetAttributeDescriptions(),
+    );
+
+    const width = 10;
+    const height = 10;
+    for (0..height) |i| {
+        for (0..width) |j| {
+            const name = try std.fmt.allocPrint(allocator, "Monkey_Mesh_{d}.{d}", .{ i, j });
+            try currentScene.m_renderables.put(
+                name,
+                RenderObject{
+                    .m_mesh = mesh,
+                    .m_materialInstance = if ((i + j) % 2 == 0) texMaterialInst else coloredMatInst,
+                    .m_transform = Mat4x4.Translation(Vec3{
+                        .x = (-5.0 * @divFloor(width, 2)) + (@as(f32, @floatFromInt(j)) * 5.0),
+                        .y = 0.0,
+                        .z = (-5.0 * @divFloor(height, 2)) + (@as(f32, @floatFromInt(i)) * 5.0),
+                    }).Transpose(),
+                },
+            );
+        }
     }
 }
 
@@ -223,10 +286,8 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
     _ = c.igText("Camera Pos: (%.2f, %.2f, %.2f)", camera.m_pos.x, camera.m_pos.y, camera.m_pos.z);
     c.igSetNextItemWidth(150.0);
     _ = c.igSliderFloat("Camera Speed", &movespeed, 1.0, 75.0, "%.2f", c.ImGuiSliderFlags_None);
+    _ = c.igColorEdit4("Monkey Color", @ptrCast(&shaderColor), c.ImGuiColorEditFlags_None);
 
-    //const rotateLeft = c.igButton("<", c.ImVec2{ .x = 20.0, .y = 20.0 });
-    //c.igSameLine(0.0, 2.0);
-    //const rotateRight = c.igButton(">", c.ImVec2{ .x = 20.0, .y = 20.0 });
     const cameraEulers = camera.m_rotation.GetEulerAngles();
     _ = c.igText(
         "Camera (Pitch, Yaw, Roll): (%.2f, %.2f, %.2f)",
@@ -390,7 +451,7 @@ fn WriteDescriptors() !void {
 
     //TODO how do we set a specific texture asset as a parameter to a material layout, or handle material params in general?
     const inventory = try AssetInventory.GetInstance();
-    const materialInst = inventory.GetMaterialInst("monkey_mat_inst") orelse @panic("!");
+    const materialInst = inventory.GetMaterialInst("textured_mat_inst") orelse @panic("!");
     if (materialInst.m_instanceDescriptorSet) |*instDescSet| {
         const uvTestTexture = inventory.GetTexture("uv_test") orelse @panic("!");
         var renderableWriter = DescriptorWriter.init(allocator);
@@ -400,6 +461,19 @@ fn WriteDescriptors() !void {
             rContext.m_defaultSamplerLinear,
             c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        );
+        renderableWriter.UpdateSet(rContext.m_logicalDevice, instDescSet.*);
+    }
+
+    const coloredInst = inventory.GetMaterialInst("colored_mat_inst") orelse @panic("!");
+    if (coloredInst.m_instanceDescriptorSet) |*instDescSet| {
+        var renderableWriter = DescriptorWriter.init(allocator);
+        try renderableWriter.WriteBuffer(
+            1,
+            coloredShaderBuffer.m_buffer,
+            @sizeOf(ColorRGBA),
+            0,
+            c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         );
         renderableWriter.UpdateSet(rContext.m_logicalDevice, instDescSet.*);
     }
@@ -426,6 +500,16 @@ fn UpdateUniformSceneBuffer() !void {
         @memcpy(
             @as([*]u8, @ptrCast(mappedData))[0..bufferSize],
             @as([*]u8, @ptrCast(&currentFrameData.m_gpuSceneData))[0..bufferSize],
+        );
+    } else {
+        return RenderLoopError.FailedToUpdateSceneUniforms;
+    }
+
+    if (coloredShaderBuffer.m_mappedData) |mappedData| {
+        const bufferSize = @sizeOf(ColorRGBA);
+        @memcpy(
+            @as([*]u8, @ptrCast(mappedData))[0..bufferSize],
+            @as([*]u8, @ptrCast(&shaderColor))[0..bufferSize],
         );
     } else {
         return RenderLoopError.FailedToUpdateSceneUniforms;

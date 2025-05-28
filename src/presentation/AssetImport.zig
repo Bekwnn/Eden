@@ -63,6 +63,7 @@ fn AssImp_ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
 
     const importMesh: *const c.aiMesh = importedScene.mMeshes[0];
     var returnMesh = Mesh{
+        .m_name = meshName,
         .m_vertexData = try ArrayList(VertexData).initCapacity(
             allocator,
             importMesh.mNumVertices,

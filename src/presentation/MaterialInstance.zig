@@ -5,7 +5,7 @@ const RenderContext = @import("RenderContext.zig").RenderContext;
 
 pub const MaterialInstance = struct {
     const Self = @This();
-
+    m_name: []const u8,
     m_parentMaterial: *Material,
     m_instanceDescriptorSet: ?c.VkDescriptorSet = null,
 

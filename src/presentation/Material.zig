@@ -5,6 +5,7 @@ const RenderContext = @import("RenderContext.zig").RenderContext;
 
 pub const Material = struct {
     const Self = @This();
+    m_name: []const u8,
     m_shaderPass: ShaderPass = undefined,
     m_materialDescriptorSet: ?c.VkDescriptorSet = null,
 

@@ -6,19 +6,11 @@ const ArrayList = std.ArrayList;
 
 const vkUtil = @import("VulkanUtil.zig");
 const RenderContext = @import("RenderContext.zig").RenderContext;
+const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
 
 pub const ShaderError = error{
     FailedToCreateShader,
     FailedToReadShaderFile,
-};
-
-pub const UniformBufferObject = struct {
-    m_dataType: type,
-    m_binding: u32,
-};
-
-pub const PushConstant = struct {
-    m_dataType: type,
 };
 
 pub const MAX_DESCRIPTORS = 4;
@@ -29,16 +21,25 @@ pub const MAX_DESCRIPTORS = 4;
 pub const ShaderEffect = struct {
     const Self = @This();
 
+    pub const DescriptorParam = struct {
+        m_binding: u32,
+        m_descriptorType: c.VkDescriptorType,
+        m_shaderStageFlags: c.VkShaderStageFlags,
+    };
+
     m_shaderStages: ArrayList(ShaderStage),
     // set 0 descriptor layout: rContext gpuSceneData globals
     // set 1 descriptor layout: per shader layout
     m_shaderDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
+    m_shaderSetParams: ArrayList(DescriptorParam),
     // set 2 descriptor layout: per shader instance layout
     m_instanceDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
+    m_instanceSetParams: ArrayList(DescriptorParam),
     // set 3 per render object layout
     m_objectDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
+    m_objectSetParams: ArrayList(DescriptorParam),
 
-    m_pushConstantRange: ?c.VkPushConstantRange = null,
+    m_pushConstantRanges: ArrayList(c.VkPushConstantRange),
 
     pub const ShaderStage = struct {
         m_shader: c.VkShaderModule,
@@ -48,7 +49,7 @@ pub const ShaderEffect = struct {
     pub fn CreateEmptyShader(allocator: Allocator) ShaderEffect {
         return ShaderEffect{
             .m_shaderStages = ArrayList(ShaderStage).init(allocator),
-            .m_descriptorSetLayouts = ArrayList(c.VkDescriptorSetLayout).init(allocator),
+            .m_pushConstantRanges = ArrayList(c.VkPushConstantRange).init(allocator),
         };
     }
 
@@ -60,6 +61,10 @@ pub const ShaderEffect = struct {
     ) !ShaderEffect {
         var newShader = ShaderEffect{
             .m_shaderStages = ArrayList(ShaderStage).init(allocator),
+            .m_shaderSetParams = ArrayList(DescriptorParam).init(allocator),
+            .m_instanceSetParams = ArrayList(DescriptorParam).init(allocator),
+            .m_objectSetParams = ArrayList(DescriptorParam).init(allocator),
+            .m_pushConstantRanges = ArrayList(c.VkPushConstantRange).init(allocator),
         };
 
         try newShader.AddShaderStage(allocator, vertShaderSource, c.VK_SHADER_STAGE_VERTEX_BIT);
@@ -75,13 +80,51 @@ pub const ShaderEffect = struct {
         self.m_shaderStages.deinit();
     }
 
-    pub fn AddShaderStage(self: *Self, allocator: Allocator, shaderSource: []const u8, flags: c.VkShaderStageFlagBits) !void {
+    pub fn BuildLayouts(self: *Self, allocator: Allocator) !void {
+        if (self.m_shaderSetParams.items.len != 0) {
+            self.m_shaderDescriptorSetLayout = try BuildLayout(allocator, &self.m_shaderSetParams);
+        }
+
+        if (self.m_instanceSetParams.items.len != 0) {
+            self.m_instanceDescriptorSetLayout = try BuildLayout(allocator, &self.m_instanceSetParams);
+        }
+
+        if (self.m_objectSetParams.items.len != 0) {
+            self.m_objectDescriptorSetLayout = try BuildLayout(allocator, &self.m_objectSetParams);
+        }
+    }
+
+    pub fn AddShaderStage(
+        self: *Self,
+        allocator: Allocator,
+        shaderSource: []const u8,
+        flags: c.VkShaderStageFlags,
+    ) !void {
         try self.m_shaderStages.append(ShaderStage{
             .m_shader = try CreateShaderModule(allocator, shaderSource),
             .m_flags = flags,
         });
     }
 };
+
+fn BuildLayout(
+    allocator: Allocator,
+    params: *ArrayList(ShaderEffect.DescriptorParam),
+) !c.VkDescriptorSetLayout {
+    const rContext = try RenderContext.GetInstance();
+
+    var layoutBuilder = DescriptorLayoutBuilder.init(allocator);
+    defer layoutBuilder.deinit();
+    var shaderStageFlags: c.VkShaderStageFlags = 0;
+    for (params.items) |param| {
+        try layoutBuilder.AddBinding(
+            param.m_binding,
+            param.m_descriptorType,
+        );
+        shaderStageFlags |= param.m_shaderStageFlags;
+    }
+    return try layoutBuilder.Build(rContext.m_logicalDevice, shaderStageFlags);
+}
 
 fn CheckAndFreeShaderModule(shader: c.VkShaderModule) void {
     const rContext = RenderContext.GetInstance() catch return;

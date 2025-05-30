@@ -1,4 +1,8 @@
+const std = @import("std");
+const ArrayList = std.mem.ArrayList;
+
 const c = @import("../c.zig");
+
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const RenderContext = @import("RenderContext.zig").RenderContext;

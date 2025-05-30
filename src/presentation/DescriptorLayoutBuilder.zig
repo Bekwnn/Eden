@@ -21,6 +21,10 @@ pub const DescriptorLayoutBuilder = struct {
         };
     }
 
+    pub fn deinit(self: *Self) void {
+        self.m_bindings.deinit();
+    }
+
     pub fn AddBinding(self: *Self, binding: u32, descriptorType: c.VkDescriptorType) !void {
         const newBind = c.VkDescriptorSetLayoutBinding{
             .binding = binding,

@@ -186,19 +186,17 @@ fn InitializeScene() !void {
         "src\\shaders\\compiled\\basic_textured_mesh-frag.spv",
     );
 
-    var texDescriptorLayoutbuilder = DescriptorLayoutBuilder.init(allocator);
-    try texDescriptorLayoutbuilder.AddBinding(1, c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-    texturedShaderEffect.m_instanceDescriptorSetLayout = try texDescriptorLayoutbuilder.Build(
-        rContext.m_logicalDevice,
-        c.VK_SHADER_STAGE_FRAGMENT_BIT,
-    );
-    texDescriptorLayoutbuilder.Clear();
-
-    texturedShaderEffect.m_pushConstantRange = c.VkPushConstantRange{
+    try texturedShaderEffect.m_instanceSetParams.append(ShaderEffect.DescriptorParam{
+        .m_binding = 1,
+        .m_descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .m_shaderStageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    });
+    try texturedShaderEffect.m_pushConstantRanges.append(c.VkPushConstantRange{
         .offset = 0,
         .size = @sizeOf(Mat4x4),
         .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-    };
+    });
+    try texturedShaderEffect.BuildLayouts(allocator);
 
     debug.print("Building basic_textured_mesh ShaderPass...\n", .{});
     texMaterial.m_shaderPass = try ShaderPass.BuildShaderPass(
@@ -218,19 +216,17 @@ fn InitializeScene() !void {
         "src\\shaders\\compiled\\basic_mesh-frag.spv",
     );
 
-    var coloredDescriptorLayoutbuilder = DescriptorLayoutBuilder.init(allocator);
-    try coloredDescriptorLayoutbuilder.AddBinding(1, c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    coloredShaderEffect.m_instanceDescriptorSetLayout = try coloredDescriptorLayoutbuilder.Build(
-        rContext.m_logicalDevice,
-        c.VK_SHADER_STAGE_FRAGMENT_BIT,
-    );
-    coloredDescriptorLayoutbuilder.Clear();
-
-    coloredShaderEffect.m_pushConstantRange = c.VkPushConstantRange{
+    try coloredShaderEffect.m_instanceSetParams.append(ShaderEffect.DescriptorParam{
+        .m_binding = 1,
+        .m_descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .m_shaderStageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+    });
+    try coloredShaderEffect.m_pushConstantRanges.append(c.VkPushConstantRange{
         .offset = 0,
         .size = @sizeOf(Mat4x4),
         .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-    };
+    });
+    try coloredShaderEffect.BuildLayouts(allocator);
 
     coloredShaderBuffer = try Buffer.CreateBuffer(
         @sizeOf(ColorRGBA),

@@ -195,17 +195,12 @@ fn CreatePipelineLayout(shaderEffect: *const ShaderEffect, allocator: Allocator)
     try setLayouts.append(shaderEffect.m_instanceDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout);
     try setLayouts.append(shaderEffect.m_objectDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout);
 
-    const pushConstantRangeCount: u32 = if (shaderEffect.m_pushConstantRange != null) 1 else 0;
-
-    const pushConstantPtr: ?*const c.VkPushConstantRange =
-        if (shaderEffect.m_pushConstantRange != null) &(shaderEffect.m_pushConstantRange.?) else null;
-
     const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = @intCast(setLayouts.items.len),
         .pSetLayouts = setLayouts.items.ptr,
-        .pushConstantRangeCount = pushConstantRangeCount,
-        .pPushConstantRanges = pushConstantPtr,
+        .pushConstantRangeCount = @intCast(shaderEffect.m_pushConstantRanges.items.len),
+        .pPushConstantRanges = shaderEffect.m_pushConstantRanges.items.ptr,
         .flags = 0,
         .pNext = null,
     };

@@ -22,6 +22,7 @@ pub const RenderObject = struct {
     m_objectDescriptorSet: ?c.VkDescriptorSet = null,
 
     m_transform: Mat4x4 = Mat4x4.identity,
+    m_objectMaterialParams: ArrayList(MaterialParam),
 
     pub fn AllocateDescriptorSet(
         self: *Self,

@@ -1,6 +1,11 @@
+const std = @import("std");
+const ArrayList = std.mem.ArrayList;
+
 const c = @import("../c.zig");
-const Material = @import("Material.zig").Material;
+
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
+const Material = @import("Material.zig").Material;
+const MaterialParam = @import("MaterialParam.zig").MaterialParam;
 const RenderContext = @import("RenderContext.zig").RenderContext;
 
 pub const MaterialInstance = struct {
@@ -8,6 +13,7 @@ pub const MaterialInstance = struct {
     m_name: []const u8,
     m_parentMaterial: *Material,
     m_instanceDescriptorSet: ?c.VkDescriptorSet = null,
+    m_materialInstanceParams: ArrayList(MaterialParam),
 
     pub fn AllocateDescriptorSet(
         self: *Self,

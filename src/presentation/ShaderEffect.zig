@@ -13,8 +13,6 @@ pub const ShaderError = error{
     FailedToReadShaderFile,
 };
 
-pub const MAX_DESCRIPTORS = 4;
-
 // This struct holds multiple shader modules to be used with a single pipeline
 // It also holds holds info about the parameters passed into the shader programs
 // https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/02_Graphics_pipeline_basics/00_Introduction.html
@@ -49,6 +47,9 @@ pub const ShaderEffect = struct {
     pub fn CreateEmptyShader(allocator: Allocator) ShaderEffect {
         return ShaderEffect{
             .m_shaderStages = ArrayList(ShaderStage).init(allocator),
+            .m_shaderSetParams = ArrayList(DescriptorParam).init(allocator),
+            .m_instanceSetParams = ArrayList(DescriptorParam).init(allocator),
+            .m_objectSetParams = ArrayList(DescriptorParam).init(allocator),
             .m_pushConstantRanges = ArrayList(c.VkPushConstantRange).init(allocator),
         };
     }

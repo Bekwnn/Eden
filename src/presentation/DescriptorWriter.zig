@@ -90,6 +90,6 @@ pub const DescriptorWriter = struct {
             write.dstSet = set;
         }
 
-        c.vkUpdateDescriptorSets(device, @intCast(self.m_writes.items.len), @ptrCast(&self.m_writes.items[0]), 0, null);
+        c.vkUpdateDescriptorSets(device, @intCast(self.m_writes.items.len), self.m_writes.items.ptr, 0, null);
     }
 };

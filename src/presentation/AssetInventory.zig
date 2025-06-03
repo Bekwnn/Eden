@@ -54,9 +54,7 @@ pub const AssetInventory = struct {
         name: []const u8,
     ) !*Material {
         //TODO init pipeline
-        try self.m_materials.put(name, Material{
-            .m_name = name,
-        });
+        try self.m_materials.put(name, Material.init(allocator, name));
         const entry = self.m_materials.getPtr(name);
         return entry orelse @panic("Material just created does not exist in hash map");
     }
@@ -78,10 +76,14 @@ pub const AssetInventory = struct {
         name: []const u8,
         parentMaterial: *Material,
     ) !*MaterialInstance {
-        try self.m_materialInstances.put(name, MaterialInstance{
-            .m_name = name,
-            .m_parentMaterial = parentMaterial,
-        });
+        try self.m_materialInstances.put(
+            name,
+            MaterialInstance.init(
+                allocator,
+                name,
+                parentMaterial,
+            ),
+        );
         const entry = self.m_materialInstances.getPtr(name);
         return entry orelse @panic("MaterialInstance just created does not exist in hash map");
     }

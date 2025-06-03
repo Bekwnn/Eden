@@ -1,9 +1,11 @@
 const std = @import("std");
-const ArrayList = std.mem.ArrayList;
+const ArrayList = std.ArrayList;
+const Allocator = std.mem.Allocator;
 
 const c = @import("../c.zig");
 
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
+const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
 const Material = @import("Material.zig").Material;
 const MaterialParam = @import("MaterialParam.zig").MaterialParam;
 const RenderContext = @import("RenderContext.zig").RenderContext;
@@ -15,6 +17,14 @@ pub const MaterialInstance = struct {
     m_instanceDescriptorSet: ?c.VkDescriptorSet = null,
     m_materialInstanceParams: ArrayList(MaterialParam),
 
+    pub fn init(allocator: Allocator, name: []const u8, parentMaterial: *Material) MaterialInstance {
+        return MaterialInstance{
+            .m_name = name,
+            .m_parentMaterial = parentMaterial,
+            .m_materialInstanceParams = ArrayList(MaterialParam).init(allocator),
+        };
+    }
+
     pub fn AllocateDescriptorSet(
         self: *Self,
         dAllocator: *DescriptorAllocator,
@@ -22,6 +32,19 @@ pub const MaterialInstance = struct {
     ) !void {
         const rContext = try RenderContext.GetInstance();
         self.m_instanceDescriptorSet = try dAllocator.Allocate(rContext.m_logicalDevice, layout);
+    }
+
+    pub fn WriteDescriptorSet(self: *Self, allocator: Allocator) !void {
+        if (self.m_instanceDescriptorSet) |*descSet| {
+            const rContext = try RenderContext.GetInstance();
+            var writer = DescriptorWriter.init(allocator);
+            for (self.m_materialInstanceParams.items) |*materialParam| {
+                try materialParam.WriteDescriptor(&writer);
+            }
+            if (self.m_materialInstanceParams.items.len != 0) {
+                writer.UpdateSet(rContext.m_logicalDevice, descSet.*);
+            }
+        }
     }
 
     // these should maybe return empty descriptor set layout instead of null

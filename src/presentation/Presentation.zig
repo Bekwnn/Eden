@@ -19,6 +19,10 @@ const GPUSceneData = scene.GPUSceneData;
 const input = @import("../Input.zig");
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Material = @import("Material.zig").Material;
+const materialParam = @import("MaterialParam.zig");
+const MaterialParam = materialParam.MaterialParam;
+const TextureParam = materialParam.TextureParam;
+const UniformParam = materialParam.UniformParam;
 const MaterialInstance = @import("MaterialInstance.zig").MaterialInstance;
 const Mesh = @import("Mesh.zig").Mesh;
 const Quat = @import("../math/Quat.zig").Quat;
@@ -112,7 +116,7 @@ fn InitializeScene() !void {
         return meshErr;
     };
 
-    _ = inventory.CreateTexture("uv_test", "test-assets\\test.png") catch |texErr| {
+    const uvTexture = inventory.CreateTexture("uv_test", "test-assets\\test.png") catch |texErr| {
         debug.print("Error creating texture: {}\n", .{texErr});
         return texErr;
     };
@@ -186,11 +190,15 @@ fn InitializeScene() !void {
         "src\\shaders\\compiled\\basic_textured_mesh-frag.spv",
     );
 
+    // TODO make setting up a material parameter binding 1 call
+    const textureParam = try TextureParam.init(allocator, uvTexture);
+    try texMaterialInst.m_materialInstanceParams.append(MaterialParam.init(textureParam, 1));
     try texturedShaderEffect.m_instanceSetParams.append(ShaderEffect.DescriptorParam{
         .m_binding = 1,
         .m_descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .m_shaderStageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
     });
+
     try texturedShaderEffect.m_pushConstantRanges.append(c.VkPushConstantRange{
         .offset = 0,
         .size = @sizeOf(Mat4x4),
@@ -216,6 +224,9 @@ fn InitializeScene() !void {
         "src\\shaders\\compiled\\basic_mesh-frag.spv",
     );
 
+    // TODO make setting up a material parameter binding 1 call
+    const colorParam = try UniformParam.init(allocator, &coloredShaderBuffer, @sizeOf(@TypeOf(shaderColor)), 0);
+    try coloredMatInst.m_materialInstanceParams.append(MaterialParam.init(colorParam, 1));
     try coloredShaderEffect.m_instanceSetParams.append(ShaderEffect.DescriptorParam{
         .m_binding = 1,
         .m_descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -253,16 +264,19 @@ fn InitializeScene() !void {
             const name = try std.fmt.allocPrint(allocator, "Monkey_Mesh_{d}.{d}", .{ i, j });
             try currentScene.m_renderables.put(
                 name,
-                RenderObject{
-                    .m_mesh = mesh,
-                    .m_materialInstance = if ((i + j) % 2 == 0) texMaterialInst else coloredMatInst,
-                    .m_transform = Mat4x4.Translation(Vec3{
-                        .x = (-5.0 * @divFloor(width, 2)) + (@as(f32, @floatFromInt(j)) * 5.0),
-                        .y = 0.0,
-                        .z = (-5.0 * @divFloor(height, 2)) + (@as(f32, @floatFromInt(i)) * 5.0),
-                    }).Transpose(),
-                },
+                RenderObject.init(
+                    allocator,
+                    name,
+                    mesh,
+                    if ((i + j) % 2 == 0) texMaterialInst else coloredMatInst,
+                ),
             );
+            const newRenderObj = currentScene.m_renderables.getPtr(name) orelse @panic("!");
+            newRenderObj.m_transform = Mat4x4.Translation(Vec3{
+                .x = (-5.0 * @divFloor(width, 2)) + (@as(f32, @floatFromInt(j)) * 5.0),
+                .y = 0.0,
+                .z = (-5.0 * @divFloor(height, 2)) + (@as(f32, @floatFromInt(i)) * 5.0),
+            }).Transpose();
         }
     }
 }
@@ -445,33 +459,18 @@ fn WriteDescriptors() !void {
     );
     writer.UpdateSet(rContext.m_logicalDevice, currentFrame.m_gpuSceneDataDescriptorSet);
 
-    //TODO how do we set a specific texture asset as a parameter to a material layout, or handle material params in general?
     const inventory = try AssetInventory.GetInstance();
-    const materialInst = inventory.GetMaterialInst("textured_mat_inst") orelse @panic("!");
-    if (materialInst.m_instanceDescriptorSet) |*instDescSet| {
-        const uvTestTexture = inventory.GetTexture("uv_test") orelse @panic("!");
-        var renderableWriter = DescriptorWriter.init(allocator);
-        try renderableWriter.WriteImage(
-            1,
-            uvTestTexture.m_imageView,
-            rContext.m_defaultSamplerLinear,
-            c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        );
-        renderableWriter.UpdateSet(rContext.m_logicalDevice, instDescSet.*);
+    var matIter = inventory.m_materials.iterator();
+    while (matIter.next()) |*material| {
+        try material.value_ptr.WriteDescriptorSet(allocator);
     }
-
-    const coloredInst = inventory.GetMaterialInst("colored_mat_inst") orelse @panic("!");
-    if (coloredInst.m_instanceDescriptorSet) |*instDescSet| {
-        var renderableWriter = DescriptorWriter.init(allocator);
-        try renderableWriter.WriteBuffer(
-            1,
-            coloredShaderBuffer.m_buffer,
-            @sizeOf(ColorRGBA),
-            0,
-            c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        );
-        renderableWriter.UpdateSet(rContext.m_logicalDevice, instDescSet.*);
+    var matInstIter = inventory.m_materialInstances.iterator();
+    while (matInstIter.next()) |*matInst| {
+        try matInst.value_ptr.WriteDescriptorSet(allocator);
+    }
+    var renderIter = currentScene.m_renderables.iterator();
+    while (renderIter.next()) |*renderable| {
+        try renderable.value_ptr.WriteDescriptorSet(allocator);
     }
 }
 

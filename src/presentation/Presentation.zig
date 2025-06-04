@@ -1,48 +1,42 @@
 const std = @import("std");
 const debug = std.debug;
-const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
+
+const c = @import("../c.zig");
+const input = @import("../Input.zig");
+
+const filePathUtils = @import("../coreutil/FilePathUtils.zig");
+
+const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
+const Quat = @import("../math/Quat.zig").Quat;
+const Vec3 = @import("../math/Vec3.zig").Vec3;
+const Vec4 = @import("../math/Vec4.zig").Vec4;
 
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const Buffer = @import("Buffer.zig").Buffer;
-const c = @import("../c.zig");
 const Camera = @import("Camera.zig").Camera;
-const ColorRGBA = @import("../math/Color.zig").ColorRGBA;
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
 const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
-const em = @import("../math/Math.zig");
-const filePathUtils = @import("../coreutil/FilePathUtils.zig");
-const game = @import("../game/GameWorld.zig");
-const GameWorld = @import("../game/GameWorld.zig").GameWorld;
-const GPUSceneData = scene.GPUSceneData;
-const input = @import("../Input.zig");
-const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
+const GPUSceneData = @import("Scene.zig").GPUSceneData;
 const Material = @import("Material.zig").Material;
-const materialParam = @import("MaterialParam.zig");
-const MaterialParam = materialParam.MaterialParam;
-const TextureParam = materialParam.TextureParam;
-const UniformParam = materialParam.UniformParam;
 const MaterialInstance = @import("MaterialInstance.zig").MaterialInstance;
+const MaterialParam = @import("MaterialParam.zig").MaterialParam;
 const Mesh = @import("Mesh.zig").Mesh;
-const Quat = @import("../math/Quat.zig").Quat;
 const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
-const scene = @import("Scene.zig");
-const Scene = scene.Scene;
+const Scene = @import("Scene.zig").Scene;
+const sceneInit = @import("SceneInit.zig");
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
 const Texture = @import("Texture.zig").Texture;
-const Vec3 = @import("../math/Vec3.zig").Vec3;
-const Vec4 = @import("../math/Vec4.zig").Vec4;
+const TextureParam = @import("MaterialParam.zig").TextureParam;
+const UniformParam = @import("MaterialParam.zig").UniformParam;
 const vkUtil = @import("VulkanUtil.zig");
 
 //TODO curTime should exist on a global of some kind
 var curTime: f32 = 0.0;
-
-//TODO move scene out
-var currentScene = Scene{};
 
 const RenderLoopError = error{
     FailedToAcquireNextImage,
@@ -66,7 +60,7 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
     c.SDL_GetWindowSize(window, &width, &height);
     debug.print("Window resized to {} x {}\n", .{ width, height });
 
-    const camera = try currentScene.GetCurrentCamera();
+    const camera = try sceneInit.GetCurrentScene().GetCurrentCamera();
     camera.*.m_aspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
 
     try rContext.RecreateSwapchain(allocator);
@@ -85,7 +79,7 @@ pub fn Initialize(
     );
 
     try AssetInventory.Initialize();
-    try InitializeScene();
+    try sceneInit.InitializeScene();
 }
 
 pub fn Shutdown() void {
@@ -98,194 +92,11 @@ pub fn Shutdown() void {
     rContext.Shutdown();
 }
 
-//TODO this needs to live somewhere, probably in AssetInventory
-var texturedShaderEffect: ShaderEffect = undefined;
-var coloredShaderEffect: ShaderEffect = undefined;
-var coloredShaderBuffer: Buffer = undefined;
-var shaderColor = ColorRGBA{
-    .r = 0.0,
-    .g = 0.6,
-    .b = 0.6,
-    .a = 1.0,
-};
-fn InitializeScene() !void {
-    // init hardcoded test currentScene:
-    var inventory = try AssetInventory.GetInstance();
-    const mesh = inventory.CreateMesh("monkey", "test-assets\\test.obj") catch |meshErr| {
-        debug.print("Error creating mesh: {}\n", .{meshErr});
-        return meshErr;
-    };
-
-    const uvTexture = inventory.CreateTexture("uv_test", "test-assets\\test.png") catch |texErr| {
-        debug.print("Error creating texture: {}\n", .{texErr});
-        return texErr;
-    };
-    const texMaterial = inventory.CreateMaterial("textured_mat") catch |materialErr| {
-        debug.print("Error creating material: {}\n", .{materialErr});
-        return materialErr;
-    };
-    const texMaterialInst = inventory.CreateMaterialInstance("textured_mat_inst", texMaterial) catch |matInstError| {
-        debug.print("Error creating material instance: {}\n", .{matInstError});
-        return matInstError;
-    };
-    const coloredMat = inventory.CreateMaterial("colored_mat") catch |materialErr| {
-        debug.print("Error creating material: {}\n", .{materialErr});
-        return materialErr;
-    };
-    const coloredMatInst = inventory.CreateMaterialInstance("colored_mat_inst", coloredMat) catch |matInstError| {
-        debug.print("Error creating material instance: {}\n", .{matInstError});
-        return matInstError;
-    };
-
-    try currentScene.CreateCamera("default");
-
-    const currentCamera = try currentScene.GetCurrentCamera();
-
-    currentCamera.m_pos = Vec3{ .x = 0.0, .y = 0.0, .z = -25.0 };
-    currentCamera.LookAt(Vec3.zero);
-
-    const cameraViewMat = currentCamera.GetViewMatrix();
-    const cameraProjMat = currentCamera.GetProjectionMatrix();
-    const cameraViewProj = cameraProjMat.Mul(&cameraViewMat);
-
-    //TODO should we include the clipspace mat?
-    const rContext = try RenderContext.GetInstance();
-    for (&rContext.m_frameData) |*frameData| {
-        frameData.m_gpuSceneData = scene.GPUSceneData{
-            .m_view = cameraViewMat.Transpose(),
-            .m_projection = cameraProjMat.Transpose(),
-            .m_viewProj = Camera.gl2VkClipSpace.Mul(&cameraViewProj).Transpose(),
-            .m_ambientColor = Vec4{
-                .x = 0.2,
-                .y = 0.2,
-                .z = 0.2,
-                .w = 1.0,
-            },
-            .m_sunDirection = Vec4{
-                .x = 0.0,
-                .y = -1.0,
-                .z = 0.0,
-                .w = 10.0,
-            },
-            .m_sunColor = Vec4{
-                .x = 1.0,
-                .y = 1.0,
-                .z = 1.0,
-                .w = 1.0,
-            },
-            .m_time = Vec4{
-                .x = 0.0,
-                .y = 0.0,
-                .z = 0.0,
-                .w = 0.0,
-            },
-        };
-    }
-
-    // textured shader
-    debug.print("Building basic_textured_mesh ShaderEffect...\n", .{});
-    texturedShaderEffect = try ShaderEffect.CreateBasicShader(
-        allocator,
-        "src\\shaders\\compiled\\basic_textured_mesh-vert.spv",
-        "src\\shaders\\compiled\\basic_textured_mesh-frag.spv",
-    );
-
-    // TODO make setting up a material parameter binding 1 call
-    const textureParam = try TextureParam.init(allocator, uvTexture);
-    try texMaterialInst.m_materialInstanceParams.append(MaterialParam.init(textureParam, 1));
-    try texturedShaderEffect.m_instanceSetParams.append(ShaderEffect.DescriptorParam{
-        .m_binding = 1,
-        .m_descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .m_shaderStageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-    });
-
-    try texturedShaderEffect.m_pushConstantRanges.append(c.VkPushConstantRange{
-        .offset = 0,
-        .size = @sizeOf(Mat4x4),
-        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-    });
-    try texturedShaderEffect.BuildLayouts(allocator);
-
-    debug.print("Building basic_textured_mesh ShaderPass...\n", .{});
-    texMaterial.m_shaderPass = try ShaderPass.BuildShaderPass(
-        allocator,
-        &texturedShaderEffect,
-        c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        c.VK_POLYGON_MODE_FILL,
-        Mesh.GetBindingDescription(),
-        Mesh.GetAttributeDescriptions(),
-    );
-
-    // basic shader
-    debug.print("Building basic_mesh ShaderEffect...\n", .{});
-    coloredShaderEffect = try ShaderEffect.CreateBasicShader(
-        allocator,
-        "src\\shaders\\compiled\\basic_mesh-vert.spv",
-        "src\\shaders\\compiled\\basic_mesh-frag.spv",
-    );
-
-    // TODO make setting up a material parameter binding 1 call
-    const colorParam = try UniformParam.init(allocator, &coloredShaderBuffer, @sizeOf(@TypeOf(shaderColor)), 0);
-    try coloredMatInst.m_materialInstanceParams.append(MaterialParam.init(colorParam, 1));
-    try coloredShaderEffect.m_instanceSetParams.append(ShaderEffect.DescriptorParam{
-        .m_binding = 1,
-        .m_descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .m_shaderStageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-    });
-    try coloredShaderEffect.m_pushConstantRanges.append(c.VkPushConstantRange{
-        .offset = 0,
-        .size = @sizeOf(Mat4x4),
-        .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
-    });
-    try coloredShaderEffect.BuildLayouts(allocator);
-
-    coloredShaderBuffer = try Buffer.CreateBuffer(
-        @sizeOf(ColorRGBA),
-        c.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        c.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | c.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-    );
-
-    try coloredShaderBuffer.MapMemory(@ptrCast(&shaderColor), @sizeOf(ColorRGBA));
-
-    debug.print("Building basic_mesh ShaderPass...\n", .{});
-    coloredMat.m_shaderPass = try ShaderPass.BuildShaderPass(
-        allocator,
-        &coloredShaderEffect,
-        c.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        c.VK_POLYGON_MODE_FILL,
-        Mesh.GetBindingDescription(),
-        Mesh.GetAttributeDescriptions(),
-    );
-
-    const width = 10;
-    const height = 10;
-    for (0..height) |i| {
-        for (0..width) |j| {
-            const name = try std.fmt.allocPrint(allocator, "Monkey_Mesh_{d}.{d}", .{ i, j });
-            try currentScene.m_renderables.put(
-                name,
-                RenderObject.init(
-                    allocator,
-                    name,
-                    mesh,
-                    if ((i + j) % 2 == 0) texMaterialInst else coloredMatInst,
-                ),
-            );
-            const newRenderObj = currentScene.m_renderables.getPtr(name) orelse @panic("!");
-            newRenderObj.m_transform = Mat4x4.Translation(Vec3{
-                .x = (-5.0 * @divFloor(width, 2)) + (@as(f32, @floatFromInt(j)) * 5.0),
-                .y = 0.0,
-                .z = (-5.0 * @divFloor(height, 2)) + (@as(f32, @floatFromInt(i)) * 5.0),
-            }).Transpose();
-        }
-    }
-}
-
 // TODO remove time params, make them accessible elsewhere
 pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
     //_ = c.igShowDemoWindow(null);
 
-    var camera = try currentScene.GetCurrentCamera();
+    var camera = try sceneInit.GetCurrentScene().GetCurrentCamera();
     _ = c.igBegin("My Editor Window", null, c.ImGuiWindowFlags_None);
     _ = c.igText(
         "Actual FPS: %.1f, Uncapped FPS: %.1f",
@@ -296,7 +107,7 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
     _ = c.igText("Camera Pos: (%.2f, %.2f, %.2f)", camera.m_pos.x, camera.m_pos.y, camera.m_pos.z);
     c.igSetNextItemWidth(150.0);
     _ = c.igSliderFloat("Camera Speed", &movespeed, 1.0, 75.0, "%.2f", c.ImGuiSliderFlags_None);
-    _ = c.igColorEdit4("Monkey Color", @ptrCast(&shaderColor), c.ImGuiColorEditFlags_None);
+    _ = c.igColorEdit4("Monkey Color", @ptrCast(&sceneInit.shaderColor), c.ImGuiColorEditFlags_None);
 
     const cameraEulers = camera.m_rotation.GetEulerAngles();
     _ = c.igText(
@@ -363,9 +174,12 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
         try UpdateUniformSceneBuffer();
 
+        // TODO this should be automatic for all params that need updating
+        try sceneInit.UpdateColoredShaderBuffer();
+
         try WriteDescriptors();
 
-        var renderableIter = currentScene.m_renderables.iterator();
+        var renderableIter = sceneInit.GetCurrentScene().m_renderables.iterator();
         var previousParentMaterial: ?*Material = null;
         var previousMaterialInstance: ?*MaterialInstance = null;
         while (renderableIter.next()) |renderableEntry| {
@@ -468,7 +282,7 @@ fn WriteDescriptors() !void {
     while (matInstIter.next()) |*matInst| {
         try matInst.value_ptr.WriteDescriptorSet(allocator);
     }
-    var renderIter = currentScene.m_renderables.iterator();
+    var renderIter = sceneInit.GetCurrentScene().m_renderables.iterator();
     while (renderIter.next()) |*renderable| {
         try renderable.value_ptr.WriteDescriptorSet(allocator);
     }
@@ -482,7 +296,7 @@ fn UpdateUniformSceneBuffer() !void {
     currentFrameData.m_gpuSceneData.m_time = GPUSceneData.CreateTimeVec(curTime);
 
     // update camera
-    const camera = try currentScene.GetCurrentCamera();
+    const camera = try sceneInit.GetCurrentScene().GetCurrentCamera();
     const view = camera.GetViewMatrix();
     const proj = camera.GetProjectionMatrix();
     currentFrameData.m_gpuSceneData.m_view = view.Transpose();
@@ -495,16 +309,6 @@ fn UpdateUniformSceneBuffer() !void {
         @memcpy(
             @as([*]u8, @ptrCast(mappedData))[0..bufferSize],
             @as([*]u8, @ptrCast(&currentFrameData.m_gpuSceneData))[0..bufferSize],
-        );
-    } else {
-        return RenderLoopError.FailedToUpdateSceneUniforms;
-    }
-
-    if (coloredShaderBuffer.m_mappedData) |mappedData| {
-        const bufferSize = @sizeOf(ColorRGBA);
-        @memcpy(
-            @as([*]u8, @ptrCast(mappedData))[0..bufferSize],
-            @as([*]u8, @ptrCast(&shaderColor))[0..bufferSize],
         );
     } else {
         return RenderLoopError.FailedToUpdateSceneUniforms;
@@ -546,7 +350,7 @@ fn UpdateCameraMovement(deltaTime: f32) !void {
         } else {
             const deltaMouseX = relativeMouseX - prevMouseX;
             const deltaMouseY = relativeMouseY - prevMouseY;
-            var camera = try currentScene.GetCurrentCamera();
+            var camera = try sceneInit.GetCurrentScene().GetCurrentCamera();
             const deltaYaw = @as(f32, @floatFromInt(deltaMouseX)) * degPerPixel * std.math.rad_per_deg;
             const deltaPitch = @as(f32, @floatFromInt(deltaMouseY)) * degPerPixel * std.math.rad_per_deg;
             const cameraEulers = camera.m_rotation.GetEulerAngles();

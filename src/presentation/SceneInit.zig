@@ -191,8 +191,8 @@ pub fn InitializeScene() !void {
         Mesh.GetAttributeDescriptions(),
     );
 
-    const width = 10;
-    const height = 10;
+    const width = 20;
+    const height = 20;
     for (0..height) |i| {
         for (0..width) |j| {
             const name = try std.fmt.allocPrint(allocator, "Monkey_Mesh_{d}.{d}", .{ i, j });

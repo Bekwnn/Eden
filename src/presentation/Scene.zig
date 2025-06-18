@@ -42,10 +42,13 @@ pub const GPUSceneData = struct {
 
 pub const Scene = struct {
     const Self = @This();
+    pub const RenderableContainer = StringHashMap(RenderObject);
+    pub const RenderableIter = RenderableContainer.Iterator;
+    pub const RenderableEntry = RenderableContainer.Entry;
 
     //TODO init and take an allocator instead?
     m_cameras: StringHashMap(Camera) = StringHashMap(Camera).init(allocator),
-    m_renderables: StringHashMap(RenderObject) = StringHashMap(RenderObject).init(allocator),
+    m_renderables: RenderableContainer = RenderableContainer.init(allocator),
 
     m_currentCamera: ?*Camera = null,
     m_defaultCamera: ?*Camera = null,

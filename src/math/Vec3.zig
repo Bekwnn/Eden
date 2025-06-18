@@ -59,6 +59,22 @@ pub const Vec3 = extern struct {
         };
     }
 
+    pub fn Min(self: *const Vec3, rhs: Vec3) Vec3 {
+        return Vec3{
+            .x = @min(self.x, rhs.x),
+            .y = @min(self.y, rhs.y),
+            .z = @min(self.z, rhs.z),
+        };
+    }
+
+    pub fn Max(self: *const Vec3, rhs: Vec3) Vec3 {
+        return Vec3{
+            .x = @max(self.x, rhs.x),
+            .y = @max(self.y, rhs.y),
+            .z = @max(self.z, rhs.z),
+        };
+    }
+
     pub fn Equals(self: *const Vec3, rhs: Vec3) bool {
         return self.EqualsT(rhs, math.floatEps(f32));
     }
@@ -85,7 +101,7 @@ pub const Vec3 = extern struct {
         return self.Sub(rhs).Length();
     }
 
-    pub fn Scale(self: *Vec3, scalar: f32) void {
+    pub fn ScaleSelf(self: *Vec3, scalar: f32) void {
         self.x *= scalar;
         self.y *= scalar;
         self.z *= scalar;
@@ -104,7 +120,7 @@ pub const Vec3 = extern struct {
         const length = self.Length();
         if (length == 0.0) @panic("Trying to scale up a vector with length 0");
         const scaleAmount = size / length;
-        self.Scale(scaleAmount);
+        self.ScaleSelf(scaleAmount);
     }
 
     pub fn GetScaledToSize(self: *Vec3, size: f32) Vec3 {

@@ -120,6 +120,28 @@ pub const Buffer = struct {
         );
     }
 
+    pub fn MapMemoryNoData(
+        self: *Self,
+        bufferSize: c.VkDeviceSize,
+    ) !void {
+        if (self.m_mappedData != null) {
+            return BufferError.FailedToMapData;
+        }
+
+        const rContext = try RenderContext.GetInstance();
+        try vkUtil.CheckVkSuccess(
+            c.vkMapMemory(
+                rContext.m_logicalDevice,
+                self.m_memory,
+                0,
+                bufferSize,
+                0,
+                @ptrCast(&self.m_mappedData),
+            ),
+            BufferError.FailedToMapData,
+        );
+    }
+
     // returns an error if memory already unmapped
     pub fn UnmapMemory(
         self: *const Self,
@@ -130,6 +152,7 @@ pub const Buffer = struct {
 
         const rContext = try RenderContext.GetInstance();
         c.vkUnmapMemory(rContext.m_logicalDevice, self.m_memory);
+        self.m_mappedData = null;
     }
 
     pub fn CreateBuffer(

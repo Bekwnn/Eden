@@ -1,6 +1,9 @@
 const std = @import("std");
-const debug = std.debug;
 const allocator = std.heap.page_allocator;
+const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
+const AutoHashMap = std.AutoHashMap;
+const debug = std.debug;
 
 const c = @import("../c.zig");
 const input = @import("../Input.zig");
@@ -51,6 +54,7 @@ const RenderLoopError = error{
     FailedToUpdateSceneUniforms,
     FailedToWaitForImageFence,
     FailedToWaitForInFlightFence,
+    NoMeshBufferData,
 };
 
 pub fn OnWindowResized(window: *c.SDL_Window) !void {
@@ -165,6 +169,15 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .pNext = null,
     };
 
+    const drawCommands = @as(
+        [*]c.VkDrawIndirectCommand,
+        @ptrCast(@alignCast(currentFrame.m_indirectDrawBuffer.m_mappedData orelse @panic("!"))),
+    )[0..renderContext.FrameData.MAX_INDIRECT_DRAW];
+    _ = drawCommands;
+
+    var batchDraws = try OrganizeDraws();
+    defer batchDraws.deinit();
+
     c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
     {
         try currentFrame.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
@@ -179,74 +192,81 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
         try WriteDescriptors();
 
-        var renderableIter = sceneInit.GetCurrentScene().m_renderables.iterator();
-        var previousParentMaterial: ?*Material = null;
-        var previousMaterialInstance: ?*MaterialInstance = null;
-        while (renderableIter.next()) |renderableEntry| {
-            var matInstance = renderableEntry.value_ptr.m_materialInstance;
-
-            //TODO move out handling binding somewhere else
+        var batchDrawIter = batchDraws.iterator();
+        while (batchDrawIter.next()) |renderBatch| {
+            //TODO move to/create "bind material" function
             c.vkCmdBindPipeline(
                 commandBuffer,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                matInstance.m_parentMaterial.m_shaderPass.m_pipeline,
+                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_shaderPass.m_pipeline,
             );
 
-            if (previousParentMaterial == null or
-                (previousParentMaterial != null and previousParentMaterial.? != matInstance.m_parentMaterial))
-            {
-                // currently binding shader globals with material params, could bind shader globals separately
-                const descriptorSets = [_]c.VkDescriptorSet{
-                    currentFrame.m_gpuSceneDataDescriptorSet,
-                    matInstance.m_parentMaterial.m_materialDescriptorSet orelse currentFrame.m_emptyDescriptorSet,
-                };
-                c.vkCmdBindDescriptorSets(
-                    commandBuffer,
-                    c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    matInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
-                    0,
-                    @intCast(descriptorSets.len),
-                    &descriptorSets,
-                    0,
-                    null,
-                );
-                previousParentMaterial = matInstance.m_parentMaterial;
-            }
-
-            if (previousMaterialInstance == null or
-                (previousMaterialInstance != null and previousMaterialInstance.? != matInstance))
-            {
-                c.vkCmdBindDescriptorSets(
-                    commandBuffer,
-                    c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    matInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
-                    2,
-                    1,
-                    &(matInstance.m_instanceDescriptorSet orelse currentFrame.m_emptyDescriptorSet),
-                    0,
-                    null,
-                );
-                previousMaterialInstance = matInstance;
-            }
-
-            if (matInstance.GetObjectDescriptorSetLayout()) |objLayout| {
-                try renderableEntry.value_ptr.AllocateDescriptorSet(&currentFrame.m_descriptorAllocator, objLayout);
-            }
-
+            // currently binding shader globals with material params, could bind shader globals separately
+            const descriptorSets = [_]c.VkDescriptorSet{
+                currentFrame.m_gpuSceneDataDescriptorSet,
+                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_materialDescriptorSet orelse currentFrame.m_emptyDescriptorSet,
+            };
             c.vkCmdBindDescriptorSets(
                 commandBuffer,
                 c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                matInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
-                3,
-                1,
-                &(renderableEntry.value_ptr.m_objectDescriptorSet orelse currentFrame.m_emptyDescriptorSet),
+                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+                0,
+                @intCast(descriptorSets.len),
+                &descriptorSets,
                 0,
                 null,
             );
 
-            renderableEntry.value_ptr.Draw(commandBuffer) catch |err| {
-                std.debug.print("Error {} drawing {s}\n", .{ err, renderableEntry.key_ptr });
-            };
+            c.vkCmdBindDescriptorSets(
+                commandBuffer,
+                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+                2,
+                1,
+                &(renderBatch.value_ptr.m_matInst.m_instanceDescriptorSet orelse currentFrame.m_emptyDescriptorSet),
+                0,
+                null,
+            );
+
+            // TODO move to/create "bind mesh" function
+            if (renderBatch.value_ptr.m_mesh.m_bufferData) |*meshBufferData| {
+                const offsets = [_]c.VkDeviceSize{0};
+                const vertexBuffers = [_]c.VkBuffer{
+                    meshBufferData.m_vertexBuffer.m_buffer,
+                };
+                c.vkCmdBindVertexBuffers(
+                    commandBuffer,
+                    0,
+                    1,
+                    &vertexBuffers,
+                    &offsets,
+                );
+                c.vkCmdBindIndexBuffer(
+                    commandBuffer,
+                    meshBufferData.m_indexBuffer.m_buffer,
+                    0,
+                    c.VK_INDEX_TYPE_UINT32,
+                );
+            } else {
+                return RenderLoopError.NoMeshBufferData;
+            }
+
+            //TODO indirect draw calls w/ compute shader culling
+            const objLayout = renderBatch.value_ptr.m_matInst.GetObjectDescriptorSetLayout();
+            for (renderBatch.value_ptr.m_renderables.items) |renderableEntry| {
+                if (objLayout) |layout| {
+                    try renderableEntry.value_ptr.AllocateDescriptorSet(&currentFrame.m_descriptorAllocator, layout);
+                }
+                try renderableEntry.value_ptr.BindPerObjectData(commandBuffer);
+                c.vkCmdDrawIndexed(
+                    commandBuffer,
+                    @intCast(renderableEntry.value_ptr.m_mesh.m_indices.items.len),
+                    1,
+                    0,
+                    0,
+                    0,
+                );
+            }
         }
 
         c.ImGui_ImplVulkan_RenderDrawData(c.igGetDrawData(), commandBuffer, null);
@@ -257,6 +277,45 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         c.vkEndCommandBuffer(commandBuffer),
         RenderLoopError.FailedToEndCommandBuffer,
     );
+}
+const DrawBatch = struct {
+    m_mesh: *Mesh,
+    m_matInst: *MaterialInstance,
+    m_renderables: ArrayList(Scene.RenderableContainer.Entry),
+};
+
+fn GetMatAndMeshKey(matInstance: *MaterialInstance, mesh: *Mesh) u128 {
+    return (@as(u128, @intFromPtr(matInstance)) << 64) | @as(u128, @intFromPtr(mesh));
+}
+
+fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
+    var batches = AutoHashMap(u128, DrawBatch).init(allocator);
+    errdefer batches.deinit();
+
+    const renderables = sceneInit.GetCurrentScene().m_renderables;
+
+    var renderableIter = renderables.iterator();
+    while (renderableIter.next()) |renderableEntry| {
+        const renderableBatchKey = GetMatAndMeshKey(
+            renderableEntry.value_ptr.m_materialInstance,
+            renderableEntry.value_ptr.m_mesh,
+        );
+        const getPutResult = try batches.getOrPut(renderableBatchKey);
+
+        // getOrPut doesn't initialize data when it puts
+        if (!getPutResult.found_existing) {
+            getPutResult.value_ptr.* = DrawBatch{
+                .m_mesh = renderableEntry.value_ptr.m_mesh,
+                .m_matInst = renderableEntry.value_ptr.m_materialInstance,
+                .m_renderables = ArrayList(Scene.RenderableContainer.Entry).init(allocator),
+            };
+        }
+
+        // add current renderable to the draw batch
+        try getPutResult.value_ptr.m_renderables.append(renderableEntry);
+    }
+
+    return batches;
 }
 
 fn WriteDescriptors() !void {
@@ -380,7 +439,7 @@ fn UpdateCameraMovement(deltaTime: f32) !void {
 
             if (!movementVec.Equals(Vec3.zero)) {
                 movementVec.NormalizeSelf();
-                movementVec.Scale(movespeed * deltaTime);
+                movementVec.ScaleSelf(movespeed * deltaTime);
             }
 
             camera.m_pos = camera.m_pos.Add(camera.m_rotation.Rotate(movementVec));

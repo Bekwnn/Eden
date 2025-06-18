@@ -50,7 +50,15 @@ pub const Mesh = struct {
     m_vertexData: ArrayList(VertexData),
     m_indices: ArrayList(u32),
 
+    m_bounds: Bounds = Bounds{},
+
     m_bufferData: ?MeshBuffers,
+
+    pub const Bounds = struct {
+        m_origin: Vec3 = Vec3.zero,
+        m_sphereRadius: f32 = 0.0,
+        m_extents: Vec3 = Vec3.one,
+    };
 
     pub fn GetBindingDescription() *const c.VkVertexInputBindingDescription {
         return &vertexInputBindingDesc;
@@ -67,6 +75,19 @@ pub const Mesh = struct {
             .m_vertexBuffer = try Buffer.CreateVertexBuffer(self),
             .m_indexBuffer = try Buffer.CreateIndexBuffer(self),
         };
+        self.UpdateBounds();
+    }
+
+    pub fn UpdateBounds(self: *Mesh) void {
+        var minPos = self.m_vertexData.items[0].m_pos;
+        var maxPos = self.m_vertexData.items[0].m_pos;
+        for (self.m_vertexData.items) |vertData| {
+            minPos = minPos.Min(vertData.m_pos);
+            maxPos = maxPos.Max(vertData.m_pos);
+        }
+        self.m_bounds.m_origin = minPos.Add(maxPos).GetScaled(0.5);
+        self.m_bounds.m_extents = maxPos.Sub(minPos).GetScaled(0.5);
+        self.m_bounds.m_sphereRadius = self.m_bounds.m_extents.Length();
     }
 
     pub fn DestroyMesh(self: *Mesh) void {

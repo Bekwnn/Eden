@@ -4,7 +4,7 @@ pub const Vec2 = extern struct {
     x: f32 = 0.0,
     y: f32 = 0.0,
 
-    pub fn Scale(self: *Vec2, scalar: f32) void {
+    pub fn ScaleSelf(self: *Vec2, scalar: f32) void {
         self.x *= scalar;
         self.y *= scalar;
     }
@@ -115,7 +115,7 @@ pub const Vec2 = extern struct {
         const length = self.Length();
         if (length == 0.0) @panic("Trying to scale up a vector with length 0");
         const scaleAmount = size / length;
-        self.Scale(scaleAmount);
+        self.ScaleSelf(scaleAmount);
     }
 
     pub fn GetScaledToSize(self: *Vec2, size: f32) Vec2 {

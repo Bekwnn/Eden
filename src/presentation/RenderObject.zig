@@ -61,32 +61,35 @@ pub const RenderObject = struct {
         }
     }
 
+    pub fn BindPerObjectData(self: *Self, cmd: c.VkCommandBuffer) !void {
+        const rContext = try RenderContext.GetInstance();
+        const frameData = rContext.GetCurrentFrame();
+        c.vkCmdBindDescriptorSets(
+            cmd,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+            3,
+            1,
+            &(self.m_objectDescriptorSet orelse frameData.m_emptyDescriptorSet),
+            0,
+            null,
+        );
+
+        c.vkCmdPushConstants(
+            cmd,
+            self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+            c.VK_SHADER_STAGE_VERTEX_BIT,
+            0,
+            @sizeOf(Mat4x4),
+            &self.m_transform,
+        );
+    }
+
     pub fn Draw(self: *Self, cmd: c.VkCommandBuffer) !void {
         if (self.m_mesh.m_bufferData) |*meshBufferData| {
-            //bind pipeline
-            //TODO sort render objs by material and move this out
-            const rContext = try RenderContext.GetInstance();
-            const frameData = rContext.GetCurrentFrame();
-            c.vkCmdBindDescriptorSets(
-                cmd,
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
-                3,
-                1,
-                &(self.m_objectDescriptorSet orelse frameData.m_emptyDescriptorSet),
-                0,
-                null,
-            );
+            self.BindPerObjectData(cmd);
 
-            c.vkCmdPushConstants(
-                cmd,
-                self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
-                c.VK_SHADER_STAGE_VERTEX_BIT,
-                0,
-                @sizeOf(Mat4x4),
-                &self.m_transform,
-            );
-
+            //TODO avoid binding mesh for every single object
             //bind vertex and index buffers
             const offsets = [_]c.VkDeviceSize{0};
             const vertexBuffers = [_]c.VkBuffer{

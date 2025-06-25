@@ -292,10 +292,13 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
     var batches = AutoHashMap(u128, DrawBatch).init(allocator);
     errdefer batches.deinit();
 
-    const renderables = sceneInit.GetCurrentScene().m_renderables;
+    const currentScene = sceneInit.GetCurrentScene();
+    const renderables = currentScene.m_renderables;
 
     var renderableIter = renderables.iterator();
     while (renderableIter.next()) |renderableEntry| {
+        //if (!IsVisible(try currentScene.GetCurrentCamera(), renderableEntry.value_ptr)) {}
+
         const renderableBatchKey = GetMatAndMeshKey(
             renderableEntry.value_ptr.m_materialInstance,
             renderableEntry.value_ptr.m_mesh,
@@ -317,6 +320,14 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
 
     return batches;
 }
+
+//fn IsVisible(camera: *const Camera, renderable: *const RenderObject) bool {
+//    const renderablePos = renderable.m_transform.GetTranslation();
+//    const renderableRot = renderable.m_transform.GetRotationQuat();
+//    const renderableScale = renderable.m_transform.GetScale();
+//    const cameraView = camera.GetViewMatrix();
+//    return true;
+//}
 
 fn WriteDescriptors() !void {
     const rContext = try RenderContext.GetInstance();

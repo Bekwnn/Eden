@@ -39,10 +39,7 @@ pub fn main() !void {
     gameWorld.Initialize();
 
     frameTimer = try time.Timer.start();
-    MainGameLoop(window) catch |err| {
-        std.debug.print("{any}", .{err});
-        std.debug.writeStackTrace();
-    };
+    try MainGameLoop(window);
 
     // teardown
 }

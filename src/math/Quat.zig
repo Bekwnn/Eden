@@ -16,13 +16,17 @@ pub const Quat = extern struct {
         .w = 1.0,
     };
 
+    pub const default_tolerance = 0.00001;
+
     pub fn Equals(lhs: *const Quat, rhs: *const Quat) bool {
-        inline for (std.meta.fields(@TypeOf(Quat))) |field| {
-            if (field.type == @TypeOf(f32) and !stdm.approxEqAbs(f32, lhs.x, rhs.x, stdm.floatEps(f32))) {
-                return false;
-            }
-        }
-        return true;
+        return EqualsT(lhs, rhs, default_tolerance);
+    }
+
+    pub fn EqualsT(lhs: *const Quat, rhs: *const Quat, tolerance: f32) bool {
+        return stdm.approxEqAbs(f32, lhs.x, rhs.x, tolerance) and
+            stdm.approxEqAbs(f32, lhs.y, rhs.y, tolerance) and
+            stdm.approxEqAbs(f32, lhs.z, rhs.z, tolerance) and
+            stdm.approxEqAbs(f32, lhs.w, rhs.w, tolerance);
     }
 
     // Yaw - returns Radians
@@ -221,10 +225,10 @@ pub const Quat = extern struct {
     //pub fn AngleBetween(lhs: *const Quat, rhs: *const Quat) f32 {}
 
     //TODO slerp
-    //
 
+    // TODO: would be nice to pass precision
     pub fn DebugLog(self: *const Quat, label: []const u8) void {
-        std.debug.print("{s}: ({d:.2}, {d:.2}, {d:.2}, {d:.2})", .{ label, self.x, self.y, self.z, self.w });
+        std.debug.print("{s}: ({d:.5}, {d:.5}, {d:.5}, {d:.5})", .{ label, self.x, self.y, self.z, self.w });
     }
 };
 

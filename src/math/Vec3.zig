@@ -15,6 +15,8 @@ pub const Vec3 = extern struct {
     pub const yAxis = Vec3{ .x = 0.0, .y = 1.0, .z = 0.0 };
     pub const zAxis = Vec3{ .x = 0.0, .y = 0.0, .z = 1.0 };
 
+    pub const default_tolerance = 0.00001;
+
     pub fn Negate(self: *const Vec3) Vec3 {
         return Vec3{
             .x = -self.x,
@@ -76,7 +78,7 @@ pub const Vec3 = extern struct {
     }
 
     pub fn Equals(self: *const Vec3, rhs: Vec3) bool {
-        return self.EqualsT(rhs, math.floatEps(f32));
+        return self.EqualsT(rhs, default_tolerance);
     }
 
     pub fn EqualsT(self: *const Vec3, rhs: Vec3, tolerance: f32) bool {
@@ -228,8 +230,9 @@ pub const Vec3 = extern struct {
         return Vec3{ 0.0, v2.x, v2.y };
     }
 
+    // TODO would be nice to pass precision
     pub fn DebugLog(self: *const Vec3, label: []const u8) void {
-        std.debug.print("{s}: ({d:.2}, {d:.2}, {d:.2})", .{ label, self.x, self.y, self.z });
+        std.debug.print("{s}: ({d:.5}, {d:.5}, {d:.5})", .{ label, self.x, self.y, self.z });
     }
 };
 

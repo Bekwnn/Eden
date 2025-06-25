@@ -26,6 +26,7 @@ pub const RenderObject = struct {
     m_mesh: *Mesh,
     m_objectDescriptorSet: ?c.VkDescriptorSet = null,
 
+    //TODO switch to an actual pos/rot/scale transform and construct mat4 before rendering
     m_transform: Mat4x4 = Mat4x4.identity,
     m_objectMaterialParams: ArrayList(MaterialParam),
 
@@ -83,42 +84,5 @@ pub const RenderObject = struct {
             @sizeOf(Mat4x4),
             &self.m_transform,
         );
-    }
-
-    pub fn Draw(self: *Self, cmd: c.VkCommandBuffer) !void {
-        if (self.m_mesh.m_bufferData) |*meshBufferData| {
-            self.BindPerObjectData(cmd);
-
-            //TODO avoid binding mesh for every single object
-            //bind vertex and index buffers
-            const offsets = [_]c.VkDeviceSize{0};
-            const vertexBuffers = [_]c.VkBuffer{
-                meshBufferData.m_vertexBuffer.m_buffer,
-            };
-            c.vkCmdBindVertexBuffers(
-                cmd,
-                0,
-                1,
-                &vertexBuffers,
-                &offsets,
-            );
-            c.vkCmdBindIndexBuffer(
-                cmd,
-                meshBufferData.m_indexBuffer.m_buffer,
-                0,
-                c.VK_INDEX_TYPE_UINT32,
-            );
-
-            c.vkCmdDrawIndexed(
-                cmd,
-                @intCast(self.m_mesh.m_indices.items.len),
-                1,
-                0,
-                0,
-                0,
-            );
-        } else {
-            return RenderObjError.NoMeshBufferData;
-        }
     }
 };

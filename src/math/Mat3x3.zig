@@ -1,5 +1,6 @@
 const debug = @import("std").debug;
 const Vec3 = @import("Vec3.zig").Vec3;
+const Quat = @import("Quat.zig").Quat;
 
 fn swap(lhs: *f32, rhs: *f32) void {
     const temp = lhs;
@@ -74,7 +75,7 @@ pub const Mat3x3 = extern struct {
         swap(&self.m[1][2], &self.m[2][1]);
     }
 
-    pub fn LookDirMat3x3(direction: Vec3, up: Vec3) Mat3x3 {
+    pub fn LookDir(direction: Vec3, up: Vec3) Mat3x3 {
         const lookAtVec = direction.Normalized();
         const rightVec = up.Cross(lookAtVec).Normalized();
         //TODO result may need transposing
@@ -87,8 +88,17 @@ pub const Mat3x3 = extern struct {
         };
     }
 
-    //TODO proper fmt usage, line breaks? etc
-    pub fn DebugLogMat3x3(mat: *const Mat3x3) void {
+    pub fn FromQuat(q: *const Quat) Mat3x3 {
+        return Mat3x3{
+            .m = [3][3]f32{
+                [3]f32{ 1.0 - 2.0 * (q.y * q.y + q.z * q.z), 2.0 * (q.x * q.y - q.z * q.w), 2.0 * (q.x * q.z + q.y * q.w) },
+                [3]f32{ 2.0 * (q.x * q.y + q.z * q.w), 1.0 - 2.0 * (q.x * q.x + q.z * q.z), 2.0 * (q.y * q.z - q.x * q.w) },
+                [3]f32{ 2.0 * (q.x * q.z - q.y * q.w), 2.0 * (q.y * q.z + q.x * q.w), 1.0 - 2.0 * (q.x * q.x + q.y * q.y) },
+            },
+        };
+    }
+
+    pub fn DebugLog(mat: *const Mat3x3) void {
         for (mat.m) |row| {
             debug.print("{{", .{});
             for (row) |val| {

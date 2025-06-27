@@ -37,11 +37,11 @@ pub const Mat4x4 = extern struct {
         },
     };
 
-    pub fn Equals(self: *const Mat4x4, other: *const Mat4x4) bool {
+    pub fn Equals(self: Mat4x4, other: Mat4x4) bool {
         return self.EqualsT(other, std.math.floatEps(f32));
     }
 
-    pub fn EqualsT(self: *const Mat4x4, other: *const Mat4x4, tolerance: f32) bool {
+    pub fn EqualsT(self: Mat4x4, other: Mat4x4, tolerance: f32) bool {
         for (self.m, other.m) |selfRow, otherRow| {
             for (selfRow, otherRow) |selfVal, otherVal| {
                 if (!std.math.approxEqAbs(f32, selfVal, otherVal, tolerance)) {
@@ -52,7 +52,7 @@ pub const Mat4x4 = extern struct {
         return true;
     }
 
-    pub fn Mul(self: *const Mat4x4, other: *const Mat4x4) Mat4x4 {
+    pub fn Mul(self: Mat4x4, other: Mat4x4) Mat4x4 {
         var returnMat = Mat4x4{};
         comptime var selfIter = 0;
         inline while (selfIter < 4) : (selfIter += 1) {
@@ -70,7 +70,7 @@ pub const Mat4x4 = extern struct {
 
     //TODO Pretends it's a vec4 with w=1, then tosses the w away at the end
     // but need to divide by w? or something
-    pub fn MulVec3(self: *const Mat4x4, other: *const Vec3) Vec3 {
+    pub fn MulVec3(self: Mat4x4, other: Vec3) Vec3 {
         return Vec3{
             .x = self.m[0][0] * other.x + self.m[0][1] * other.y + self.m[0][2] * other.z + self.m[0][3],
             .y = self.m[1][0] * other.x + self.m[1][1] * other.y + self.m[1][2] * other.z + self.m[1][3],
@@ -78,7 +78,7 @@ pub const Mat4x4 = extern struct {
         };
     }
 
-    pub fn Transpose(self: *const Mat4x4) Mat4x4 {
+    pub fn Transpose(self: Mat4x4) Mat4x4 {
         return Mat4x4{
             .m = [4][4]f32{
                 [4]f32{ self.m[0][0], self.m[1][0], self.m[2][0], self.m[3][0] },
@@ -114,13 +114,13 @@ pub const Mat4x4 = extern struct {
         return lookAtMat;
     }
 
-    pub fn GetPitch(self: *const Mat4x4) f32 {
+    pub fn GetPitch(self: Mat4x4) f32 {
         return std.math.asin(self.m[1][0]);
     }
-    pub fn GetYaw(self: *const Mat4x4) f32 {
+    pub fn GetYaw(self: Mat4x4) f32 {
         return std.math.atan2(-self.m[2][0], self.m[0][0]);
     }
-    pub fn GetRoll(self: *const Mat4x4) f32 {
+    pub fn GetRoll(self: Mat4x4) f32 {
         return std.math.atan2(-self.m[1][2], self.m[1][1]);
     }
 
@@ -145,7 +145,7 @@ pub const Mat4x4 = extern struct {
     }
 
     //TODO testing
-    pub fn GetRotationMat3x3(self: *const Mat4x4) Mat3x3 {
+    pub fn GetRotationMat3x3(self: Mat4x4) Mat3x3 {
         var row0 = Vec3{ .x = self.m[0][0], .y = self.m[0][1], .z = self.m[0][2] };
         row0.NormalizeSelf();
         var row1 = Vec3{ .x = self.m[1][0], .y = self.m[1][1], .z = self.m[1][2] };
@@ -161,7 +161,7 @@ pub const Mat4x4 = extern struct {
     }
 
     //TODO testing
-    pub fn GetRotationQuat(self: *const Mat4x4) Quat {
+    pub fn GetRotationQuat(self: Mat4x4) Quat {
         const mat3x3 = self.GetRotationMat3x3();
 
         const trace = mat3x3.m[0][0] + mat3x3.m[1][1] + mat3x3.m[2][2];
@@ -209,7 +209,7 @@ pub const Mat4x4 = extern struct {
         }
     }
 
-    pub fn Determinent(self: *const Mat4x4) f32 {
+    pub fn Determinent(self: Mat4x4) f32 {
         const A2323 = self.m[2][2] * self.m[3][3] - self.m[2][3] * self.m[3][2];
         const A1323 = self.m[2][1] * self.m[3][3] - self.m[2][3] * self.m[3][1];
         const A1223 = self.m[2][1] * self.m[3][2] - self.m[2][2] * self.m[3][1];
@@ -225,7 +225,7 @@ pub const Mat4x4 = extern struct {
         // zig fmt: on
     }
 
-    pub fn Inverse(self: *const Mat4x4) !Mat4x4 {
+    pub fn Inverse(self: Mat4x4) !Mat4x4 {
         const A2323 = self.m[2][2] * self.m[3][3] - self.m[2][3] * self.m[3][2];
         const A1323 = self.m[2][1] * self.m[3][3] - self.m[2][3] * self.m[3][1];
         const A1223 = self.m[2][1] * self.m[3][2] - self.m[2][2] * self.m[3][1];
@@ -298,7 +298,7 @@ pub const Mat4x4 = extern struct {
         };
     }
 
-    pub fn FromTransform(transform: *const Transform) Mat4x4 {
+    pub fn FromTransform(transform: Transform) Mat4x4 {
         var returnMat = FromQuat(transform.m_rotation);
 
         returnMat.m[0][0] *= transform.m_scale.x;
@@ -319,7 +319,7 @@ pub const Mat4x4 = extern struct {
         return returnMat;
     }
 
-    pub fn GetTranslation(self: *const Mat4x4) Vec3 {
+    pub fn GetTranslation(self: Mat4x4) Vec3 {
         return Vec3{
             .x = self.m[0][3],
             .y = self.m[1][3],
@@ -333,7 +333,7 @@ pub const Mat4x4 = extern struct {
         self.m[2][3] = translation.z;
     }
 
-    pub fn GetScale(self: *const Mat4x4) Vec3 {
+    pub fn GetScale(self: Mat4x4) Vec3 {
         return Vec3{
             .x = @sqrt(self.m[0][0] * self.m[0][0] + self.m[1][0] * self.m[1][0] + self.m[2][0] * self.m[2][0]),
             .y = @sqrt(self.m[0][1] * self.m[0][1] + self.m[1][1] * self.m[1][1] + self.m[2][1] * self.m[2][1]),
@@ -359,7 +359,7 @@ pub const Mat4x4 = extern struct {
     }
 
     //TODO proper fmt usage, line breaks? etc
-    pub fn DebugLog(mat: *const Mat4x4, label: []const u8) void {
+    pub fn DebugLog(mat: Mat4x4, label: []const u8) void {
         debug.print("{s}: ", .{label});
         for (mat.m) |row| {
             debug.print("{{", .{});
@@ -412,7 +412,7 @@ test "Transpose" {
 test "Rotation" {
     const q1 = Quat.FromEulerAngles(std.math.pi, 0.0, 0.0);
     const mFromQ = Mat4x4.FromQuat(q1);
-    const oneVec180m = mFromQ.MulVec3(&Vec3.one);
+    const oneVec180m = mFromQ.MulVec3(Vec3.one);
     const oneVec180q = q1.Rotate(Vec3.one);
     const expectedVec = Vec3{ .x = -1.0, .y = 1.0, .z = -1.0 };
     try TestVec3Equal("oneVec180q", oneVec180q, "expectedVec", expectedVec);
@@ -439,7 +439,8 @@ test "Decomposition" {
     try TestVec3Equal("transformScale", transformMat.GetScale(), "scaleBefore", scaleBefore);
 }
 
-fn TestQuatEqual(lhsLabel: []const u8, lhs: *const Quat, rhsLabel: []const u8, rhs: *const Quat) !void {
+// TODO make a math testing util file
+fn TestQuatEqual(lhsLabel: []const u8, lhs: Quat, rhsLabel: []const u8, rhs: Quat) !void {
     std.testing.expect(lhs.Equals(rhs)) catch |err| {
         debug.print("{any}\n", .{err});
         lhs.DebugLog(lhsLabel);
@@ -461,7 +462,7 @@ fn TestVec3Equal(lhsLabel: []const u8, lhs: Vec3, rhsLabel: []const u8, rhs: Vec
     };
 }
 
-fn TestMatEqual(lhsLabel: []const u8, lhs: *const Mat4x4, rhsLabel: []const u8, rhs: *const Mat4x4) !void {
+fn TestMatEqual(lhsLabel: []const u8, lhs: Mat4x4, rhsLabel: []const u8, rhs: Mat4x4) !void {
     std.testing.expect(lhs.Equals(rhs)) catch |err| {
         debug.print("{any}\n", .{err});
         lhs.DebugLog(lhsLabel);

@@ -127,12 +127,26 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
         camera.m_rotation.z,
         camera.m_rotation.w,
     );
+
+    _ = c.igText("Draw Stats:");
+    _ = c.igText("Batches: %d", drawStats.m_batches);
+    _ = c.igText("Renderables Drawn: %d", drawStats.m_renderablesDrawn);
+    _ = c.igText("Total Renderables in Scene: %d", drawStats.m_renderablesInScene);
     c.igEnd();
 }
 
+const DrawStats = struct {
+    m_batches: u32 = 0,
+    m_renderablesDrawn: u32 = 0,
+    m_renderablesInScene: u32 = 0,
+};
+var drawStats = DrawStats{};
 pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrame = rContext.GetCurrentFrame();
+
+    drawStats = DrawStats{};
+    drawStats.m_renderablesInScene = sceneInit.GetCurrentScene().m_renderables.count();
 
     const beginInfo = c.VkCommandBufferBeginInfo{
         .sType = c.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -204,7 +218,8 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
             // currently binding shader globals with material params, could bind shader globals separately
             const descriptorSets = [_]c.VkDescriptorSet{
                 currentFrame.m_gpuSceneDataDescriptorSet,
-                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_materialDescriptorSet orelse currentFrame.m_emptyDescriptorSet,
+                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_materialDescriptorSet orelse
+                    currentFrame.m_emptyDescriptorSet,
             };
             c.vkCmdBindDescriptorSets(
                 commandBuffer,
@@ -266,7 +281,9 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
                     0,
                     0,
                 );
+                drawStats.m_renderablesDrawn += 1;
             }
+            drawStats.m_batches += 1;
         }
 
         c.ImGui_ImplVulkan_RenderDrawData(c.igGetDrawData(), commandBuffer, null);
@@ -278,6 +295,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         RenderLoopError.FailedToEndCommandBuffer,
     );
 }
+
 const DrawBatch = struct {
     m_mesh: *Mesh,
     m_matInst: *MaterialInstance,
@@ -297,7 +315,9 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
 
     var renderableIter = renderables.iterator();
     while (renderableIter.next()) |renderableEntry| {
-        //if (!IsVisible(try currentScene.GetCurrentCamera(), renderableEntry.value_ptr)) {}
+        //if (!IsVisible(try currentScene.GetCurrentCamera(), renderableEntry.value_ptr)) {
+        //    continue;
+        //}
 
         const renderableBatchKey = GetMatAndMeshKey(
             renderableEntry.value_ptr.m_materialInstance,
@@ -321,13 +341,27 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
     return batches;
 }
 
-//fn IsVisible(camera: *const Camera, renderable: *const RenderObject) bool {
-//    const renderablePos = renderable.m_transform.GetTranslation();
-//    const renderableRot = renderable.m_transform.GetRotationQuat();
-//    const renderableScale = renderable.m_transform.GetScale();
-//    const cameraView = camera.GetViewMatrix();
-//    return true;
-//}
+fn IsVisible(camera: *const Camera, renderable: *const RenderObject) bool {
+    const renderablePos = renderable.m_transform.GetTranslation();
+    const renderableRot = renderable.m_transform.GetRotationQuat();
+
+    // Scale the sphere by max scaling value
+    const renderableScale = renderable.m_transform.GetScale();
+    const maxScale: f32 = @max(renderableScale.x, renderableScale.y, renderableScale.z);
+
+    const renderableBounds = renderable.m_mesh.m_bounds;
+    // get bounds origin in world space
+    const boundsOrigin = renderablePos.Add(renderableRot.Rotate(renderableBounds.m_origin));
+
+    const cameraFrustum = camera.GetFrustumData();
+    for (cameraFrustum.m_planes) |plane| {
+        if (plane.GetSignedDistance(&boundsOrigin) < -(renderableBounds.m_sphereRadius * maxScale)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 fn WriteDescriptors() !void {
     const rContext = try RenderContext.GetInstance();
@@ -371,7 +405,7 @@ fn UpdateUniformSceneBuffer() !void {
     const proj = camera.GetProjectionMatrix();
     currentFrameData.m_gpuSceneData.m_view = view.Transpose();
     currentFrameData.m_gpuSceneData.m_projection = proj.Transpose();
-    currentFrameData.m_gpuSceneData.m_viewProj = proj.Mul(&view).Transpose();
+    currentFrameData.m_gpuSceneData.m_viewProj = proj.Mul(view).Transpose();
 
     // update uniform buffer
     if (currentFrameData.m_gpuSceneDataBuffer.m_mappedData) |mappedData| {

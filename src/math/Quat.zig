@@ -18,11 +18,11 @@ pub const Quat = extern struct {
 
     pub const default_tolerance = 0.00001;
 
-    pub fn Equals(lhs: *const Quat, rhs: *const Quat) bool {
+    pub fn Equals(lhs: Quat, rhs: Quat) bool {
         return EqualsT(lhs, rhs, default_tolerance);
     }
 
-    pub fn EqualsT(lhs: *const Quat, rhs: *const Quat, tolerance: f32) bool {
+    pub fn EqualsT(lhs: Quat, rhs: Quat, tolerance: f32) bool {
         return stdm.approxEqAbs(f32, lhs.x, rhs.x, tolerance) and
             stdm.approxEqAbs(f32, lhs.y, rhs.y, tolerance) and
             stdm.approxEqAbs(f32, lhs.z, rhs.z, tolerance) and
@@ -30,7 +30,7 @@ pub const Quat = extern struct {
     }
 
     // Yaw - returns Radians
-    pub fn GetYaw(self: *const Quat) f32 {
+    pub fn GetYaw(self: Quat) f32 {
         return stdm.atan2(
             2.0 * (self.w * self.y + self.x * self.z),
             1.0 - 2.0 * (self.y * self.y + self.x * self.x),
@@ -38,7 +38,7 @@ pub const Quat = extern struct {
     }
 
     // Pitch - returns Radians
-    pub fn GetPitch(self: *const Quat) f32 {
+    pub fn GetPitch(self: Quat) f32 {
         const sinPitch = 2.0 * (self.w * self.x - self.y * self.z);
         if (@abs(sinPitch) >= 1.0) {
             return if (sinPitch > 0.0) std.math.pi / 2.0 else -std.math.pi / 2.0;
@@ -48,7 +48,7 @@ pub const Quat = extern struct {
     }
 
     // Roll - returns Radians
-    pub fn GetRoll(self: *const Quat) f32 {
+    pub fn GetRoll(self: Quat) f32 {
         return stdm.atan2(
             2.0 * (self.w * self.z + self.x * self.y),
             1.0 - 2.0 * (self.x * self.x + self.z * self.z),
@@ -56,7 +56,7 @@ pub const Quat = extern struct {
     }
 
     // x=Pitch, y=Yaw, z=Roll in Radians
-    pub fn GetEulerAngles(self: *const Quat) Vec3 {
+    pub fn GetEulerAngles(self: Quat) Vec3 {
         return Vec3{
             .x = self.GetPitch(),
             .y = self.GetYaw(),
@@ -81,7 +81,7 @@ pub const Quat = extern struct {
         };
     }
 
-    pub fn GetInverse(self: *const Quat) Quat {
+    pub fn GetInverse(self: Quat) Quat {
         return Quat{ .x = -self.x, .y = -self.y, .z = -self.z, .w = self.w };
     }
 
@@ -91,19 +91,19 @@ pub const Quat = extern struct {
         self.z = -self.z;
     }
 
-    pub fn Length(self: *const Quat) f32 {
+    pub fn Length(self: Quat) f32 {
         return stdm.sqrt(self.LengthSqrd());
     }
 
-    pub fn LengthSqrd(self: *const Quat) f32 {
+    pub fn LengthSqrd(self: Quat) f32 {
         return self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w;
     }
 
-    pub fn IsNormalized(self: *const Quat) bool {
+    pub fn IsNormalized(self: Quat) bool {
         return std.math.approxEqRel(f32, self.LengthSqrd(), 1.0, std.math.floatEps(f32));
     }
 
-    pub fn Normalized(self: *const Quat) Quat {
+    pub fn Normalized(self: Quat) Quat {
         const length = self.Length();
         if (length == 0.0) @panic("Normalizing quaternion with length 0");
         return Quat{
@@ -190,7 +190,7 @@ pub const Quat = extern struct {
         return Quat.FromToRotationVec(Vec3.zAxis, lookDir);
     }
 
-    pub fn Mul(lhs: *const Quat, rhs: Quat) Quat {
+    pub fn Mul(lhs: Quat, rhs: Quat) Quat {
         return Quat{
             .x = lhs.w * rhs.x + lhs.x * rhs.w - lhs.y * rhs.z + lhs.z * rhs.y,
             .y = lhs.w * rhs.y + lhs.x * rhs.z + lhs.y * rhs.w - lhs.z * rhs.x,
@@ -199,7 +199,7 @@ pub const Quat = extern struct {
         };
     }
 
-    pub fn Rotate(self: *const Quat, vec: Vec3) Vec3 {
+    pub fn Rotate(self: Quat, vec: Vec3) Vec3 {
         const qv = Vec3{
             .x = self.x,
             .y = self.y,
@@ -210,24 +210,24 @@ pub const Quat = extern struct {
         return vec.Add(uv.GetScaled(2.0 * self.w)).Add(uuv.GetScaled(2.0));
     }
 
-    pub fn GetForwardVec(self: *const Quat) Vec3 {
+    pub fn GetForwardVec(self: Quat) Vec3 {
         return self.Rotate(Vec3.zAxis);
     }
 
-    pub fn GetRightVec(self: *const Quat) Vec3 {
+    pub fn GetRightVec(self: Quat) Vec3 {
         return self.Rotate(Vec3.xAxis);
     }
 
-    pub fn GetUpVec(self: *const Quat) Vec3 {
+    pub fn GetUpVec(self: Quat) Vec3 {
         return self.Rotate(Vec3.yAxis);
     }
 
-    //pub fn AngleBetween(lhs: *const Quat, rhs: *const Quat) f32 {}
+    //pub fn AngleBetween(lhs: Quat, rhs: Quat) f32 {}
 
     //TODO slerp
 
     // TODO: would be nice to pass precision
-    pub fn DebugLog(self: *const Quat, label: []const u8) void {
+    pub fn DebugLog(self: Quat, label: []const u8) void {
         std.debug.print("{s}: ({d:.5}, {d:.5}, {d:.5}, {d:.5})", .{ label, self.x, self.y, self.z, self.w });
     }
 };

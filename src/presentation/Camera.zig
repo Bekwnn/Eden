@@ -1,9 +1,10 @@
 const debug = @import("std").debug;
 const stdmath = @import("std").math;
 
-const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
+const Plane = @import("../math/Plane.zig").Plane;
 const Quat = @import("../math/Quat.zig").Quat;
+const Vec3 = @import("../math/Vec3.zig").Vec3;
 
 const defaultAspect: f32 = 16.0 / 9.0; //16:9 //TODO initialize perspective
 const defaultAspectInv: f32 = 1.0 / defaultAspect;
@@ -58,6 +59,66 @@ pub const Camera = struct {
         orthoMat.m[3][1] = -(top + bottom) / (top - bottom);
         orthoMat.m[3][2] = self.m_nearPlane / (self.m_nearPlane - self.m_farPlane);
         return orthoMat;
+    }
+
+    pub const FrustumData = struct {
+        m_planes: [6]Plane,
+
+        pub const FrustumPlane = enum {
+            Near,
+            Far,
+            Left,
+            Right,
+            Top,
+            Bottom,
+        };
+    };
+
+    pub fn GetFrustumData(self: *const Camera) FrustumData {
+        const forward: Vec3 = self.m_rotation.GetForwardVec();
+        const right: Vec3 = self.m_rotation.GetRightVec();
+        const up: Vec3 = self.m_rotation.GetUpVec();
+
+        const halfVSide: f32 = self.m_farPlane * @tan(self.m_fovY * 0.5);
+        const halfHSide: f32 = halfVSide * self.m_aspectRatio;
+        const forwardFarPos: Vec3 = self.m_pos.Add(forward.GetScaled(self.m_nearPlane));
+
+        const rightHalfHFovScaled = right.GetScaled(halfHSide);
+        const leftNorm = Vec3.Cross(up, forwardFarPos.Add(rightHalfHFovScaled)).Normalized();
+        const rightNorm = Vec3.Cross(forwardFarPos.Sub(rightHalfHFovScaled), up).Normalized();
+
+        const upHalfVFovScaled = up.GetScaled(halfVSide);
+        const topNorm = Vec3.Cross(right, forwardFarPos.Sub(upHalfVFovScaled)).Normalized();
+        const botNorm = Vec3.Cross(forwardFarPos.Add(upHalfVFovScaled), right).Normalized();
+
+        return FrustumData{
+            .m_planes = [_]Plane{
+                Plane{
+                    .m_origin = self.m_pos.Add(forward.GetScaled(self.m_nearPlane)),
+                    .m_normal = forward,
+                },
+                Plane{
+                    .m_origin = forwardFarPos,
+                    .m_normal = forward.Negate(),
+                },
+                Plane{
+                    .m_origin = self.m_pos,
+                    .m_normal = leftNorm,
+                },
+                Plane{
+                    .m_origin = self.m_pos,
+                    .m_normal = rightNorm,
+                },
+                Plane{
+                    .m_origin = self.m_pos,
+                    .m_normal = topNorm,
+                },
+                Plane{
+                    .m_origin = self.m_pos,
+                    .m_normal = botNorm,
+                },
+            },
+        };
     }
 
     // multiply clip.Mul(proj) to convert from opengl style clip space to vulkan style clip space

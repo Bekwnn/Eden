@@ -80,7 +80,7 @@ pub fn InitializeScene() !void {
 
     const cameraViewMat = currentCamera.GetViewMatrix();
     const cameraProjMat = currentCamera.GetProjectionMatrix();
-    const cameraViewProj = cameraProjMat.Mul(&cameraViewMat);
+    const cameraViewProj = cameraProjMat.Mul(cameraViewMat);
 
     //TODO should we include the clipspace mat?
     const rContext = try RenderContext.GetInstance();
@@ -88,7 +88,7 @@ pub fn InitializeScene() !void {
         frameData.m_gpuSceneData = GPUSceneData{
             .m_view = cameraViewMat.Transpose(),
             .m_projection = cameraProjMat.Transpose(),
-            .m_viewProj = Camera.gl2VkClipSpace.Mul(&cameraViewProj).Transpose(),
+            .m_viewProj = Camera.gl2VkClipSpace.Mul(cameraViewProj).Transpose(),
             .m_ambientColor = Vec4{
                 .x = 0.2,
                 .y = 0.2,

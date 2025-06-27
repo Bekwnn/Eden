@@ -1,7 +1,6 @@
 const std = @import("std");
 const math = std.math;
 
-const Quat = @import("Quat.zig").Quat;
 const Vec2 = @import("Vec2.zig").Vec2;
 
 pub const Vec3 = extern struct {
@@ -17,7 +16,7 @@ pub const Vec3 = extern struct {
 
     pub const default_tolerance = 0.00001;
 
-    pub fn Negate(self: *const Vec3) Vec3 {
+    pub fn Negate(self: Vec3) Vec3 {
         return Vec3{
             .x = -self.x,
             .y = -self.y,
@@ -25,7 +24,7 @@ pub const Vec3 = extern struct {
         };
     }
 
-    pub fn Add(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Add(self: Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = self.x + rhs.x,
             .y = self.y + rhs.y,
@@ -33,7 +32,7 @@ pub const Vec3 = extern struct {
         };
     }
 
-    pub fn Sub(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Sub(self: Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = self.x - rhs.x,
             .y = self.y - rhs.y,
@@ -41,7 +40,7 @@ pub const Vec3 = extern struct {
         };
     }
 
-    pub fn Mul(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Mul(self: Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = self.x * rhs.x,
             .y = self.y * rhs.y,
@@ -49,11 +48,11 @@ pub const Vec3 = extern struct {
         };
     }
 
-    pub fn Dot(self: *const Vec3, rhs: Vec3) f32 {
+    pub fn Dot(self: Vec3, rhs: Vec3) f32 {
         return self.x * rhs.x + self.y * rhs.y + self.z * rhs.z;
     }
 
-    pub fn Cross(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Cross(self: Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = self.y * rhs.z - self.z * rhs.y,
             .y = self.z * rhs.x - self.x * rhs.z,
@@ -61,7 +60,7 @@ pub const Vec3 = extern struct {
         };
     }
 
-    pub fn Min(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Min(self: Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = @min(self.x, rhs.x),
             .y = @min(self.y, rhs.y),
@@ -69,7 +68,7 @@ pub const Vec3 = extern struct {
         };
     }
 
-    pub fn Max(self: *const Vec3, rhs: Vec3) Vec3 {
+    pub fn Max(self: Vec3, rhs: Vec3) Vec3 {
         return Vec3{
             .x = @max(self.x, rhs.x),
             .y = @max(self.y, rhs.y),
@@ -77,29 +76,29 @@ pub const Vec3 = extern struct {
         };
     }
 
-    pub fn Equals(self: *const Vec3, rhs: Vec3) bool {
+    pub fn Equals(self: Vec3, rhs: Vec3) bool {
         return self.EqualsT(rhs, default_tolerance);
     }
 
-    pub fn EqualsT(self: *const Vec3, rhs: Vec3, tolerance: f32) bool {
+    pub fn EqualsT(self: Vec3, rhs: Vec3, tolerance: f32) bool {
         return math.approxEqAbs(f32, self.x, rhs.x, tolerance) and
             math.approxEqAbs(f32, self.y, rhs.y, tolerance) and
             math.approxEqAbs(f32, self.z, rhs.z, tolerance);
     }
 
-    pub fn LengthSqrd(self: *const Vec3) f32 {
+    pub fn LengthSqrd(self: Vec3) f32 {
         return self.x * self.x + self.y * self.y + self.z * self.z;
     }
 
-    pub fn Length(self: *const Vec3) f32 {
+    pub fn Length(self: Vec3) f32 {
         return math.sqrt(self.LengthSqrd());
     }
 
-    pub fn DistSqrd(self: *const Vec3, rhs: Vec3) f32 {
+    pub fn DistSqrd(self: Vec3, rhs: Vec3) f32 {
         return self.Sub(rhs).LengthSqrd();
     }
 
-    pub fn Dist(self: *const Vec3, rhs: Vec3) f32 {
+    pub fn Dist(self: Vec3, rhs: Vec3) f32 {
         return self.Sub(rhs).Length();
     }
 
@@ -109,7 +108,7 @@ pub const Vec3 = extern struct {
         self.z *= scalar;
     }
 
-    pub fn GetScaled(self: *const Vec3, scalar: f32) Vec3 {
+    pub fn GetScaled(self: Vec3, scalar: f32) Vec3 {
         return Vec3{
             .x = self.x * scalar,
             .y = self.y * scalar,
@@ -156,7 +155,7 @@ pub const Vec3 = extern struct {
         }
     }
 
-    pub fn GetClampedToMinSize(self: *const Vec3, size: f32) Vec3 {
+    pub fn GetClampedToMinSize(self: Vec3, size: f32) Vec3 {
         const lengthSqrd = self.LengthSqrd();
         const sizeSqrd = size * size;
         if (lengthSqrd < sizeSqrd) {
@@ -170,7 +169,7 @@ pub const Vec3 = extern struct {
         }
     }
 
-    pub fn GetClampedToMaxSize(self: *const Vec3, size: f32) Vec3 {
+    pub fn GetClampedToMaxSize(self: Vec3, size: f32) Vec3 {
         const lengthSqrd = self.LengthSqrd();
         const sizeSqrd = size * size;
         if (lengthSqrd > sizeSqrd) {
@@ -184,11 +183,11 @@ pub const Vec3 = extern struct {
         }
     }
 
-    pub fn IsNormalized(self: *const Vec3) bool {
+    pub fn IsNormalized(self: Vec3) bool {
         return std.math.approxEqRel(f32, self.LengthSqrd(), 1.0, std.math.floatEps(f32));
     }
 
-    pub fn Normalized(self: *const Vec3) Vec3 {
+    pub fn Normalized(self: Vec3) Vec3 {
         const length = self.Length();
         if (length == 0.0) @panic("Normalizing vector with length 0");
         return Vec3{
@@ -206,32 +205,20 @@ pub const Vec3 = extern struct {
         self.z /= length;
     }
 
-    pub fn RotatedByQuat(self: *const Vec3, q: Quat) Vec3 {
-        const qxyz = Vec3{ .x = q.x, .y = q.y, .z = q.z };
-        const t = qxyz.Cross(self.*).GetScaled(2.0);
-        return self.Add(t.GetScaled(q.w)).Add(qxyz.Cross(t));
-    }
-
-    pub fn RotateByQuat(self: *Vec3, q: Quat) void {
-        const qxyz = Vec3{ .x = q.x, .y = q.y, .z = q.z };
-        const t = qxyz.Cross(self.*).GetScaled(2.0);
-        self = self.Add(t.GetScaled(q.w).Add(qxyz.Cross(t)));
-    }
-
-    pub fn Vec3_xy0(v2: *const Vec2) Vec3 {
+    pub fn Vec3_xy0(v2: Vec2) Vec3 {
         return Vec3{ v2.x, v2.y, 0.0 };
     }
 
-    pub fn Vec3_x0y(v2: *const Vec2) Vec3 {
+    pub fn Vec3_x0y(v2: Vec2) Vec3 {
         return Vec3{ v2.x, 0.0, v2.y };
     }
 
-    pub fn Vec3_0xy(v2: *const Vec2) Vec3 {
+    pub fn Vec3_0xy(v2: Vec2) Vec3 {
         return Vec3{ 0.0, v2.x, v2.y };
     }
 
     // TODO would be nice to pass precision
-    pub fn DebugLog(self: *const Vec3, label: []const u8) void {
+    pub fn DebugLog(self: Vec3, label: []const u8) void {
         std.debug.print("{s}: ({d:.5}, {d:.5}, {d:.5})", .{ label, self.x, self.y, self.z });
     }
 };

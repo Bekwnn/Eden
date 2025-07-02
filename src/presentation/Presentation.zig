@@ -365,21 +365,15 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
         // add current renderable to the draw batch
         try getPutResult.value_ptr.m_renderables.append(renderableEntry);
     }
-    debugLogOneTime = false;
 
     return batches;
 }
 
-var debugLogOneTime = true;
 fn IsVisible(camera: *const Camera, renderable: *const RenderObject) bool {
     // TODO Really need to figure out how to handle this transpose nonsense
     const renderableTransform = renderable.m_transform.Transpose();
     const renderablePos = renderableTransform.GetTranslation();
     const renderableRot = renderableTransform.GetRotationQuat();
-
-    if (debugLogOneTime) {
-        renderablePos.DebugLog(renderable.m_name);
-    }
 
     // Scale the sphere by max scaling value
     const renderableScale = renderableTransform.GetScale();

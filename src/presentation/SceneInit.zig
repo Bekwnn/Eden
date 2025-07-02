@@ -4,6 +4,7 @@ const allocator = std.heap.page_allocator;
 
 const c = @import("../c.zig");
 
+const ColorRGBA = @import("../math/Color.zig").ColorRGBA;
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec4 = @import("../math/Vec4.zig").Vec4;
@@ -11,14 +12,14 @@ const Vec4 = @import("../math/Vec4.zig").Vec4;
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const Buffer = @import("Buffer.zig").Buffer;
 const Camera = @import("Camera.zig").Camera;
-const ColorRGBA = @import("../math/Color.zig").ColorRGBA;
+const DebugDraw = @import("DebugDraw.zig");
+const GPUSceneData = @import("Scene.zig").GPUSceneData;
 const materialParam = @import("MaterialParam.zig");
 const MaterialParam = materialParam.MaterialParam;
 const Mesh = @import("Mesh.zig").Mesh;
 const RenderContext = @import("RenderContext.zig").RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
 const Scene = @import("Scene.zig").Scene;
-const GPUSceneData = @import("Scene.zig").GPUSceneData;
 const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
 const ShaderPass = @import("ShaderPass.zig").ShaderPass;
 const Texture = @import("Texture.zig").Texture;
@@ -43,44 +44,47 @@ pub fn GetCurrentScene() *Scene {
 }
 
 pub fn InitializeScene() !void {
+    try DebugDraw.Init();
+
     // init hardcoded test currentScene:
     var inventory = try AssetInventory.GetInstance();
-    const mesh = inventory.CreateMesh("monkey", "test-assets\\test.obj") catch |meshErr| {
-        debug.print("Error creating mesh: {}\n", .{meshErr});
-        return meshErr;
-    };
 
-    const uvTexture = inventory.CreateTexture("uv_test", "test-assets\\test.png") catch |texErr| {
-        debug.print("Error creating texture: {}\n", .{texErr});
-        return texErr;
-    };
-    const texMaterial = inventory.CreateMaterial("textured_mat") catch |materialErr| {
-        debug.print("Error creating material: {}\n", .{materialErr});
-        return materialErr;
-    };
-    const texMaterialInst = inventory.CreateMaterialInstance("textured_mat_inst", texMaterial) catch |matInstError| {
-        debug.print("Error creating material instance: {}\n", .{matInstError});
-        return matInstError;
-    };
-    const coloredMat = inventory.CreateMaterial("colored_mat") catch |materialErr| {
-        debug.print("Error creating material: {}\n", .{materialErr});
-        return materialErr;
-    };
-    const coloredMatInst = inventory.CreateMaterialInstance("colored_mat_inst", coloredMat) catch |matInstError| {
-        debug.print("Error creating material instance: {}\n", .{matInstError});
-        return matInstError;
-    };
+    const mesh = try inventory.CreateMesh("monkey", "test-assets\\test.obj");
+
+    const uvTexture = try inventory.CreateTexture("uv_test", "test-assets\\test.png");
+
+    const texMaterial = try inventory.CreateMaterial("textured_mat");
+    const texMaterialInst = try inventory.CreateMaterialInstance("textured_mat_inst", texMaterial);
+
+    const coloredMat = try inventory.CreateMaterial("colored_mat");
+    const coloredMatInst = try inventory.CreateMaterialInstance("colored_mat_inst", coloredMat);
 
     try currentScene.CreateCamera("default");
 
     const currentCamera = try currentScene.GetCurrentCamera();
 
     currentCamera.m_pos = Vec3{ .x = 0.0, .y = 0.0, .z = -25.0 };
-    currentCamera.LookAt(Vec3.zero);
 
     const cameraViewMat = currentCamera.GetViewMatrix();
     const cameraProjMat = currentCamera.GetProjectionMatrix();
     const cameraViewProj = cameraProjMat.Mul(cameraViewMat);
+
+    const cameraAxesLoc = currentCamera.m_pos.Add(Vec3.yAxis.GetScaled(5.0));
+    _ = try DebugDraw.CreateDebugLine(
+        cameraAxesLoc,
+        cameraAxesLoc.Add(currentCamera.m_rotation.GetForwardVec().GetScaled(3.0)),
+        ColorRGBA.presets.Magenta,
+    );
+    _ = try DebugDraw.CreateDebugLine(
+        cameraAxesLoc,
+        cameraAxesLoc.Add(currentCamera.m_rotation.GetRightVec().GetScaled(3.0)),
+        ColorRGBA.presets.Magenta,
+    );
+    _ = try DebugDraw.CreateDebugLine(
+        cameraAxesLoc,
+        cameraAxesLoc.Add(currentCamera.m_rotation.GetUpVec().GetScaled(3.0)),
+        ColorRGBA.presets.Magenta,
+    );
 
     //TODO should we include the clipspace mat?
     const rContext = try RenderContext.GetInstance();
@@ -159,6 +163,7 @@ pub fn InitializeScene() !void {
     );
 
     // TODO make setting up a material parameter binding 1 call
+    // COLOR MESH MAT
     const colorParam = try UniformParam.init(allocator, &coloredShaderBuffer, @sizeOf(@TypeOf(shaderColor)), 0);
     try coloredMatInst.m_materialInstanceParams.append(MaterialParam.init(colorParam, 1));
     try coloredShaderEffect.m_instanceSetParams.append(ShaderEffect.DescriptorParam{

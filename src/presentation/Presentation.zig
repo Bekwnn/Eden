@@ -10,6 +10,7 @@ const input = @import("../Input.zig");
 
 const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 
+const Color = @import("../math/Color.zig");
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Quat = @import("../math/Quat.zig").Quat;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
@@ -18,6 +19,7 @@ const Vec4 = @import("../math/Vec4.zig").Vec4;
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const Buffer = @import("Buffer.zig").Buffer;
 const Camera = @import("Camera.zig").Camera;
+const DebugDraw = @import("DebugDraw.zig");
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
 const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
@@ -127,12 +129,48 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
         camera.m_rotation.z,
         camera.m_rotation.w,
     );
+    if (c.igButton("Update Debug Frustum", c.ImVec2{ .x = 150.0, .y = 40.0 })) {
+        try UpdateFrustumDraw();
+    }
 
     _ = c.igText("Draw Stats:");
     _ = c.igText("Batches: %d", drawStats.m_batches);
     _ = c.igText("Renderables Drawn: %d", drawStats.m_renderablesDrawn);
     _ = c.igText("Total Renderables in Scene: %d", drawStats.m_renderablesInScene);
     c.igEnd();
+}
+
+//TODO delete
+const ColorRGBA = Color.ColorRGBA;
+var cameraDebugLines = [_]?*DebugDraw.DebugLine{null} ** 6;
+fn UpdateFrustumDraw() !void {
+    const currentScene = sceneInit.GetCurrentScene();
+    const currentCamera = try currentScene.GetCurrentCamera();
+    const frustumData = currentCamera.GetFrustumData();
+    for (frustumData.m_planes, 0..) |plane, i| {
+        const planeFace: Camera.FrustumData.FrustumPlane = @enumFromInt(i);
+        debug.print("{any}\n", .{planeFace});
+        plane.m_origin.DebugLog("origin");
+        debug.print("\n", .{});
+        plane.m_normal.DebugLog("normal");
+        debug.print("\n", .{});
+        if (cameraDebugLines[i]) |cameraDebugLine| {
+            cameraDebugLine.m_lines[0] = plane.m_origin;
+            cameraDebugLine.m_lines[1] = plane.m_origin.Add(plane.m_normal.GetScaled(5.0));
+        } else {
+            const debugColor = switch (planeFace) {
+                .Near => ColorRGBA.presets.Blue,
+                .Right => ColorRGBA.presets.Red,
+                .Top => ColorRGBA.presets.Green,
+                .Far, .Left, .Bottom => ColorRGBA.presets.White,
+            };
+            cameraDebugLines[i] = try DebugDraw.CreateDebugLine(
+                plane.m_origin,
+                plane.m_origin.Add(plane.m_normal.GetScaled(5.0)),
+                debugColor,
+            );
+        }
+    }
 }
 
 const DrawStats = struct {
@@ -208,40 +246,8 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
         var batchDrawIter = batchDraws.iterator();
         while (batchDrawIter.next()) |renderBatch| {
-            //TODO move to/create "bind material" function
-            c.vkCmdBindPipeline(
-                commandBuffer,
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_shaderPass.m_pipeline,
-            );
-
-            // currently binding shader globals with material params, could bind shader globals separately
-            const descriptorSets = [_]c.VkDescriptorSet{
-                currentFrame.m_gpuSceneDataDescriptorSet,
-                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_materialDescriptorSet orelse
-                    currentFrame.m_emptyDescriptorSet,
-            };
-            c.vkCmdBindDescriptorSets(
-                commandBuffer,
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_shaderPass.m_pipelineLayout,
-                0,
-                @intCast(descriptorSets.len),
-                &descriptorSets,
-                0,
-                null,
-            );
-
-            c.vkCmdBindDescriptorSets(
-                commandBuffer,
-                c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-                renderBatch.value_ptr.m_matInst.m_parentMaterial.m_shaderPass.m_pipelineLayout,
-                2,
-                1,
-                &(renderBatch.value_ptr.m_matInst.m_instanceDescriptorSet orelse currentFrame.m_emptyDescriptorSet),
-                0,
-                null,
-            );
+            try renderBatch.value_ptr.m_matInst.m_parentMaterial.BindMaterial(commandBuffer);
+            try renderBatch.value_ptr.m_matInst.BindMaterialInstance(commandBuffer);
 
             // TODO move to/create "bind mesh" function
             if (renderBatch.value_ptr.m_mesh.m_bufferData) |*meshBufferData| {
@@ -286,6 +292,28 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
             drawStats.m_batches += 1;
         }
 
+        const assetInventory = try AssetInventory.GetInstance();
+        const debugLineMatInst = assetInventory.GetMaterialInst("debug_line_mat_inst") orelse @panic("!");
+        try DebugDraw.FillVertexBuffer();
+        try DebugDraw.BindForDrawing(commandBuffer);
+
+        for (DebugDraw.debugLines.items, 0..) |debugLine, i| {
+            DebugDraw.BindDebugLine(
+                commandBuffer,
+                debugLineMatInst.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+                debugLine,
+            );
+
+            const vertexCount = 2;
+            c.vkCmdDraw(
+                commandBuffer,
+                vertexCount,
+                1,
+                @intCast(i * vertexCount),
+                @intCast(i),
+            );
+        }
+
         c.ImGui_ImplVulkan_RenderDrawData(c.igGetDrawData(), commandBuffer, null);
     }
     c.vkCmdEndRenderPass(commandBuffer);
@@ -315,9 +343,9 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
 
     var renderableIter = renderables.iterator();
     while (renderableIter.next()) |renderableEntry| {
-        //if (!IsVisible(try currentScene.GetCurrentCamera(), renderableEntry.value_ptr)) {
-        //    continue;
-        //}
+        if (!IsVisible(try currentScene.GetCurrentCamera(), renderableEntry.value_ptr)) {
+            continue;
+        }
 
         const renderableBatchKey = GetMatAndMeshKey(
             renderableEntry.value_ptr.m_materialInstance,
@@ -337,16 +365,24 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
         // add current renderable to the draw batch
         try getPutResult.value_ptr.m_renderables.append(renderableEntry);
     }
+    debugLogOneTime = false;
 
     return batches;
 }
 
+var debugLogOneTime = true;
 fn IsVisible(camera: *const Camera, renderable: *const RenderObject) bool {
-    const renderablePos = renderable.m_transform.GetTranslation();
-    const renderableRot = renderable.m_transform.GetRotationQuat();
+    // TODO Really need to figure out how to handle this transpose nonsense
+    const renderableTransform = renderable.m_transform.Transpose();
+    const renderablePos = renderableTransform.GetTranslation();
+    const renderableRot = renderableTransform.GetRotationQuat();
+
+    if (debugLogOneTime) {
+        renderablePos.DebugLog(renderable.m_name);
+    }
 
     // Scale the sphere by max scaling value
-    const renderableScale = renderable.m_transform.GetScale();
+    const renderableScale = renderableTransform.GetScale();
     const maxScale: f32 = @max(renderableScale.x, renderableScale.y, renderableScale.z);
 
     const renderableBounds = renderable.m_mesh.m_bounds;

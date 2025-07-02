@@ -336,3 +336,13 @@ test "LookAt" {
         };
     }
 }
+
+test "Rotate" {
+    try std.testing.expect(Quat.identity.Rotate(Vec3.xAxis).Equals(Vec3.xAxis));
+    try std.testing.expect(Quat.identity.Rotate(Vec3.yAxis).Equals(Vec3.yAxis));
+    try std.testing.expect(Quat.identity.Rotate(Vec3.zAxis).Equals(Vec3.zAxis));
+
+    try std.testing.expect(Quat.identity.Rotate(Vec3.xAxis).Equals(Vec3.xAxis));
+    try std.testing.expect(Quat.identity.Rotate(Vec3.yAxis).Equals(Vec3.yAxis));
+    try std.testing.expect(Quat.identity.Rotate(Vec3.zAxis).Equals(Vec3.zAxis));
+}

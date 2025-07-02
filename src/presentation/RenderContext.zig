@@ -565,6 +565,7 @@ const requiredFeatures = c.VkPhysicalDeviceFeatures2{
     .features = c.VkPhysicalDeviceFeatures{
         .geometryShader = c.VK_TRUE,
         .samplerAnisotropy = c.VK_TRUE,
+        .fillModeNonSolid = c.VK_TRUE,
     },
 };
 fn PhysicalDeviceIsSuitable(

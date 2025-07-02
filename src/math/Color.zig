@@ -1,9 +1,9 @@
 const stdm = @import("std").math;
 
-pub const colorsRGB8 = @import("ColorRGB8.zig");
-pub const colorsRGBA8 = @import("ColorRGBA8.zig");
-pub const colorsRGBA = @import("ColorRGBA.zig");
-pub const colorsRGB = @import("ColorRGB.zig");
+const colorsRGB8 = @import("ColorRGB8.zig");
+const colorsRGBA8 = @import("ColorRGBA8.zig");
+const colorsRGBA = @import("ColorRGBA.zig");
+const colorsRGB = @import("ColorRGB.zig");
 
 fn ColorEquals(comptime colorType: type, lhs: *const colorType, rhs: *const colorType) bool {
     const fieldNames = [_][]const u8{
@@ -28,7 +28,7 @@ pub const ColorRGB = extern struct {
     r: f32,
     g: f32,
     b: f32,
-
+    pub const presets = colorsRGB;
     pub fn Equals(self: *const ColorRGB, other: *const ColorRGB) bool {
         return ColorEquals(ColorRGB, self, other);
     }
@@ -38,6 +38,7 @@ pub const ColorRGB8 = extern struct {
     r: u8,
     g: u8,
     b: u8,
+    pub const presets = colorsRGB8;
     pub fn Equals(self: *const ColorRGB8, other: *const ColorRGB8) bool {
         return ColorEquals(ColorRGB8, self, other);
     }
@@ -48,6 +49,7 @@ pub const ColorRGBA = extern struct {
     g: f32,
     b: f32,
     a: f32,
+    pub const presets = colorsRGBA;
     pub fn Equals(self: *const ColorRGBA, other: *const ColorRGBA) bool {
         return ColorEquals(ColorRGBA, self, other);
     }
@@ -58,6 +60,7 @@ pub const ColorRGBA8 = extern struct {
     g: u8,
     b: u8,
     a: u8,
+    pub const presets = colorsRGBA8;
     pub fn Equals(self: *const ColorRGBA8, other: *const ColorRGBA8) bool {
         return ColorEquals(ColorRGBA8, self, other);
     }

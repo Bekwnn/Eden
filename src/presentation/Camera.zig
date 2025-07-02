@@ -75,21 +75,21 @@ pub const Camera = struct {
     };
 
     pub fn GetFrustumData(self: *const Camera) FrustumData {
-        const forward: Vec3 = self.m_rotation.GetForwardVec();
+        const forward: Vec3 = self.m_rotation.GetForwardVec().Negate(); //cam looks in -Z
         const right: Vec3 = self.m_rotation.GetRightVec();
         const up: Vec3 = self.m_rotation.GetUpVec();
 
         const halfVSide: f32 = self.m_farPlane * @tan(self.m_fovY * 0.5);
         const halfHSide: f32 = halfVSide * self.m_aspectRatio;
-        const forwardFarPos: Vec3 = self.m_pos.Add(forward.GetScaled(self.m_nearPlane));
+        const forwardFarPos: Vec3 = self.m_pos.Add(forward.GetScaled(self.m_farPlane));
 
         const rightHalfHFovScaled = right.GetScaled(halfHSide);
-        const leftNorm = Vec3.Cross(up, forwardFarPos.Add(rightHalfHFovScaled)).Normalized();
-        const rightNorm = Vec3.Cross(forwardFarPos.Sub(rightHalfHFovScaled), up).Normalized();
+        const rightNorm = Vec3.Cross(up, forwardFarPos.Add(rightHalfHFovScaled)).Normalized();
+        const leftNorm = Vec3.Cross(forwardFarPos.Sub(rightHalfHFovScaled), up).Normalized();
 
         const upHalfVFovScaled = up.GetScaled(halfVSide);
-        const topNorm = Vec3.Cross(right, forwardFarPos.Sub(upHalfVFovScaled)).Normalized();
-        const botNorm = Vec3.Cross(forwardFarPos.Add(upHalfVFovScaled), right).Normalized();
+        const botNorm = Vec3.Cross(right, forwardFarPos.Sub(upHalfVFovScaled)).Normalized();
+        const topNorm = Vec3.Cross(forwardFarPos.Add(upHalfVFovScaled), right).Normalized();
 
         return FrustumData{
             .m_planes = [_]Plane{

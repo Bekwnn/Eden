@@ -47,6 +47,22 @@ pub const MaterialInstance = struct {
         }
     }
 
+    // Binds the material instance descriptor set 2
+    pub fn BindMaterialInstance(self: *const Self, cmd: c.VkCommandBuffer) !void {
+        const renderContext = try RenderContext.GetInstance();
+        const currentFrame = renderContext.GetCurrentFrame();
+        c.vkCmdBindDescriptorSets(
+            cmd,
+            c.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            self.m_parentMaterial.m_shaderPass.m_pipelineLayout,
+            2,
+            1,
+            &(self.m_instanceDescriptorSet orelse currentFrame.m_emptyDescriptorSet),
+            0,
+            null,
+        );
+    }
+
     // these should maybe return empty descriptor set layout instead of null
 
     // descriptor set bound for the parent material

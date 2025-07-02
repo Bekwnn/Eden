@@ -382,8 +382,8 @@ test "Inverse" {
         },
     };
     const m1Inv = try m1.Inverse();
-    const result = m1.Mul(&m1Inv);
-    try TestMatEqual("inverseResult", &result, "Mat4x4.identity", &Mat4x4.identity);
+    const result = m1.Mul(m1Inv);
+    try TestMatEqual("inverseResult", result, "Mat4x4.identity", Mat4x4.identity);
 }
 
 test "Transpose" {
@@ -405,8 +405,8 @@ test "Transpose" {
     };
     const m2t = m2.Transpose();
     const m2tt = m2t.Transpose();
-    try TestMatEqual("m2t", &m2t, "transpose", &transpose);
-    try TestMatEqual("m2tt", &m2tt, "m2", &m2);
+    try TestMatEqual("m2t", m2t, "transpose", transpose);
+    try TestMatEqual("m2tt", m2tt, "m2", m2);
 }
 
 test "Rotation" {
@@ -427,7 +427,7 @@ test "Decomposition" {
     );
     const posBefore = Vec3{ .x = 1.0, .y = 2.0, .z = 4.0 };
     const scaleBefore = Vec3{ .x = 2.5, .y = 2.5, .z = 2.5 };
-    const transformMat = Mat4x4.FromTransform(&Transform{
+    const transformMat = Mat4x4.FromTransform(Transform{
         .m_position = posBefore,
         .m_rotation = quatBefore,
         .m_scale = scaleBefore,
@@ -435,7 +435,7 @@ test "Decomposition" {
 
     try TestVec3Equal("transformPos", transformMat.GetTranslation(), "posBefore", posBefore);
     const transformRot = transformMat.GetRotationQuat();
-    try TestQuatEqual("transformRot", &transformRot, "quatBefore", &quatBefore);
+    try TestQuatEqual("transformRot", transformRot, "quatBefore", quatBefore);
     try TestVec3Equal("transformScale", transformMat.GetScale(), "scaleBefore", scaleBefore);
 }
 

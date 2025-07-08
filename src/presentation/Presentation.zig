@@ -137,6 +137,8 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
     _ = c.igText("Batches: %d", drawStats.m_batches);
     _ = c.igText("Renderables Drawn: %d", drawStats.m_renderablesDrawn);
     _ = c.igText("Total Renderables in Scene: %d", drawStats.m_renderablesInScene);
+    _ = c.igText("Total Debug Lines: %d", DebugDraw.debugLines.items.len);
+    _ = c.igText("Total Debug Circles: %d", DebugDraw.debugCircles.items.len);
     c.igEnd();
 }
 
@@ -292,26 +294,8 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
             drawStats.m_batches += 1;
         }
 
-        const assetInventory = try AssetInventory.GetInstance();
-        const debugLineMatInst = assetInventory.GetMaterialInst("debug_line_mat_inst") orelse @panic("!");
-        try DebugDraw.FillVertexBuffer();
-        try DebugDraw.BindForDrawing(commandBuffer);
-
-        for (DebugDraw.debugLines.items, 0..) |debugLine, i| {
-            DebugDraw.BindDebugLine(
-                commandBuffer,
-                debugLineMatInst.m_parentMaterial.m_shaderPass.m_pipelineLayout,
-                debugLine,
-            );
-
-            const vertexCount = 2;
-            c.vkCmdDraw(
-                commandBuffer,
-                vertexCount,
-                1,
-                @intCast(i * vertexCount),
-                @intCast(i),
-            );
+        if (DebugDraw.ShouldDraw()) {
+            try DebugDraw.Draw(commandBuffer);
         }
 
         c.ImGui_ImplVulkan_RenderDrawData(c.igGetDrawData(), commandBuffer, null);
@@ -343,7 +327,7 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
 
     var renderableIter = renderables.iterator();
     while (renderableIter.next()) |renderableEntry| {
-        if (!IsVisible(try currentScene.GetCurrentCamera(), renderableEntry.value_ptr)) {
+        if (!try IsVisible(try currentScene.GetCurrentCamera(), renderableEntry.value_ptr)) {
             continue;
         }
 
@@ -365,23 +349,42 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
         // add current renderable to the draw batch
         try getPutResult.value_ptr.m_renderables.append(renderableEntry);
     }
-
+    firstTimeBoundsDraw = false;
     return batches;
 }
 
-fn IsVisible(camera: *const Camera, renderable: *const RenderObject) bool {
-    // TODO Really need to figure out how to handle this transpose nonsense
-    const renderableTransform = renderable.m_transform.Transpose();
-    const renderablePos = renderableTransform.GetTranslation();
-    const renderableRot = renderableTransform.GetRotationQuat();
+var firstTimeBoundsDraw = true; //TODO delete
+fn IsVisible(camera: *const Camera, renderable: *const RenderObject) !bool {
+    const renderablePos = renderable.m_transform.m_position;
+    const renderableRot = renderable.m_transform.m_rotation;
 
     // Scale the sphere by max scaling value
-    const renderableScale = renderableTransform.GetScale();
+    const renderableScale = renderable.m_transform.m_scale;
     const maxScale: f32 = @max(renderableScale.x, renderableScale.y, renderableScale.z);
 
     const renderableBounds = renderable.m_mesh.m_bounds;
     // get bounds origin in world space
     const boundsOrigin = renderablePos.Add(renderableRot.Rotate(renderableBounds.m_origin));
+
+    //TODO delete and remove error union
+    if (firstTimeBoundsDraw) {
+        _ = try DebugDraw.CreateDebugCircle(
+            boundsOrigin,
+            Vec3.yAxis,
+            renderableBounds.m_sphereRadius,
+            ColorRGBA.presets.Green,
+        );
+        _ = try DebugDraw.CreateDebugBox(
+            boundsOrigin,
+            renderableBounds.m_extents,
+            ColorRGBA.presets.Yellow,
+        );
+        _ = try DebugDraw.CreateDebugLine(
+            boundsOrigin,
+            boundsOrigin.Add(Vec3.xAxis.GetScaled(renderableBounds.m_extents.Length())),
+            ColorRGBA.presets.Magenta,
+        );
+    }
 
     const cameraFrustum = camera.GetFrustumData();
     for (cameraFrustum.m_planes) |plane| {

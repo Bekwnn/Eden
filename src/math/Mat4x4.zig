@@ -160,7 +160,6 @@ pub const Mat4x4 = extern struct {
         } };
     }
 
-    //TODO testing
     pub fn GetRotationQuat(self: Mat4x4) Quat {
         const mat3x3 = self.GetRotationMat3x3();
 

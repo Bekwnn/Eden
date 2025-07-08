@@ -4,10 +4,12 @@ const Allocator = std.mem.Allocator;
 
 const c = @import("../c.zig");
 
+const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
+const Transform = @import("../math/Transform.zig").Transform;
+
 const Buffer = @import("Buffer.zig").Buffer;
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
-const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Material = @import("Material.zig").Material;
 const MaterialInstance = @import("MaterialInstance.zig").MaterialInstance;
 const MaterialParam = @import("MaterialParam.zig").MaterialParam;
@@ -26,8 +28,8 @@ pub const RenderObject = struct {
     m_mesh: *Mesh,
     m_objectDescriptorSet: ?c.VkDescriptorSet = null,
 
-    //TODO switch to an actual pos/rot/scale transform and construct mat4 before rendering
-    m_transform: Mat4x4 = Mat4x4.identity,
+    m_transform: Transform = Transform{},
+    m_transformMat: Mat4x4 = Mat4x4{}, //TODO gpu takes transform in mat4 format, should they just live in a buffer somewhere?
     m_objectMaterialParams: ArrayList(MaterialParam),
 
     //TODO create a default material/material instance
@@ -76,13 +78,14 @@ pub const RenderObject = struct {
             null,
         );
 
+        self.m_transformMat = self.m_transform.GetMat4x4().Transpose();
         c.vkCmdPushConstants(
             cmd,
             self.m_materialInstance.m_parentMaterial.m_shaderPass.m_pipelineLayout,
             c.VK_SHADER_STAGE_VERTEX_BIT,
             0,
             @sizeOf(Mat4x4),
-            &self.m_transform,
+            &self.m_transformMat,
         );
     }
 };

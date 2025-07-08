@@ -6,6 +6,7 @@ const c = @import("../c.zig");
 
 const ColorRGBA = @import("../math/Color.zig").ColorRGBA;
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
+const Transform = @import("../math/Transform.zig").Transform;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec4 = @import("../math/Vec4.zig").Vec4;
 
@@ -46,6 +47,8 @@ pub fn GetCurrentScene() *Scene {
 pub fn InitializeScene() !void {
     try DebugDraw.Init();
 
+    std.debug.print("Initializing scene...\n", .{});
+
     // init hardcoded test currentScene:
     var inventory = try AssetInventory.GetInstance();
 
@@ -68,23 +71,6 @@ pub fn InitializeScene() !void {
     const cameraViewMat = currentCamera.GetViewMatrix();
     const cameraProjMat = currentCamera.GetProjectionMatrix();
     const cameraViewProj = cameraProjMat.Mul(cameraViewMat);
-
-    const cameraAxesLoc = currentCamera.m_pos.Add(Vec3.yAxis.GetScaled(5.0));
-    _ = try DebugDraw.CreateDebugLine(
-        cameraAxesLoc,
-        cameraAxesLoc.Add(currentCamera.m_rotation.GetForwardVec().GetScaled(3.0)),
-        ColorRGBA.presets.Magenta,
-    );
-    _ = try DebugDraw.CreateDebugLine(
-        cameraAxesLoc,
-        cameraAxesLoc.Add(currentCamera.m_rotation.GetRightVec().GetScaled(3.0)),
-        ColorRGBA.presets.Magenta,
-    );
-    _ = try DebugDraw.CreateDebugLine(
-        cameraAxesLoc,
-        cameraAxesLoc.Add(currentCamera.m_rotation.GetUpVec().GetScaled(3.0)),
-        ColorRGBA.presets.Magenta,
-    );
 
     //TODO should we include the clipspace mat?
     const rContext = try RenderContext.GetInstance();
@@ -211,13 +197,16 @@ pub fn InitializeScene() !void {
                 ),
             );
             const newRenderObj = currentScene.m_renderables.getPtr(name) orelse @panic("!");
-            newRenderObj.m_transform = Mat4x4.Translation(Vec3{
-                .x = (-5.0 * @divFloor(width, 2)) + (@as(f32, @floatFromInt(j)) * 5.0),
-                .y = 0.0,
-                .z = (-5.0 * @divFloor(height, 2)) + (@as(f32, @floatFromInt(i)) * 5.0),
-            }).Transpose();
+            newRenderObj.m_transform = Transform{
+                .m_position = Vec3{
+                    .x = (-5.0 * @divFloor(width, 2)) + (@as(f32, @floatFromInt(j)) * 5.0),
+                    .y = 0.0,
+                    .z = (-5.0 * @divFloor(height, 2)) + (@as(f32, @floatFromInt(i)) * 5.0),
+                },
+            };
         }
     }
+    std.debug.print("Scene initialized.\n", .{});
 }
 
 // TODO this should be automatic for all params that need updating

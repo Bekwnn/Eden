@@ -1,5 +1,6 @@
-const debug = @import("std").debug;
-const stdmath = @import("std").math;
+const std = @import("std");
+const debug = std.debug;
+const stdmath = std.math;
 
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Plane = @import("../math/Plane.zig").Plane;
@@ -75,26 +76,33 @@ pub const Camera = struct {
     };
 
     pub fn GetFrustumData(self: *const Camera) FrustumData {
-        const forward: Vec3 = self.m_rotation.GetForwardVec().Negate(); //cam looks in -Z
+        //cam looks in -Z
+        const forward: Vec3 = self.m_rotation.GetForwardVec().Negate();
         const right: Vec3 = self.m_rotation.GetRightVec();
         const up: Vec3 = self.m_rotation.GetUpVec();
 
+        debug.assert(Vec3.IsNormalized(forward));
+        debug.assert(Vec3.IsNormalized(right));
+        debug.assert(Vec3.IsNormalized(up));
+
         const halfVSide: f32 = self.m_farPlane * @tan(self.m_fovY * 0.5);
         const halfHSide: f32 = halfVSide * self.m_aspectRatio;
-        const forwardFarPos: Vec3 = self.m_pos.Add(forward.GetScaled(self.m_farPlane));
+        const forwardFarVec: Vec3 = forward.GetScaled(self.m_farPlane);
+        const forwardFarPos: Vec3 = self.m_pos.Add(forwardFarVec);
+        const forwardNearPos: Vec3 = self.m_pos.Add(forward.GetScaled(self.m_nearPlane));
 
         const rightHalfHFovScaled = right.GetScaled(halfHSide);
-        const rightNorm = Vec3.Cross(up, forwardFarPos.Add(rightHalfHFovScaled)).Normalized();
-        const leftNorm = Vec3.Cross(forwardFarPos.Sub(rightHalfHFovScaled), up).Normalized();
+        const rightNorm = Vec3.Cross(up, forwardFarVec.Add(rightHalfHFovScaled)).Normalized();
+        const leftNorm = Vec3.Cross(forwardFarVec.Sub(rightHalfHFovScaled), up).Normalized();
 
         const upHalfVFovScaled = up.GetScaled(halfVSide);
-        const botNorm = Vec3.Cross(right, forwardFarPos.Sub(upHalfVFovScaled)).Normalized();
-        const topNorm = Vec3.Cross(forwardFarPos.Add(upHalfVFovScaled), right).Normalized();
+        const botNorm = Vec3.Cross(right, forwardFarVec.Sub(upHalfVFovScaled)).Normalized();
+        const topNorm = Vec3.Cross(forwardFarVec.Add(upHalfVFovScaled), right).Normalized();
 
         return FrustumData{
             .m_planes = [_]Plane{
                 Plane{
-                    .m_origin = self.m_pos.Add(forward.GetScaled(self.m_nearPlane)),
+                    .m_origin = forwardNearPos,
                     .m_normal = forward,
                 },
                 Plane{

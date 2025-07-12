@@ -9,18 +9,18 @@ pub const Plane = struct {
     pub const default_tolerance = 0.00001;
 
     // returns a positive value if it's in the direction of m_normal, negative if "behind" the plane
-    pub fn GetSignedDistance(self: *const Plane, pos: *const Vec3) f32 {
+    pub fn GetSignedDistance(self: Plane, pos: Vec3) f32 {
         const originToPos = pos.Sub(self.m_origin);
         return originToPos.Dot(self.m_normal);
     }
 
     // check if a point is on the plane or on the side of the plane the normal is pointing
-    pub fn IsOnPositiveSide(self: *const Plane, pos: *const Vec3) bool {
+    pub fn IsOnPositiveSide(self: Plane, pos: Vec3) bool {
         return self.GetSignedDistance(pos) >= 0.0;
     }
 
     // returns point on the plane closest to pos
-    pub fn ProjectToPlane(self: *const Plane, pos: *const Vec3) Vec3 {
+    pub fn ProjectToPlane(self: Plane, pos: Vec3) Vec3 {
         const distanceFromPlane = self.GetSignedDistance(pos);
         return pos.Add(self.m_normal.GetScaled(-distanceFromPlane));
     }

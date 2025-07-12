@@ -465,7 +465,7 @@ fn CreateVkInstance(
         .applicationVersion = applicationVersion,
         .pEngineName = engineName,
         .engineVersion = engineVersion,
-        .apiVersion = c.VK_API_VERSION_1_0,
+        .apiVersion = c.VK_API_VERSION_1_4,
         .pNext = null,
     };
 

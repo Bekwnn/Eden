@@ -144,11 +144,27 @@ pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
 
 //TODO delete
 const ColorRGBA = Color.ColorRGBA;
+var cameraForwardLine: ?*DebugDraw.DebugLine = null;
 var cameraDebugLines = [_]?*DebugDraw.DebugLine{null} ** 6;
+var cameraDebugCircles = [_]?*DebugDraw.DebugCircle{null} ** 6;
 fn UpdateFrustumDraw() !void {
     const currentScene = sceneInit.GetCurrentScene();
     const currentCamera = try currentScene.GetCurrentCamera();
     const frustumData = currentCamera.GetFrustumData();
+
+    const forwardOffsetPos = currentCamera.m_pos.Add(currentCamera.m_rotation.GetForwardVec().Negate().GetScaled(15));
+
+    if (cameraForwardLine) |forwardLine| {
+        forwardLine.m_lines[0] = currentCamera.m_pos;
+        forwardLine.m_lines[1] = forwardOffsetPos;
+    } else {
+        cameraForwardLine = try DebugDraw.CreateDebugLine(
+            currentCamera.m_pos,
+            forwardOffsetPos,
+            ColorRGBA.presets.Yellow,
+        );
+    }
+
     for (frustumData.m_planes, 0..) |plane, i| {
         const planeFace: Camera.FrustumData.FrustumPlane = @enumFromInt(i);
         debug.print("{any}\n", .{planeFace});
@@ -156,9 +172,30 @@ fn UpdateFrustumDraw() !void {
         debug.print("\n", .{});
         plane.m_normal.DebugLog("normal");
         debug.print("\n", .{});
+
+        const offsetOnPlane = plane.ProjectToPlane(forwardOffsetPos);
+
+        if (cameraDebugCircles[i]) |cameraDebugCircle| {
+            cameraDebugCircle.m_pos = offsetOnPlane;
+            cameraDebugCircle.m_upDir = plane.m_normal;
+        } else {
+            const debugColor = switch (planeFace) {
+                .Near => ColorRGBA.presets.Blue,
+                .Right => ColorRGBA.presets.Red,
+                .Top => ColorRGBA.presets.Green,
+                .Far, .Left, .Bottom => ColorRGBA.presets.White,
+            };
+            cameraDebugCircles[i] = try DebugDraw.CreateDebugCircle(
+                offsetOnPlane,
+                plane.m_normal,
+                3,
+                debugColor,
+            );
+        }
+
         if (cameraDebugLines[i]) |cameraDebugLine| {
-            cameraDebugLine.m_lines[0] = plane.m_origin;
-            cameraDebugLine.m_lines[1] = plane.m_origin.Add(plane.m_normal.GetScaled(5.0));
+            cameraDebugLine.m_lines[0] = offsetOnPlane;
+            cameraDebugLine.m_lines[1] = offsetOnPlane.Add(plane.m_normal.GetScaled(5.0));
         } else {
             const debugColor = switch (planeFace) {
                 .Near => ColorRGBA.presets.Blue,
@@ -167,8 +204,8 @@ fn UpdateFrustumDraw() !void {
                 .Far, .Left, .Bottom => ColorRGBA.presets.White,
             };
             cameraDebugLines[i] = try DebugDraw.CreateDebugLine(
-                plane.m_origin,
-                plane.m_origin.Add(plane.m_normal.GetScaled(5.0)),
+                offsetOnPlane,
+                offsetOnPlane.Add(plane.m_normal.GetScaled(5.0)),
                 debugColor,
             );
         }
@@ -388,7 +425,7 @@ fn IsVisible(camera: *const Camera, renderable: *const RenderObject) !bool {
 
     const cameraFrustum = camera.GetFrustumData();
     for (cameraFrustum.m_planes) |plane| {
-        if (plane.GetSignedDistance(&boundsOrigin) < -(renderableBounds.m_sphereRadius * maxScale)) {
+        if (plane.GetSignedDistance(boundsOrigin) < -(renderableBounds.m_sphereRadius * maxScale)) {
             return false;
         }
     }

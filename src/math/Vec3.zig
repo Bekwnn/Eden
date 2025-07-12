@@ -184,7 +184,7 @@ pub const Vec3 = extern struct {
     }
 
     pub fn IsNormalized(self: Vec3) bool {
-        return std.math.approxEqRel(f32, self.LengthSqrd(), 1.0, std.math.floatEps(f32));
+        return std.math.approxEqRel(f32, self.LengthSqrd(), 1.0, default_tolerance);
     }
 
     pub fn Normalized(self: Vec3) Vec3 {

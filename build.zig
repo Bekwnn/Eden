@@ -115,39 +115,6 @@ fn buildAllShaders(b: *std.Build, exe: anytype, shouldDebugLog: bool) !void {
     }
 }
 
-// ex usage: buildVKShaders(b, exe, "oceanshader", "vert");
-// will compile "shaders/oceanshader.vert" to "shaders/compiled/oceanshader-vert.spv"
-fn buildVKShader(b: *std.Build, exe: anytype, shaderName: []const u8, shaderExt: []const u8, shouldDebugLog: bool) !void {
-    var inFileName = ArrayList(u8).init(b.allocator);
-    try inFileName.appendSlice(shaderName);
-    try inFileName.appendSlice(".");
-    try inFileName.appendSlice(shaderExt);
-
-    const compiledExt = ".spv";
-    var outFileName = ArrayList(u8).init(b.allocator);
-    try outFileName.appendSlice(shaderName);
-    try outFileName.appendSlice("-");
-    try outFileName.appendSlice(shaderExt);
-    try outFileName.appendSlice(compiledExt);
-
-    const relativeIn = try path.join(b.allocator, &[_][]const u8{ shaderDirName, inFileName.items });
-    const relativeOut = try path.join(b.allocator, &[_][]const u8{ compiledShaderDirName, outFileName.items });
-
-    if (shouldDebugLog) {
-        std.debug.print("relative shader path: {s}\n", .{relativeIn});
-        std.debug.print("relative compiled shader path: {s}\n", .{relativeOut});
-    }
-
-    // example glslc usage: glslc -o oceanshader-vert.spv oceanshader.vert
-    const glslc_cmd = b.addSystemCommand(&[_][]const u8{
-        "glslc",
-        "-o",
-        relativeOut,
-        relativeIn,
-    });
-    exe.step.dependOn(&glslc_cmd.step);
-}
-
 const BuildConfig = struct {
     VulkanPath: []u8,
     VerboseBuild: bool,
@@ -212,9 +179,11 @@ pub fn build(b: *std.Build) !void {
             "Any build config json files in root will be ignored by git tracking.",
     ) orelse "DefaultBuildConfig.json";
     const buildConfig = try LoadBuildConfig(b, buildConfigFileName);
-
-    const isDebug = std.mem.eql(u8, buildConfig.OptimizationMode, "Debug");
-    const optimizationMode = b.standardOptimizeOption(.{});
+    const optimizationMode = std.meta.stringToEnum(
+        std.builtin.OptimizeMode,
+        buildConfig.OptimizationMode,
+    ) orelse .Debug;
+    std.debug.print("optimizationMode: {any}\n", .{optimizationMode});
     const targetOptions = b.standardTargetOptions(.{});
     const exe = b.addExecutable(.{
         .name = "sdl-zig-demo",
@@ -301,12 +270,12 @@ pub fn build(b: *std.Build) !void {
 
     exe.addIncludePath(b.path("dependency/assimp/include"));
     exe.linkSystemLibrary("assimp-vc142-mt");
-    if (isDebug) {
+    if (optimizationMode == .Debug) {
         exe.addLibraryPath(b.path("dependency/assimp/lib/RelWithDebInfo"));
     } else {
         exe.addLibraryPath(b.path("dependency/assimp/lib/Release"));
     }
-    const assimpDllPath = if (isDebug) &[_][]const u8{
+    const assimpDllPath = if (optimizationMode == .Debug) &[_][]const u8{
         "dependency",
         "assimp",
         "bin",

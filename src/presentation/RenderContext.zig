@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
@@ -476,17 +477,32 @@ fn CreateVkInstance(
     defer allocator.free(extensionNames);
     _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast(extensionNames.ptr));
 
-    try CheckValidationLayerSupport(allocator);
-    const instanceInfo = c.VkInstanceCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pApplicationInfo = &appInfo,
-        .enabledLayerCount = @intCast(validationLayers.len),
-        .ppEnabledLayerNames = @ptrCast(validationLayers[0..].ptr),
-        .enabledExtensionCount = @intCast(extensionNames.len),
-        .ppEnabledExtensionNames = extensionNames.ptr,
-        .flags = 0,
-        .pNext = null,
-    };
+    if (builtin.mode == .Debug) {
+        try CheckValidationLayerSupport(allocator);
+    }
+
+    const instanceInfo = if (builtin.mode == .Debug)
+        c.VkInstanceCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pApplicationInfo = &appInfo,
+            .enabledLayerCount = @intCast(validationLayers.len),
+            .ppEnabledLayerNames = @ptrCast(validationLayers[0..].ptr),
+            .enabledExtensionCount = @intCast(extensionNames.len),
+            .ppEnabledExtensionNames = extensionNames.ptr,
+            .flags = 0,
+            .pNext = null,
+        }
+    else
+        c.VkInstanceCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pApplicationInfo = &appInfo,
+            .enabledLayerCount = 0,
+            .ppEnabledLayerNames = null,
+            .enabledExtensionCount = @intCast(extensionNames.len),
+            .ppEnabledExtensionNames = extensionNames.ptr,
+            .flags = 0,
+            .pNext = null,
+        };
 
     const logLayersAndExtensions = true;
     if (logLayersAndExtensions) {
@@ -495,9 +511,11 @@ fn CreateVkInstance(
             std.debug.print(" {s}\n", .{extName});
         }
 
-        std.debug.print("Enabled Validation Layers:\n", .{});
-        for (validationLayers) |layerName| {
-            std.debug.print(" {s}\n", .{layerName});
+        if (builtin.mode == .Debug) {
+            std.debug.print("Enabled Validation Layers:\n", .{});
+            for (validationLayers) |layerName| {
+                std.debug.print(" {s}\n", .{layerName});
+            }
         }
     }
 
@@ -508,7 +526,6 @@ fn CreateVkInstance(
     );
 }
 
-//TODO pass in a list of required/enabled extensions
 fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
     const rContext = try RenderContext.GetInstance();
     var deviceCount: u32 = 0;

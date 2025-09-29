@@ -6,6 +6,7 @@ const time = std.time;
 const gameWorld = @import("game/GameWorld.zig");
 
 const presentation = @import("presentation/Presentation.zig");
+const editor = @import("presentation/Editor.zig");
 const RenderContext = @import("presentation/RenderContext.zig").RenderContext;
 const sdlInit = @import("presentation/SDLInit.zig");
 
@@ -35,8 +36,9 @@ pub fn main() !void {
         debug.print("Failed to load test image {s}\n", .{testImagePath});
     }
 
-    //presentation.Initialize(renderer);
     gameWorld.Initialize();
+
+    try editor.Initialize();
 
     frameTimer = try time.Timer.start();
     try MainGameLoop(window);
@@ -99,8 +101,10 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
             c.ImGui_ImplVulkan_NewFrame();
             c.ImGui_ImplSDL2_NewFrame();
 
+            try editor.UpdateCameraMovement(deltaT, rawDeltaNs);
+
             c.igNewFrame();
-            try presentation.ImguiFrame(deltaT, rawDeltaNs);
+            try editor.Draw(deltaT, rawDeltaNs);
             c.igRender(); // does not actually draw, drawing happens in RenderFrame()
 
             try presentation.RenderFrame(deltaT);

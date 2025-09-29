@@ -15,6 +15,7 @@ const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Quat = @import("../math/Quat.zig").Quat;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec4 = @import("../math/Vec4.zig").Vec4;
+const ColorRGBA = @import("../math/ColorRGBA.zig");
 
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const Buffer = @import("Buffer.zig").Buffer;
@@ -98,126 +99,12 @@ pub fn Shutdown() void {
     rContext.Shutdown();
 }
 
-// TODO remove time params, make them accessible elsewhere
-pub fn ImguiFrame(deltaT: f32, rawDeltaNs: u64) !void {
-    //_ = c.igShowDemoWindow(null);
-
-    var camera = try sceneInit.GetCurrentScene().GetCurrentCamera();
-    _ = c.igBegin("My Editor Window", null, c.ImGuiWindowFlags_None);
-    _ = c.igText(
-        "Actual FPS: %.1f, Uncapped FPS: %.1f",
-        1.0 / deltaT,
-        @as(f32, @floatFromInt(std.time.ns_per_s)) / @as(f32, @floatFromInt(rawDeltaNs)),
-    );
-
-    _ = c.igText("Camera Pos: (%.2f, %.2f, %.2f)", camera.m_pos.x, camera.m_pos.y, camera.m_pos.z);
-    c.igSetNextItemWidth(150.0);
-    _ = c.igSliderFloat("Camera Speed", &movespeed, 1.0, 75.0, "%.2f", c.ImGuiSliderFlags_None);
-    _ = c.igColorEdit4("Monkey Color", @ptrCast(&sceneInit.shaderColor), c.ImGuiColorEditFlags_None);
-
-    const cameraEulers = camera.m_rotation.GetEulerAngles();
-    _ = c.igText(
-        "Camera (Pitch, Yaw, Roll): (%.2f, %.2f, %.2f)",
-        cameraEulers.x * std.math.deg_per_rad,
-        cameraEulers.y * std.math.deg_per_rad,
-        cameraEulers.z * std.math.deg_per_rad,
-    );
-    _ = c.igText(
-        "Camera Quat: (x:%.3f, y:%.3f, z:%.3f, w:%.3f)",
-        camera.m_rotation.x,
-        camera.m_rotation.y,
-        camera.m_rotation.z,
-        camera.m_rotation.w,
-    );
-    if (c.igButton("Update Debug Frustum", c.ImVec2{ .x = 150.0, .y = 40.0 })) {
-        try UpdateFrustumDraw();
-    }
-
-    _ = c.igText("Draw Stats:");
-    _ = c.igText("Batches: %d", drawStats.m_batches);
-    _ = c.igText("Renderables Drawn: %d", drawStats.m_renderablesDrawn);
-    _ = c.igText("Total Renderables in Scene: %d", drawStats.m_renderablesInScene);
-    _ = c.igText("Total Debug Lines: %d", DebugDraw.debugLines.items.len);
-    _ = c.igText("Total Debug Circles: %d", DebugDraw.debugCircles.items.len);
-    c.igEnd();
-}
-
-//TODO delete
-const ColorRGBA = Color.ColorRGBA;
-var cameraForwardLine: ?*DebugDraw.DebugLine = null;
-var cameraDebugLines = [_]?*DebugDraw.DebugLine{null} ** 6;
-var cameraDebugCircles = [_]?*DebugDraw.DebugCircle{null} ** 6;
-fn UpdateFrustumDraw() !void {
-    const currentScene = sceneInit.GetCurrentScene();
-    const currentCamera = try currentScene.GetCurrentCamera();
-    const frustumData = currentCamera.GetFrustumData();
-
-    const forwardOffsetPos = currentCamera.m_pos.Add(currentCamera.m_rotation.GetForwardVec().Negate().GetScaled(15));
-
-    if (cameraForwardLine) |forwardLine| {
-        forwardLine.m_lines[0] = currentCamera.m_pos;
-        forwardLine.m_lines[1] = forwardOffsetPos;
-    } else {
-        cameraForwardLine = try DebugDraw.CreateDebugLine(
-            currentCamera.m_pos,
-            forwardOffsetPos,
-            ColorRGBA.presets.Yellow,
-        );
-    }
-
-    for (frustumData.m_planes, 0..) |plane, i| {
-        const planeFace: Camera.FrustumData.FrustumPlane = @enumFromInt(i);
-        debug.print("{any}\n", .{planeFace});
-        plane.m_origin.DebugLog("origin");
-        debug.print("\n", .{});
-        plane.m_normal.DebugLog("normal");
-        debug.print("\n", .{});
-
-        const offsetOnPlane = plane.ProjectToPlane(forwardOffsetPos);
-
-        if (cameraDebugCircles[i]) |cameraDebugCircle| {
-            cameraDebugCircle.m_pos = offsetOnPlane;
-            cameraDebugCircle.m_upDir = plane.m_normal;
-        } else {
-            const debugColor = switch (planeFace) {
-                .Near => ColorRGBA.presets.Blue,
-                .Right => ColorRGBA.presets.Red,
-                .Top => ColorRGBA.presets.Green,
-                .Far, .Left, .Bottom => ColorRGBA.presets.White,
-            };
-            cameraDebugCircles[i] = try DebugDraw.CreateDebugCircle(
-                offsetOnPlane,
-                plane.m_normal,
-                3,
-                debugColor,
-            );
-        }
-
-        if (cameraDebugLines[i]) |cameraDebugLine| {
-            cameraDebugLine.m_lines[0] = offsetOnPlane;
-            cameraDebugLine.m_lines[1] = offsetOnPlane.Add(plane.m_normal.GetScaled(5.0));
-        } else {
-            const debugColor = switch (planeFace) {
-                .Near => ColorRGBA.presets.Blue,
-                .Right => ColorRGBA.presets.Red,
-                .Top => ColorRGBA.presets.Green,
-                .Far, .Left, .Bottom => ColorRGBA.presets.White,
-            };
-            cameraDebugLines[i] = try DebugDraw.CreateDebugLine(
-                offsetOnPlane,
-                offsetOnPlane.Add(plane.m_normal.GetScaled(5.0)),
-                debugColor,
-            );
-        }
-    }
-}
-
-const DrawStats = struct {
+pub const DrawStats = struct {
     m_batches: u32 = 0,
     m_renderablesDrawn: u32 = 0,
     m_renderablesInScene: u32 = 0,
 };
-var drawStats = DrawStats{};
+pub var drawStats = DrawStats{};
 pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrame = rContext.GetCurrentFrame();
@@ -507,75 +394,12 @@ fn AllocateMaterialDescriptorSets(dAllocator: *DescriptorAllocator) !void {
     }
 }
 
-//TODO temp function for camera movement
-const degPerPixel: f32 = 0.25;
-var movespeed: f32 = 20.0;
-var rMouseButtonHeld = false;
-var prevMouseX: i32 = 0;
-var prevMouseY: i32 = 0;
-fn UpdateCameraMovement(deltaTime: f32) !void {
-    var relativeMouseX: i32 = 0;
-    var relativeMouseY: i32 = 0;
-    const mouseState = c.SDL_GetMouseState(&relativeMouseX, &relativeMouseY);
-    if (mouseState & c.SDL_BUTTON_RMASK != 0) {
-        if (!rMouseButtonHeld) {
-            // start tracking mouse pos on frame 0, update rotation on subsequent frames
-            rMouseButtonHeld = true;
-        } else {
-            const deltaMouseX = relativeMouseX - prevMouseX;
-            const deltaMouseY = relativeMouseY - prevMouseY;
-            var camera = try sceneInit.GetCurrentScene().GetCurrentCamera();
-            const deltaYaw = @as(f32, @floatFromInt(deltaMouseX)) * degPerPixel * std.math.rad_per_deg;
-            const deltaPitch = @as(f32, @floatFromInt(deltaMouseY)) * degPerPixel * std.math.rad_per_deg;
-            const cameraEulers = camera.m_rotation.GetEulerAngles();
-            camera.m_rotation = Quat.FromEulerAngles(cameraEulers.y - deltaYaw, cameraEulers.x - deltaPitch, 0.0);
-
-            var movementVec = Vec3.zero;
-            if (input.GetKeyState(c.SDL_SCANCODE_W, null)) {
-                movementVec.z -= 1.0; //why is +Z not forward?
-            }
-            if (input.GetKeyState(c.SDL_SCANCODE_S, null)) {
-                movementVec.z += 1.0;
-            }
-
-            if (input.GetKeyState(c.SDL_SCANCODE_D, null)) {
-                movementVec.x += 1.0;
-            }
-            if (input.GetKeyState(c.SDL_SCANCODE_A, null)) {
-                movementVec.x -= 1.0;
-            }
-
-            if (input.GetKeyState(c.SDL_SCANCODE_E, null)) {
-                movementVec.y += 1.0;
-            }
-            if (input.GetKeyState(c.SDL_SCANCODE_Q, null)) {
-                movementVec.y -= 1.0;
-            }
-
-            if (!movementVec.Equals(Vec3.zero)) {
-                movementVec.NormalizeSelf();
-                movementVec.ScaleSelf(movespeed * deltaTime);
-            }
-
-            camera.m_pos = camera.m_pos.Add(camera.m_rotation.Rotate(movementVec));
-        }
-
-        prevMouseX = relativeMouseX;
-        prevMouseY = relativeMouseY;
-    } else {
-        rMouseButtonHeld = false;
-    }
-}
-
 pub fn RenderFrame(deltaTime: f32) !void {
     const swapchainAllocator = std.heap.page_allocator;
 
     curTime += deltaTime;
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
-
-    //TODO move input logic
-    try UpdateCameraMovement(deltaTime);
 
     // 1sec = 1e9 nanoseconds
     const timeoutns = 1000000000;

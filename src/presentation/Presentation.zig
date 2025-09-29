@@ -11,11 +11,11 @@ const input = @import("../Input.zig");
 const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 
 const Color = @import("../math/Color.zig");
+const ColorRGBA = Color.ColorRGBA;
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Quat = @import("../math/Quat.zig").Quat;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec4 = @import("../math/Vec4.zig").Vec4;
-const ColorRGBA = @import("../math/ColorRGBA.zig");
 
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const Buffer = @import("Buffer.zig").Buffer;

@@ -101,7 +101,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
             c.ImGui_ImplVulkan_NewFrame();
             c.ImGui_ImplSDL2_NewFrame();
 
-            try editor.UpdateCameraMovement(deltaT, rawDeltaNs);
+            try editor.UpdateCameraMovement(deltaT);
 
             c.igNewFrame();
             try editor.Draw(deltaT, rawDeltaNs);

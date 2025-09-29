@@ -1,7 +1,7 @@
 const c = @import("../c.zig");
 const sceneInit = @import("SceneInit.zig");
 const std = @import("std");
-const drawStats = @import("Presentation.zig").drawStats;
+const presentation = @import("Presentation.zig");
 const DebugDraw = @import("DebugDraw.zig");
 const input = @import("../Input.zig");
 
@@ -9,10 +9,10 @@ const Quat = @import("../math/Quat.zig").Quat;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 
 pub fn Initialize() !void {
-    c.igGetIO().ConfigFlags |= c.ImGuiConfigFlags_DockingEnabled;
+    c.igGetIO_Nil().*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
 }
 
-pub fn Draw(deltaT: f32, rawDeltaNs: f32) !void {
+pub fn Draw(deltaT: f32, rawDeltaNs: u64) !void {
     var camera = try sceneInit.GetCurrentScene().GetCurrentCamera();
     _ = c.igBegin("My Editor Window", null, c.ImGuiWindowFlags_None);
     _ = c.igText(
@@ -42,9 +42,9 @@ pub fn Draw(deltaT: f32, rawDeltaNs: f32) !void {
     );
 
     _ = c.igText("Draw Stats:");
-    _ = c.igText("Batches: %d", drawStats.m_batches);
-    _ = c.igText("Renderables Drawn: %d", drawStats.m_renderablesDrawn);
-    _ = c.igText("Total Renderables in Scene: %d", drawStats.m_renderablesInScene);
+    _ = c.igText("Batches: %d", presentation.drawStats.m_batches);
+    _ = c.igText("Renderables Drawn: %d", presentation.drawStats.m_renderablesDrawn);
+    _ = c.igText("Total Renderables in Scene: %d", presentation.drawStats.m_renderablesInScene);
     _ = c.igText("Total Debug Lines: %d", DebugDraw.debugLines.items.len);
     _ = c.igText("Total Debug Circles: %d", DebugDraw.debugCircles.items.len);
     c.igEnd();

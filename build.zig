@@ -5,57 +5,6 @@ const path = fs.path;
 
 const filePathUtils = @import("src/coreutil/FilePathUtils.zig");
 
-fn deleteOldDll(dllNameExt: []const u8) !void {
-    // delete existing dll if it's there
-    const workingDir = fs.cwd();
-    var binDir = try workingDir.openDir("zig-out", .{});
-    binDir = try binDir.openDir("bin", .{});
-    try binDir.deleteFile(dllNameExt);
-}
-
-fn openDllSrcDir(dllDir: []const []const u8) !fs.Dir {
-    var srcPath = fs.cwd();
-    for (dllDir) |dir| {
-        srcPath = try srcPath.openDir(dir, .{});
-    }
-    return srcPath;
-}
-
-fn openDllDstDir() !fs.Dir {
-    const workingDir = fs.cwd();
-    var dstPath = try workingDir.openDir("zig-out", .{});
-    dstPath = try dstPath.openDir("bin", .{});
-    return dstPath;
-}
-
-// Copy files to zig-out/bin
-fn copyDllToBin(allocator: std.mem.Allocator, dllDir: []const []const u8, dllName: []const u8) !void {
-    var dllNameExt = ArrayList(u8).init(allocator);
-    try dllNameExt.appendSlice(dllName);
-    try dllNameExt.appendSlice(".dll");
-
-    deleteOldDll(dllNameExt.items) catch {
-        // make dir if it doesn't exist
-        const workingDir = fs.cwd();
-        workingDir.makeDir("zig-out") catch {}; // may already exist
-        var cacheDir = try workingDir.openDir("zig-out", .{});
-        cacheDir.makeDir("bin") catch {}; // may already exist
-    };
-
-    const srcPath = openDllSrcDir(dllDir) catch |e| {
-        std.debug.print("Unable to resolve src path\n", .{});
-        return e;
-    };
-    const dstPath = openDllDstDir() catch |e| {
-        std.debug.print("Unable to resolve dst path\n", .{});
-        return e;
-    };
-    srcPath.copyFile(dllNameExt.items, dstPath, dllNameExt.items, .{}) catch |e| {
-        std.debug.print("Unable to copy file from {} to {}\n", .{ srcPath, dstPath });
-        return e;
-    };
-}
-
 const ShaderCleanError = error{
     Delete,
     Remake,
@@ -187,53 +136,96 @@ pub fn build(b: *std.Build) !void {
     const targetOptions = b.standardTargetOptions(.{});
     const exe = b.addExecutable(.{
         .name = "sdl-zig-demo",
-        .root_source_file = b.path("src/main.zig"),
-        .optimize = optimizationMode,
-        .target = targetOptions,
+        .version = std.SemanticVersion{ .major = 0, .minor = 1, .patch = 0 },
+        .root_module = b.addModule(
+            "root_module",
+            std.Build.Module.CreateOptions{
+                .root_source_file = b.path("src/main.zig"),
+                .optimize = optimizationMode,
+                .target = targetOptions,
+            },
+        ),
     });
 
     exe.setVerboseLink(buildConfig.VerboseBuild);
     exe.setVerboseCC(buildConfig.VerboseBuild);
 
-    exe.addIncludePath(b.path("dependency"));
+    exe.root_module.addIncludePath(b.path("dependency"));
+    exe.root_module.addIncludePath(b.path("src"));
+    exe.root_module.link_libc = true;
+    exe.root_module.link_libcpp = true;
+    exe.root_module.linkSystemLibrary("user32", .{});
+    exe.root_module.linkSystemLibrary("gdi32", .{});
 
-    exe.linkSystemLibrary("c");
-
+    // --- VULKAN START ---
     const vulkanRootPath = try GetVulkanRootPathAlloc(b, &buildConfig);
     defer b.allocator.free(vulkanRootPath);
     std.debug.print("Chosen Vulkan dir:\n{s}\n", .{vulkanRootPath});
 
+    const vulkan_lib = b.addLibrary(.{
+        .name = "Vulkan",
+        .root_module = b.addModule(
+            "Vulkan_root_module",
+            .{
+                .optimize = optimizationMode,
+                .target = targetOptions,
+            },
+        ),
+    });
+
     const vulkanPathLib = try std.fmt.allocPrint(b.allocator, "{s}/Lib", .{vulkanRootPath});
-    exe.addLibraryPath(.{
+    vulkan_lib.root_module.addLibraryPath(.{
         .cwd_relative = vulkanPathLib,
     });
-    exe.linkSystemLibrary("vulkan-1");
-
     const vulkanPathInclude = try std.fmt.allocPrint(b.allocator, "{s}/Include", .{vulkanRootPath});
-    exe.addIncludePath(.{
+    vulkan_lib.root_module.addIncludePath(.{
         .cwd_relative = vulkanPathInclude,
     });
+    vulkan_lib.root_module.linkSystemLibrary("vulkan-1", .{});
+    exe.linkLibrary(vulkan_lib);
+    b.installArtifact(vulkan_lib);
+    // --- VULKAN END ---
 
-    exe.addIncludePath(b.path("src"));
-
-    exe.addIncludePath(b.path("dependency/SDL2/include"));
-    exe.addLibraryPath(b.path("dependency/SDL2/lib/x64"));
-    exe.linkSystemLibrary("SDL2");
-
-    // imgui
-    const imgui_lib = b.addStaticLibrary(.{
-        .name = "cimgui",
-        .target = targetOptions,
-        .optimize = optimizationMode,
+    // --- SDL START ---
+    const sdl2_lib = b.addLibrary(.{
+        .name = "SDL2",
+        .linkage = .dynamic,
+        .root_module = b.addModule(
+            "SDL2_root_module",
+            .{
+                .optimize = optimizationMode,
+                .target = targetOptions,
+            },
+        ),
     });
-    imgui_lib.addIncludePath(b.path("dependency/cimgui/"));
-    imgui_lib.addIncludePath(b.path("dependency/cimgui/imgui/"));
-    imgui_lib.addIncludePath(b.path("dependency/cimgui/imgui/backends/"));
-    imgui_lib.addIncludePath(b.path("dependency/SDL2/include/"));
-    imgui_lib.linkLibC();
-    imgui_lib.linkLibCpp();
-    imgui_lib.linkSystemLibrary("vulkan-1");
-    imgui_lib.addCSourceFiles(.{
+    sdl2_lib.root_module.addIncludePath(b.path("dependency/SDL2/include"));
+    sdl2_lib.root_module.addLibraryPath(b.path("dependency/SDL2/lib/x64"));
+    sdl2_lib.root_module.linkSystemLibrary("SDL2", .{});
+
+    exe.linkLibrary(sdl2_lib);
+    b.installArtifact(sdl2_lib);
+    // --- SDL END ---
+
+    // --- IMGUI START ---
+    const imgui_lib = b.addLibrary(.{
+        .name = "cimgui",
+        .linkage = .static,
+        .root_module = b.addModule(
+            "ImGui_root_module",
+            .{
+                .optimize = optimizationMode,
+                .target = targetOptions,
+            },
+        ),
+    });
+    imgui_lib.root_module.addIncludePath(b.path("dependency/cimgui/"));
+    imgui_lib.root_module.addIncludePath(b.path("dependency/cimgui/imgui/"));
+    imgui_lib.root_module.addIncludePath(b.path("dependency/cimgui/imgui/backends/"));
+    imgui_lib.root_module.addIncludePath(b.path("dependency/SDL2/include/"));
+    imgui_lib.root_module.link_libc = true;
+    imgui_lib.root_module.link_libcpp = true;
+    imgui_lib.root_module.linkLibrary(vulkan_lib);
+    imgui_lib.root_module.addCSourceFiles(.{
         .files = &.{
             "dependency/cimgui/cimgui.cpp",
             "dependency/cimgui/cimgui_impl.cpp",
@@ -257,41 +249,34 @@ pub fn build(b: *std.Build) !void {
             "-Wno-pragma-pack",
         },
     });
-    imgui_lib.addLibraryPath(.{ .cwd_relative = vulkanPathLib });
-    imgui_lib.addIncludePath(.{ .cwd_relative = vulkanPathInclude });
+    imgui_lib.root_module.addLibraryPath(.{ .cwd_relative = vulkanPathLib });
+    imgui_lib.root_module.addIncludePath(.{ .cwd_relative = vulkanPathInclude });
+
     exe.linkLibrary(imgui_lib);
+    // --- IMGUI END ---
 
-    //TODO this might be automatic now with newer zig? (0.13.0+)
-    const sdl2DllPath = &[_][]const u8{ "dependency", "SDL2", "lib", "x64" };
-    copyDllToBin(b.allocator, sdl2DllPath, "SDL2") catch |e| {
-        std.debug.print("Could not copy SDL2.dll, {}\n", .{e});
-        @panic("Build failure.");
-    };
-
-    exe.addIncludePath(b.path("dependency/assimp/include"));
-    exe.linkSystemLibrary("assimp-vc142-mt");
+    // --- ASSIMP START ---
+    const assimp_lib = b.addLibrary(.{
+        .name = "AssImp",
+        .linkage = .dynamic,
+        .root_module = b.createModule(
+            .{
+                .optimize = optimizationMode,
+                .target = targetOptions,
+            },
+        ),
+    });
+    assimp_lib.root_module.addIncludePath(b.path("dependency/assimp/include"));
     if (optimizationMode == .Debug) {
-        exe.addLibraryPath(b.path("dependency/assimp/lib/RelWithDebInfo"));
+        assimp_lib.root_module.addLibraryPath(b.path("dependency/assimp/lib/RelWithDebInfo"));
     } else {
-        exe.addLibraryPath(b.path("dependency/assimp/lib/Release"));
+        assimp_lib.root_module.addLibraryPath(b.path("dependency/assimp/lib/Release"));
     }
-    const assimpDllPath = if (optimizationMode == .Debug) &[_][]const u8{
-        "dependency",
-        "assimp",
-        "bin",
-        "RelWithDebInfo",
-    } else &[_][]const u8{
-        "dependency",
-        "assimp",
-        "bin",
-        "Release",
-    };
+    exe.root_module.linkLibrary(assimp_lib);
+    b.installArtifact(assimp_lib);
+    // --- ASSIMP END ---
 
-    copyDllToBin(b.allocator, assimpDllPath, "assimp-vc142-mt") catch |e| {
-        std.debug.print("Could not copy assimp-vc142-mt.dll, {}\n", .{e});
-        @panic("Build failure.");
-    };
-
+    // --- STB START ---
     exe.addIncludePath(b.path("dependency/stb"));
     const stb_flags = &[_][]const u8{
         "-std=c17",
@@ -300,21 +285,18 @@ pub fn build(b: *std.Build) !void {
         .file = b.path("dependency/stb/stb_image_impl.c"),
         .flags = stb_flags,
     });
+    // --- STB END ---
 
+    // --- VMA START ---
     exe.addIncludePath(b.path("dependency/vma"));
     const vma_flags = &[_][]const u8{};
     exe.addCSourceFile(.{
         .file = b.path("dependency/vma/vk_mem_alloc.cpp"),
         .flags = vma_flags,
     });
+    // --- VMA END ---
 
-    exe.linkSystemLibrary("user32");
-    exe.linkSystemLibrary("gdi32");
-
-    exe.linkLibCpp();
-
-    b.installArtifact(exe);
-
+    // --- TESTS BEGIN ---
     const test_files = [_][]const u8{
         "src/math/Math.zig",
     };
@@ -329,6 +311,9 @@ pub fn build(b: *std.Build) !void {
         const run_test = b.addRunArtifact(test_artifact);
         test_step.dependOn(&run_test.step);
     }
+    // --- TESTS END ---
+
+    b.installArtifact(exe);
 
     const run_exe_cmd = b.addRunArtifact(exe);
     run_exe_cmd.step.dependOn(b.getInstallStep());

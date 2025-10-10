@@ -7,9 +7,30 @@ const input = @import("../Input.zig");
 
 const Quat = @import("../math/Quat.zig").Quat;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
+const Vec2 = @import("../math/Vec2.zig").Vec2;
 
 pub fn Initialize() !void {
     c.igGetIO_Nil().*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
+}
+
+pub fn DrawInspector() void {
+    var windowSize = c.ImVec2{ .x = 0.0, .y = 0.0 };
+    c.igGetContentRegionAvail(&windowSize);
+    c.igSetNextWindowPos(
+        c.ImVec2{ .x = 0.0, .y = 0.0 },
+        c.ImGuiCond_None,
+        c.ImVec2{ .x = 0.0, .y = 0.0 },
+    );
+    c.igSetNextWindowSize(
+        c.ImVec2{ .x = 200.0, .y = windowSize.y },
+        c.ImGuiCond_None,
+    );
+
+    if (c.igBegin("Left Dock?", null, c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove)) {
+        _ = c.igText("Stuff goes here.");
+    }
+
+    c.igEnd();
 }
 
 pub fn Draw(deltaT: f32, rawDeltaNs: u64) !void {
@@ -48,6 +69,8 @@ pub fn Draw(deltaT: f32, rawDeltaNs: u64) !void {
     _ = c.igText("Total Debug Lines: %d", DebugDraw.debugLines.items.len);
     _ = c.igText("Total Debug Circles: %d", DebugDraw.debugCircles.items.len);
     c.igEnd();
+
+    DrawInspector();
 }
 
 //TODO temp function for camera movement

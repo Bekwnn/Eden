@@ -161,49 +161,26 @@ pub fn build(b: *std.Build) !void {
     const vulkanRootPath = try GetVulkanRootPathAlloc(b, &buildConfig);
     defer b.allocator.free(vulkanRootPath);
     std.debug.print("Chosen Vulkan dir:\n{s}\n", .{vulkanRootPath});
-
-    const vulkan_lib = b.addLibrary(.{
-        .name = "Vulkan",
-        .root_module = b.addModule(
-            "Vulkan_root_module",
-            .{
-                .optimize = optimizationMode,
-                .target = targetOptions,
-            },
-        ),
-    });
-
     const vulkanPathLib = try std.fmt.allocPrint(b.allocator, "{s}/Lib", .{vulkanRootPath});
-    vulkan_lib.root_module.addLibraryPath(.{
+    exe.root_module.addLibraryPath(.{
         .cwd_relative = vulkanPathLib,
     });
     const vulkanPathInclude = try std.fmt.allocPrint(b.allocator, "{s}/Include", .{vulkanRootPath});
-    vulkan_lib.root_module.addIncludePath(.{
+    exe.root_module.addIncludePath(.{
         .cwd_relative = vulkanPathInclude,
     });
-    vulkan_lib.root_module.linkSystemLibrary("vulkan-1", .{});
-    exe.linkLibrary(vulkan_lib);
-    b.installArtifact(vulkan_lib);
+    exe.root_module.linkSystemLibrary("vulkan-1", .{});
     // --- VULKAN END ---
 
-    // --- SDL START ---
-    const sdl2_lib = b.addLibrary(.{
-        .name = "SDL2",
-        .linkage = .dynamic,
-        .root_module = b.addModule(
-            "SDL2_root_module",
-            .{
-                .optimize = optimizationMode,
-                .target = targetOptions,
-            },
-        ),
-    });
-    sdl2_lib.root_module.addIncludePath(b.path("dependency/SDL2/include"));
-    sdl2_lib.root_module.addLibraryPath(b.path("dependency/SDL2/lib/x64"));
-    sdl2_lib.root_module.linkSystemLibrary("SDL2", .{});
+    // copies dlls to the build cache, which then get copied to the output.
+    // Allows the copying process to be cached.
+    const dll_wfs = b.addNamedWriteFiles("dll-copying");
 
-    exe.linkLibrary(sdl2_lib);
-    b.installArtifact(sdl2_lib);
+    // --- SDL START ---
+    _ = dll_wfs.addCopyFile(b.path("dependency/SDL2/lib/x64/SDL2.dll"), "SDL2.dll");
+    exe.root_module.addIncludePath(b.path("dependency/SDL2/include"));
+    exe.root_module.addLibraryPath(b.path("dependency/SDL2/lib/x64"));
+    exe.root_module.linkSystemLibrary("SDL2", .{});
     // --- SDL END ---
 
     // --- IMGUI START ---
@@ -224,7 +201,7 @@ pub fn build(b: *std.Build) !void {
     imgui_lib.root_module.addIncludePath(b.path("dependency/SDL2/include/"));
     imgui_lib.root_module.link_libc = true;
     imgui_lib.root_module.link_libcpp = true;
-    imgui_lib.root_module.linkLibrary(vulkan_lib);
+    imgui_lib.root_module.linkSystemLibrary("vulkan-1", .{});
     imgui_lib.root_module.addCSourceFiles(.{
         .files = &.{
             "dependency/cimgui/cimgui.cpp",
@@ -251,29 +228,21 @@ pub fn build(b: *std.Build) !void {
     });
     imgui_lib.root_module.addLibraryPath(.{ .cwd_relative = vulkanPathLib });
     imgui_lib.root_module.addIncludePath(.{ .cwd_relative = vulkanPathInclude });
-
     exe.linkLibrary(imgui_lib);
     // --- IMGUI END ---
 
     // --- ASSIMP START ---
-    const assimp_lib = b.addLibrary(.{
-        .name = "AssImp",
-        .linkage = .dynamic,
-        .root_module = b.createModule(
-            .{
-                .optimize = optimizationMode,
-                .target = targetOptions,
-            },
-        ),
-    });
-    assimp_lib.root_module.addIncludePath(b.path("dependency/assimp/include"));
-    if (optimizationMode == .Debug) {
-        assimp_lib.root_module.addLibraryPath(b.path("dependency/assimp/lib/RelWithDebInfo"));
-    } else {
-        assimp_lib.root_module.addLibraryPath(b.path("dependency/assimp/lib/Release"));
-    }
-    exe.root_module.linkLibrary(assimp_lib);
-    b.installArtifact(assimp_lib);
+    _ = dll_wfs.addCopyFile(
+        b.path("dependency/assimp/lib/assimp-vc142-mt.dll"),
+        "assimp-vc142-mt.dll",
+    );
+    const assimp_lib_path = switch (optimizationMode) {
+        .Debug => b.path("dependency/assimp/lib/Release/"),
+        else => b.path("dependency/assimp/lib/RelWithDebInfo/"),
+    };
+    exe.root_module.addLibraryPath(assimp_lib_path);
+    exe.root_module.addIncludePath(b.path("dependency/assimp/include"));
+    exe.root_module.linkSystemLibrary("assimp-vc142-mt", .{});
     // --- ASSIMP END ---
 
     // --- STB START ---
@@ -313,6 +282,12 @@ pub fn build(b: *std.Build) !void {
     }
     // --- TESTS END ---
 
+    // copy dlls previously copied to the cache to bin
+    b.installDirectory(.{
+        .install_dir = .bin,
+        .source_dir = dll_wfs.getDirectory(),
+        .install_subdir = "",
+    });
     b.installArtifact(exe);
 
     const run_exe_cmd = b.addRunArtifact(exe);

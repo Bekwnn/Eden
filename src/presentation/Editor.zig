@@ -9,31 +9,152 @@ const Quat = @import("../math/Quat.zig").Quat;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec2 = @import("../math/Vec2.zig").Vec2;
 
-pub fn Initialize() !void {
+var mainWindow: ?*c.SDL_Window = null;
+
+// TODO temp vars to setup widths of different docked windows
+// should instead be more container/parent based than this
+//
+// bottom tray and top bar exist first, and the left/right
+// trays + middle viewport lie sandwiched between them
+const leftTrayWidth = 200.0;
+const bottomTrayHeight = 200.0;
+const rightTrayWidth = 300.0;
+const topBarHeight = 50.0;
+const fixedWindowFlags =
+    c.ImGuiWindowFlags_NoResize |
+    c.ImGuiWindowFlags_NoMove |
+    c.ImGuiWindowFlags_NoTitleBar;
+
+pub fn Initialize(window: *c.SDL_Window) !void {
     c.igGetIO_Nil().*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
+    mainWindow = window;
 }
 
-pub fn DrawInspector() void {
-    var windowSize = c.ImVec2{ .x = 0.0, .y = 0.0 };
-    c.igGetContentRegionAvail(&windowSize);
+pub fn GetMainWindow() !*c.SDL_Window {
+    const WindowError = error{MissingWindow};
+    return mainWindow orelse WindowError.MissingWindow;
+}
+
+// right tray
+pub fn DrawSceneInspector() !void {
+    const window: *c.SDL_Window = try GetMainWindow();
+    var winSizeX: c_int = 0;
+    var winSizeY: c_int = 0;
+    c.SDL_GetWindowSize(window, &winSizeX, &winSizeY);
+    c.igSetNextWindowPos(
+        c.ImVec2{ .x = @as(f32, @floatFromInt(winSizeX)) - rightTrayWidth, .y = topBarHeight },
+        c.ImGuiCond_None,
+        c.ImVec2{ .x = 0.0, .y = 0.0 },
+    );
+    c.igSetNextWindowSize(
+        c.ImVec2{ .x = rightTrayWidth, .y = @as(f32, @floatFromInt(winSizeY)) - (topBarHeight + bottomTrayHeight) },
+        c.ImGuiCond_None,
+    );
+
+    if (c.igBegin("Inspector", null, fixedWindowFlags)) {
+        _ = c.igText("Scene View + Object Inspector go here.");
+    }
+
+    c.igEnd();
+}
+
+// left tray
+pub fn DrawGlobalSettings() !void {
+    const window: *c.SDL_Window = try GetMainWindow();
+    var winSizeX: c_int = 0;
+    var winSizeY: c_int = 0;
+    c.SDL_GetWindowSize(window, &winSizeX, &winSizeY);
+    c.igSetNextWindowPos(
+        c.ImVec2{ .x = 0.0, .y = topBarHeight },
+        c.ImGuiCond_None,
+        c.ImVec2{ .x = 0.0, .y = 0.0 },
+    );
+    c.igSetNextWindowSize(
+        c.ImVec2{ .x = leftTrayWidth, .y = @as(f32, @floatFromInt(winSizeY)) - (topBarHeight + bottomTrayHeight) },
+        c.ImGuiCond_None,
+    );
+
+    if (c.igBegin("Global Settings", null, fixedWindowFlags)) {
+        _ = c.igText("Global Settings go here.");
+    }
+
+    c.igEnd();
+}
+
+// top bar: will have menus, play button, and more
+pub fn DrawTopBar() !void {
+    const window: *c.SDL_Window = try GetMainWindow();
+    var winSizeX: c_int = 0;
+    var winSizeY: c_int = 0;
+    c.SDL_GetWindowSize(window, &winSizeX, &winSizeY);
     c.igSetNextWindowPos(
         c.ImVec2{ .x = 0.0, .y = 0.0 },
         c.ImGuiCond_None,
         c.ImVec2{ .x = 0.0, .y = 0.0 },
     );
     c.igSetNextWindowSize(
-        c.ImVec2{ .x = 200.0, .y = windowSize.y },
+        c.ImVec2{ .x = @floatFromInt(winSizeX), .y = topBarHeight },
         c.ImGuiCond_None,
     );
 
-    if (c.igBegin("Left Dock?", null, c.ImGuiWindowFlags_NoResize | c.ImGuiWindowFlags_NoMove)) {
-        _ = c.igText("Stuff goes here.");
+    if (c.igBegin("Top Bar", null, fixedWindowFlags)) {
+        _ = c.igText("Menu + play button goes here.");
     }
 
     c.igEnd();
 }
 
-pub fn Draw(deltaT: f32, rawDeltaNs: u64) !void {
+// bottom tray: will have folder browser + console + more
+pub fn DrawBottomTray() !void {
+    const window: *c.SDL_Window = try GetMainWindow();
+    var winSizeX: c_int = 0;
+    var winSizeY: c_int = 0;
+    c.SDL_GetWindowSize(window, &winSizeX, &winSizeY);
+    c.igSetNextWindowPos(
+        c.ImVec2{ .x = 0.0, .y = @as(f32, @floatFromInt(winSizeY)) - bottomTrayHeight },
+        c.ImGuiCond_None,
+        c.ImVec2{ .x = 0.0, .y = 0.0 },
+    );
+    c.igSetNextWindowSize(
+        c.ImVec2{ .x = @floatFromInt(winSizeX), .y = bottomTrayHeight },
+        c.ImGuiCond_None,
+    );
+
+    if (c.igBegin("Bottom Tray", null, fixedWindowFlags)) {
+        _ = c.igText("Bottom tray stuff goes here.");
+    }
+
+    c.igEnd();
+}
+
+// middle viewport
+pub fn DrawViewport() !void {
+    const window: *c.SDL_Window = try GetMainWindow();
+    var winSizeX: c_int = 0;
+    var winSizeY: c_int = 0;
+    c.SDL_GetWindowSize(window, &winSizeX, &winSizeY);
+    c.igSetNextWindowPos(
+        c.ImVec2{ .x = leftTrayWidth, .y = topBarHeight },
+        c.ImGuiCond_None,
+        c.ImVec2{ .x = 0.0, .y = 0.0 },
+    );
+    c.igSetNextWindowSize(
+        c.ImVec2{
+            .x = @as(f32, @floatFromInt(winSizeX)) - (leftTrayWidth + rightTrayWidth),
+            .y = @as(f32, @floatFromInt(winSizeY)) - (topBarHeight + bottomTrayHeight),
+        },
+        c.ImGuiCond_None,
+    );
+
+    if (c.igBegin("Viewport", null, fixedWindowFlags | c.ImGuiWindowFlags_NoBackground)) {
+        _ = c.igText("Viewport goes here.");
+    }
+
+    c.igEnd();
+}
+
+//TODO delete eventually
+pub fn DrawFloatingDebugWindow(deltaT: f32, rawDeltaNs: u64) !void {
     var camera = try sceneInit.GetCurrentScene().GetCurrentCamera();
     _ = c.igBegin("My Editor Window", null, c.ImGuiWindowFlags_None);
     _ = c.igText(
@@ -69,8 +190,19 @@ pub fn Draw(deltaT: f32, rawDeltaNs: u64) !void {
     _ = c.igText("Total Debug Lines: %d", DebugDraw.debugLines.items.len);
     _ = c.igText("Total Debug Circles: %d", DebugDraw.debugCircles.items.len);
     c.igEnd();
+}
 
-    DrawInspector();
+pub fn Draw(deltaT: f32, rawDeltaNs: u64) !void {
+    _ = deltaT;
+    _ = rawDeltaNs;
+
+    try DrawTopBar();
+    try DrawBottomTray();
+    try DrawSceneInspector();
+    try DrawGlobalSettings();
+    try DrawViewport();
+
+    //try DrawFloatingDebugWindow(deltaT, rawDeltaNs);
 }
 
 //TODO temp function for camera movement

@@ -38,7 +38,7 @@ pub fn main() !void {
 
     gameWorld.Initialize();
 
-    try editor.Initialize();
+    try editor.Initialize(window);
 
     frameTimer = try time.Timer.start();
     try MainGameLoop(window);

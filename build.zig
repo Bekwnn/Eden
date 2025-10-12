@@ -296,6 +296,9 @@ pub fn build(b: *std.Build) !void {
     const run_exe_step = b.step("run", "Run the demo");
     run_exe_step.dependOn(&run_exe_cmd.step);
 
+    //TODO would be nice to make shader building its own separate process and allow
+    // shaders to fail to compile without blocking the build. References to failed
+    // or missing shaders would instead display with a generic error shader.
     const logShaderCompilation = true;
     try cleanCompiledShaders();
     try buildAllShaders(b, exe, logShaderCompilation);

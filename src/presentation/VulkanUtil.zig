@@ -2,7 +2,6 @@ const c = @import("../c.zig");
 const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
 const vkUtil = @import("VulkanUtil.zig");
-const zigUtil = @import("../coreutil/ZigUtil.zig");
 const std = @import("std");
 
 pub const VkError = error{

@@ -3,12 +3,8 @@ const allocator = std.heap.page_allocator;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const AutoHashMap = std.AutoHashMap;
-const debug = std.debug;
 
 const c = @import("../c.zig");
-const input = @import("../Input.zig");
-
-const filePathUtils = @import("../coreutil/FilePathUtils.zig");
 
 const Color = @import("../math/Color.zig");
 const ColorRGBA = Color.ColorRGBA;
@@ -34,11 +30,6 @@ const RenderContext = renderContext.RenderContext;
 const RenderObject = @import("RenderObject.zig").RenderObject;
 const Scene = @import("Scene.zig").Scene;
 const sceneInit = @import("SceneInit.zig");
-const ShaderEffect = @import("ShaderEffect.zig").ShaderEffect;
-const ShaderPass = @import("ShaderPass.zig").ShaderPass;
-const Texture = @import("Texture.zig").Texture;
-const TextureParam = @import("MaterialParam.zig").TextureParam;
-const UniformParam = @import("MaterialParam.zig").UniformParam;
 const vkUtil = @import("VulkanUtil.zig");
 
 //TODO curTime should exist on a global of some kind
@@ -65,12 +56,12 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
     var width: c_int = 0;
     var height: c_int = 0;
     c.SDL_GetWindowSize(window, &width, &height);
-    debug.print("Window resized to {} x {}\n", .{ width, height });
+    std.debug.print("Window resized to {} x {}\n", .{ width, height });
 
     const camera = try sceneInit.GetCurrentScene().GetCurrentCamera();
-    camera.*.m_aspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
+    camera.m_aspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
 
-    try rContext.RecreateSwapchain(allocator);
+    try rContext.m_swapchain.RecreateSwapchain(allocator);
 }
 
 pub fn Initialize(
@@ -431,7 +422,7 @@ pub fn RenderFrame(deltaTime: f32) !void {
         &imageIndex,
     );
     if (acquireImageResult == c.VK_ERROR_OUT_OF_DATE_KHR) {
-        try rContext.RecreateSwapchain(swapchainAllocator); // recreate swapchain and skip this frame
+        try rContext.m_swapchain.RecreateSwapchain(swapchainAllocator); // recreate swapchain and skip this frame
         return;
     } else if (acquireImageResult != c.VK_SUCCESS and acquireImageResult != c.VK_SUBOPTIMAL_KHR) {
         return RenderLoopError.FailedToAcquireNextImage;
@@ -477,9 +468,8 @@ pub fn RenderFrame(deltaTime: f32) !void {
     };
 
     const presentResult = c.vkQueuePresentKHR(rContext.m_presentQueue, &presentInfo);
-    //TODO fix RecreateSwapchain
     if (presentResult == c.VK_ERROR_OUT_OF_DATE_KHR or presentResult == c.VK_SUBOPTIMAL_KHR) {
-        try rContext.RecreateSwapchain(swapchainAllocator);
+        try rContext.m_swapchain.RecreateSwapchain(swapchainAllocator);
     } else if (presentResult != c.VK_SUCCESS) {
         return RenderLoopError.FailedToPresent;
     }

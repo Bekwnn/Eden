@@ -20,10 +20,6 @@ var instance: ?RenderContext = null;
 const engineName = "Eden";
 const engineVersion = c.VK_MAKE_API_VERSION(0, 0, 1, 0);
 
-//TODO
-// all the functions that are outside of the RenderContext struct but are accessing rContext should
-// really just be moved inside the struct and take a (self: *RenderContext)
-
 pub const RenderContextError = error{
     AlreadyInitialized,
     FailedToBeginCommandBuffer,
@@ -50,7 +46,7 @@ pub const RenderContextError = error{
     FailedToResetCommandBuffer,
     FailedToResetFence,
     FailedToWait,
-    MissingValidationLayer,
+    MissingEnabledLayer,
     UninitializedShutdown,
 
     // device with vulkan support detected; does not satisfy properties
@@ -107,6 +103,7 @@ pub const RenderContext = struct {
     //m_debugCallback: c.VkDebugReportCallbackEXT,
 
     m_swapchain: Swapchain = undefined,
+    // TODO should VkRenderPass live here? or in Swapchain? Or its own thing?
     m_renderPass: c.VkRenderPass = undefined,
 
     m_graphicsQueueIdx: ?u32 = null,
@@ -253,13 +250,15 @@ pub const RenderContext = struct {
 
         defer c.vkDestroyDevice(instance.?.m_logicalDevice, null);
 
-        defer self.DestroySwapchain();
+        defer self.m_swapchain.DestroySwapchain();
 
         defer {
             for (&self.m_frameData) |*frameData| {
                 c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_swapchainSemaphore, null);
                 c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_renderSemaphore, null);
                 c.vkDestroyFence(self.m_logicalDevice, frameData.m_renderFence, null);
+
+                frameData.m_descriptorAllocator.deinit(self.m_logicalDevice);
 
                 // destroying the parent pool frees all command buffers allocated with it
                 c.vkDestroyCommandPool(self.m_logicalDevice, frameData.m_commandPool, null);
@@ -284,67 +283,6 @@ pub const RenderContext = struct {
             self.m_logicalDevice,
             self.m_emptyDescriptorSetLayout,
         );
-    }
-
-    //TODO move to swapchain
-    pub fn RecreateSwapchain(self: *RenderContext, allocator: Allocator) !void {
-        try vkUtil.CheckVkSuccess(
-            c.vkDeviceWaitIdle(self.m_logicalDevice),
-            RenderContextError.FailedToWait,
-        );
-
-        std.debug.print("Recreating Swapchain...\n", .{});
-        self.DestroySwapchain();
-
-        self.m_swapchain = try Swapchain.CreateSwapchain(
-            allocator,
-            self.m_logicalDevice,
-            self.m_physicalDevice,
-            self.m_surface,
-            self.m_graphicsQueueIdx.?,
-            self.m_presentQueueIdx.?,
-        );
-        try CreateRenderPass();
-
-        try self.m_swapchain.CreateColorAndDepthResources(
-            self.m_logicalDevice,
-            self.m_msaaSamples,
-        );
-        try self.m_swapchain.CreateFrameBuffers(
-            allocator,
-            self.m_logicalDevice,
-            self.m_renderPass,
-        );
-
-        //TODO check if we really need to recreate command buffers?
-        // maybe they rely on swapchain state?
-        try CreateCommandBuffers();
-    }
-
-    //TODO redo + move to swapchain
-    pub fn DestroySwapchain(self: *RenderContext) void {
-        defer {
-            for (&self.m_frameData) |*frameData| {
-                frameData.m_descriptorAllocator.deinit(self.m_logicalDevice);
-            }
-        }
-
-        defer self.m_swapchain.FreeSwapchain(self.m_logicalDevice);
-
-        defer c.vkDestroyRenderPass(self.m_logicalDevice, self.m_renderPass, null);
-
-        defer self.m_swapchain.CleanupFrameBuffers(self.m_logicalDevice);
-
-        for (&self.m_frameData) |*frameData| {
-            defer c.vkFreeCommandBuffers(
-                self.m_logicalDevice,
-                frameData.m_commandPool,
-                1,
-                &frameData.m_mainCommandBuffer,
-            );
-        }
-
-        defer self.m_swapchain.CleanupDepthAndColorImages(self.m_logicalDevice);
     }
 
     // usage: call BeginImmedaiteSubmit(), record to the command buffer, call FinishImmediateSubmit()
@@ -406,8 +344,8 @@ pub const RenderContext = struct {
     }
 };
 
-const validationLayers = [_][:0]const u8{
-    "VK_LAYER_KHRONOS_validation",
+const enabledLayers = [_][:0]const u8{
+    if (builtin.mode == .Debug) "VK_LAYER_KHRONOS_validation",
 };
 fn CheckValidationLayerSupport(allocator: Allocator) !void {
     var layerCount: u32 = 0;
@@ -422,11 +360,11 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
         RenderContextError.FailedToCheckInstanceLayerProperties,
     );
 
-    for (validationLayers) |validationLayer| {
+    for (enabledLayers) |enabledLayer| {
         var layerFound = false;
 
         for (detectedLayerProperties) |detectedLayer| {
-            const needle: []const u8 = validationLayer;
+            const needle: []const u8 = enabledLayer;
             const haystack: []const u8 = &detectedLayer.layerName;
             if (std.mem.startsWith(u8, haystack, needle)) {
                 layerFound = true;
@@ -435,13 +373,13 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
         }
 
         if (!layerFound) {
-            std.debug.print("Unable to find validation layer \"{s}\"\n", .{validationLayer});
+            std.debug.print("Unable to find enabled layer \"{s}\"\n", .{enabledLayer});
             std.debug.print("Layers found:\n", .{});
             for (detectedLayerProperties) |detectedLayer| {
                 var trailingWhitespaceStripped = std.mem.tokenizeScalar(u8, &detectedLayer.layerName, ' ');
                 std.debug.print("\"{s}\"\n", .{trailingWhitespaceStripped.next().?});
             }
-            return RenderContextError.MissingValidationLayer;
+            return RenderContextError.MissingEnabledLayer;
         }
     }
 }
@@ -481,23 +419,12 @@ fn CreateVkInstance(
         try CheckValidationLayerSupport(allocator);
     }
 
-    const instanceInfo = if (builtin.mode == .Debug)
+    const instanceInfo =
         c.VkInstanceCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             .pApplicationInfo = &appInfo,
-            .enabledLayerCount = @intCast(validationLayers.len),
-            .ppEnabledLayerNames = @ptrCast(validationLayers[0..].ptr),
-            .enabledExtensionCount = @intCast(extensionNames.len),
-            .ppEnabledExtensionNames = extensionNames.ptr,
-            .flags = 0,
-            .pNext = null,
-        }
-    else
-        c.VkInstanceCreateInfo{
-            .sType = c.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-            .pApplicationInfo = &appInfo,
-            .enabledLayerCount = 0,
-            .ppEnabledLayerNames = null,
+            .enabledLayerCount = @intCast(enabledLayers.len),
+            .ppEnabledLayerNames = @ptrCast(enabledLayers[0..].ptr),
             .enabledExtensionCount = @intCast(extensionNames.len),
             .ppEnabledExtensionNames = extensionNames.ptr,
             .flags = 0,
@@ -511,11 +438,9 @@ fn CreateVkInstance(
             std.debug.print(" {s}\n", .{extName});
         }
 
-        if (builtin.mode == .Debug) {
-            std.debug.print("Enabled Validation Layers:\n", .{});
-            for (validationLayers) |layerName| {
-                std.debug.print(" {s}\n", .{layerName});
-            }
+        std.debug.print("Enabled Layers:\n", .{});
+        for (enabledLayers) |layerName| {
+            std.debug.print(" {s}\n", .{layerName});
         }
     }
 
@@ -1047,7 +972,8 @@ fn InitImgui(window: *c.SDL_Window) !void {
     //TODO create cleanup function, destory m_imguiPool
 }
 
-fn CreateRenderPass() !void {
+// Recreated if swapchain is updated
+pub fn CreateRenderPass() !void {
     const rContext = try RenderContext.GetInstance();
     const colorAttachment = c.VkAttachmentDescription{
         .format = rContext.m_swapchain.m_format.format,

@@ -1,6 +1,7 @@
 const c = @import("../c.zig");
 const vkUtil = @import("VulkanUtil.zig");
 const renderContext = @import("RenderContext.zig");
+const RenderContext = renderContext.RenderContext;
 
 const texture = @import("Texture.zig");
 const Texture = texture.Texture;
@@ -148,6 +149,53 @@ pub const Swapchain = struct {
         return newSwapchain;
     }
 
+    pub fn DestroySwapchain(self: *Swapchain) void {
+        const rContext = RenderContext.GetInstance() catch unreachable;
+
+        defer self.FreeSwapchain(rContext.m_logicalDevice);
+
+        // TODO this is awkward
+        defer c.vkDestroyRenderPass(rContext.m_logicalDevice, rContext.m_renderPass, null);
+
+        defer self.CleanupDepthAndColorImages(rContext.m_logicalDevice);
+
+        defer self.CleanupFrameBuffers(rContext.m_logicalDevice);
+    }
+
+    // Call when the swapchain is out of date
+    // Calls DestorySwapchain() then recreates
+    pub fn RecreateSwapchain(self: *Swapchain, allocator: Allocator) !void {
+        std.debug.print("Recreating Swapchain...\n", .{});
+        const rContext = try RenderContext.GetInstance();
+        try vkUtil.CheckVkSuccess(
+            c.vkDeviceWaitIdle(rContext.m_logicalDevice),
+            renderContext.RenderContextError.FailedToWait,
+        );
+
+        self.DestroySwapchain();
+
+        self.* = try Swapchain.CreateSwapchain(
+            allocator,
+            rContext.m_logicalDevice,
+            rContext.m_physicalDevice,
+            rContext.m_surface,
+            rContext.m_graphicsQueueIdx.?,
+            rContext.m_presentQueueIdx.?,
+        );
+        //TODO this is awkward
+        try renderContext.CreateRenderPass();
+
+        try self.CreateColorAndDepthResources(
+            rContext.m_logicalDevice,
+            rContext.m_msaaSamples,
+        );
+        try self.CreateFrameBuffers(
+            allocator,
+            rContext.m_logicalDevice,
+            rContext.m_renderPass,
+        );
+    }
+
     pub fn CreateColorAndDepthResources(
         self: *Swapchain,
         logicalDevice: c.VkDevice,
@@ -178,7 +226,7 @@ pub const Swapchain = struct {
         logicalDevice: c.VkDevice,
         renderPass: c.VkRenderPass,
     ) !void {
-        //CREATE FRAMEBUFFERS START
+        std.debug.print("    Creating frame buffers...\n", .{});
         self.m_frameBuffers = try allocator.alloc(
             c.VkFramebuffer,
             self.m_imageViews.len,
@@ -215,7 +263,7 @@ pub const Swapchain = struct {
         }
     }
 
-    pub fn FreeSwapchain(self: *Swapchain, logicalDevice: c.VkDevice) void {
+    fn FreeSwapchain(self: *Swapchain, logicalDevice: c.VkDevice) void {
         defer c.vkDestroySwapchainKHR(logicalDevice, self.m_swapchain, null);
         defer {
             for (self.m_imageViews) |imageView| {
@@ -224,7 +272,7 @@ pub const Swapchain = struct {
         }
     }
 
-    pub fn CleanupFrameBuffers(
+    fn CleanupFrameBuffers(
         self: *Swapchain,
         logicalDevice: c.VkDevice,
     ) void {
@@ -233,7 +281,7 @@ pub const Swapchain = struct {
         }
     }
 
-    pub fn CleanupDepthAndColorImages(
+    fn CleanupDepthAndColorImages(
         self: *Swapchain,
         logicalDevice: c.VkDevice,
     ) void {
@@ -272,7 +320,8 @@ fn ChooseSwapSurfaceFormat(availableFormats: []c.VkSurfaceFormatKHR) !c.VkSurfac
     return availableFormats[0];
 }
 
-//TODO don't hardcode these
+//TODO don't hardcode these instead pick a window size
+// (ex, pick from a set resolutions such that window is ~75% of detected monitor resolution)
 const INITIAL_WIDTH = 1280;
 const INITIAL_HEIGHT = 720;
 fn ChooseSwapExtent(capabilities: c.VkSurfaceCapabilitiesKHR) c.VkExtent2D {

@@ -232,10 +232,17 @@ pub fn build(b: *std.Build) !void {
     // --- IMGUI END ---
 
     // --- ASSIMP START ---
-    _ = dll_wfs.addCopyFile(
-        b.path("dependency/assimp/lib/assimp-vc142-mt.dll"),
-        "assimp-vc142-mt.dll",
-    );
+    const assimp_dll_path = switch (optimizationMode) {
+        .Debug => b.path("dependency/assimp/bin/RelWithDebInfo/assimp-vc142-mt.dll"),
+        else => b.path("dependency/assimp/bin/Release/assimp-vc142-mt.dll"),
+    };
+    _ = dll_wfs.addCopyFile(assimp_dll_path, "assimp-vc142-mt.dll");
+    if (optimizationMode == .Debug) {
+        _ = dll_wfs.addCopyFile(
+            b.path("dependency/assimp/bin/RelWithDebInfo/assimp-vc142-mt.pdb"),
+            "assimp-vc142-mt.pdb",
+        );
+    }
     const assimp_lib_path = switch (optimizationMode) {
         .Debug => b.path("dependency/assimp/lib/Release/"),
         else => b.path("dependency/assimp/lib/RelWithDebInfo/"),

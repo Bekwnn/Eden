@@ -12,7 +12,6 @@ const Allocator = std.mem.Allocator;
 pub const SwapchainError = error{
     FailedToCreateSwapchain,
     FailedToGetImages,
-    FailedToCreateFrameBuffers,
     NoAvailablePresentMode,
     NoAvailableSwapSurfaceFormat,
     UnspecifiedError,
@@ -24,6 +23,7 @@ pub const SwapchainSupportDetails = struct {
     presentModes: []c.VkPresentModeKHR,
 };
 
+//TODO remove frame buffers when dynamic rendering is working
 pub const Swapchain = struct {
     m_swapchain: c.VkSwapchainKHR,
     m_imageCount: u32,
@@ -31,7 +31,6 @@ pub const Swapchain = struct {
     m_format: c.VkSurfaceFormatKHR,
     m_extent: c.VkExtent2D,
     m_imageViews: []c.VkImageView,
-    m_frameBuffers: []c.VkFramebuffer,
     m_currentImageIndex: u32,
     m_depthImage: Texture,
     m_colorImage: Texture,
@@ -61,7 +60,7 @@ pub const Swapchain = struct {
             .m_format = try ChooseSwapSurfaceFormat(swapchainSupport.formats),
             .m_extent = ChooseSwapExtent(swapchainSupport.capabilities),
             .m_imageViews = undefined,
-            .m_frameBuffers = undefined,
+            //.m_frameBuffers = undefined,
             .m_currentImageIndex = 0,
             .m_depthImage = undefined,
             .m_colorImage = undefined,
@@ -154,12 +153,7 @@ pub const Swapchain = struct {
 
         defer self.FreeSwapchain(rContext.m_logicalDevice);
 
-        // TODO this is awkward
-        defer c.vkDestroyRenderPass(rContext.m_logicalDevice, rContext.m_renderPass, null);
-
         defer self.CleanupDepthAndColorImages(rContext.m_logicalDevice);
-
-        defer self.CleanupFrameBuffers(rContext.m_logicalDevice);
     }
 
     // Call when the swapchain is out of date
@@ -182,17 +176,10 @@ pub const Swapchain = struct {
             rContext.m_graphicsQueueIdx.?,
             rContext.m_presentQueueIdx.?,
         );
-        //TODO this is awkward
-        try renderContext.CreateRenderPass();
 
         try self.CreateColorAndDepthResources(
             rContext.m_logicalDevice,
             rContext.m_msaaSamples,
-        );
-        try self.CreateFrameBuffers(
-            allocator,
-            rContext.m_logicalDevice,
-            rContext.m_renderPass,
         );
     }
 
@@ -220,64 +207,12 @@ pub const Swapchain = struct {
         );
     }
 
-    pub fn CreateFrameBuffers(
-        self: *Swapchain,
-        allocator: Allocator,
-        logicalDevice: c.VkDevice,
-        renderPass: c.VkRenderPass,
-    ) !void {
-        std.debug.print("    Creating frame buffers...\n", .{});
-        self.m_frameBuffers = try allocator.alloc(
-            c.VkFramebuffer,
-            self.m_imageViews.len,
-        );
-        var i: usize = 0;
-        while (i < self.m_imageViews.len) : (i += 1) {
-            var attachments = [_]c.VkImageView{
-                self.m_colorImage.m_imageView,
-                self.m_depthImage.m_imageView,
-                self.m_imageViews[i],
-            };
-
-            const framebufferInfo = c.VkFramebufferCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-                .renderPass = renderPass,
-                .attachmentCount = attachments.len,
-                .pAttachments = &attachments,
-                .width = self.m_extent.width,
-                .height = self.m_extent.height,
-                .layers = 1,
-                .flags = 0,
-                .pNext = null,
-            };
-
-            try vkUtil.CheckVkSuccess(
-                c.vkCreateFramebuffer(
-                    logicalDevice,
-                    &framebufferInfo,
-                    null,
-                    &self.m_frameBuffers[i],
-                ),
-                SwapchainError.FailedToCreateFrameBuffers,
-            );
-        }
-    }
-
     fn FreeSwapchain(self: *Swapchain, logicalDevice: c.VkDevice) void {
         defer c.vkDestroySwapchainKHR(logicalDevice, self.m_swapchain, null);
         defer {
             for (self.m_imageViews) |imageView| {
                 c.vkDestroyImageView(logicalDevice, imageView, null);
             }
-        }
-    }
-
-    fn CleanupFrameBuffers(
-        self: *Swapchain,
-        logicalDevice: c.VkDevice,
-    ) void {
-        for (self.m_frameBuffers) |frameBuffer| {
-            c.vkDestroyFramebuffer(logicalDevice, frameBuffer, null);
         }
     }
 

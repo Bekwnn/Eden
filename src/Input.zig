@@ -4,9 +4,9 @@ pub const ModifierKey = enum {
     Shift,
     Ctrl,
     Alt,
+    None,
 };
 
-//
 pub fn GetModifierDown(keybState: [*c]const u8, modifier: ModifierKey) bool {
     switch (modifier) {
         ModifierKey.Shift => {
@@ -26,6 +26,17 @@ pub fn GetModifierDown(keybState: [*c]const u8, modifier: ModifierKey) bool {
         ModifierKey.Alt => {
             if (keybState[c.SDL_SCANCODE_LALT] != 0 or
                 keybState[c.SDL_SCANCODE_RALT] != 0)
+            {
+                return true;
+            }
+        },
+        ModifierKey.None => {
+            if (keybState[c.SDL_SCANCODE_LCTRL] == 0 and
+                keybState[c.SDL_SCANCODE_RCTRL] == 0 and
+                keybState[c.SDL_SCANCODE_LSHIFT] == 0 and
+                keybState[c.SDL_SCANCODE_RSHIFT] == 0 and
+                keybState[c.SDL_SCANCODE_LALT] == 0 and
+                keybState[c.SDL_SCANCODE_RALT] == 0)
             {
                 return true;
             }

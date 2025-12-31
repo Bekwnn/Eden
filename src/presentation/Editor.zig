@@ -1,13 +1,20 @@
-const c = @import("../c.zig");
-const sceneInit = @import("SceneInit.zig");
 const std = @import("std");
-const presentation = @import("Presentation.zig");
+
 const DebugDraw = @import("DebugDraw.zig");
-const input = @import("../Input.zig");
+const presentation = @import("Presentation.zig");
+const renderContext = @import("RenderContext.zig");
+const RenderContext = renderContext.RenderContext;
+const sceneInit = @import("SceneInit.zig");
+const vkUtil = @import("VulkanUtil.zig");
 
 const Quat = @import("../math/Quat.zig").Quat;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec2 = @import("../math/Vec2.zig").Vec2;
+
+const c = @import("../c.zig");
+const input = @import("../Input.zig");
+
+const allocator = std.heap.page_allocator;
 
 var mainWindow: ?*c.SDL_Window = null;
 
@@ -25,9 +32,81 @@ const fixedWindowFlags =
     c.ImGuiWindowFlags_NoMove |
     c.ImGuiWindowFlags_NoTitleBar;
 
+pub const EditorError = error{
+    FailedToInitialize,
+};
+
+const ViewportFrameData = struct {
+    m_descriptorSet: c.VkDescriptorSet,
+
+    m_imageView: c.VkImageView,
+    m_sampler: c.VkSampler,
+
+    pub fn GetId(self: *ViewportFrameData) c.ImTextureID {
+        return @as(c.ImTextureID, @intFromPtr(self.m_descriptorSet));
+    }
+};
+
+var viewportFrameData: std.ArrayList(ViewportFrameData) = undefined;
+
 pub fn Initialize(window: *c.SDL_Window) !void {
     c.igGetIO_Nil().*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
     mainWindow = window;
+
+    // Initialize data for the render viewport
+    const rContext = try RenderContext.GetInstance();
+    const imageCount = rContext.m_swapchain.m_imageCount;
+    viewportFrameData = try std.ArrayList(ViewportFrameData).initCapacity(allocator, imageCount);
+    for (rContext.m_swapchain.m_imageViews, 0..imageCount) |vkimageview, _| {
+        const curViewportData = viewportFrameData.addOneAssumeCapacity();
+        curViewportData.m_imageView = vkimageview;
+        const samplerInfo = c.VkSamplerCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = c.VK_FILTER_LINEAR,
+            .minFilter = c.VK_FILTER_LINEAR,
+            .addressModeU = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeV = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeW = c.VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .anisotropyEnable = c.VK_FALSE,
+            .maxAnisotropy = 1,
+            .borderColor = c.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+            .compareEnable = c.VK_FALSE,
+            .compareOp = c.VK_COMPARE_OP_ALWAYS,
+            .unnormalizedCoordinates = c.VK_FALSE,
+            .mipmapMode = c.VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .mipLodBias = 0.0,
+            .minLod = -1000,
+            .maxLod = 1000,
+            .flags = 0,
+            .pNext = null,
+        };
+        try vkUtil.CheckVkSuccess(
+            c.vkCreateSampler(
+                rContext.m_logicalDevice,
+                &samplerInfo,
+                null,
+                &curViewportData.m_sampler,
+            ),
+            EditorError.FailedToInitialize,
+        );
+
+        curViewportData.m_descriptorSet = c.ImGui_ImplVulkan_AddTexture(
+            curViewportData.m_sampler,
+            curViewportData.m_imageView,
+            c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        );
+    }
+}
+
+pub fn Deinit() void {
+    const rContext = RenderContext.GetInstance() catch {
+        @panic("!");
+    };
+    for (viewportFrameData.items) |*vpFrameData| {
+        c.vkDestroyImageView(rContext.m_logicalDevice, vpFrameData.m_imageView, null);
+        c.vkDestroySampler(rContext.m_logicalDevice, vpFrameData.m_sampler, null);
+        c.ImGui_ImplVulkan_RemoveTexture(vpFrameData.m_descriptorSet);
+    }
 }
 
 pub fn GetMainWindow() !*c.SDL_Window {
@@ -148,6 +227,16 @@ pub fn DrawViewport() !void {
 
     if (c.igBegin("Viewport", null, fixedWindowFlags | c.ImGuiWindowFlags_NoBackground)) {
         _ = c.igText("Viewport goes here.");
+        //const rContext = try RenderContext.GetInstance();
+        //c.igImage(
+        //    viewportFrameData.items[rContext.m_currentFrame].GetId(),
+        //    c.ImVec2{
+        //        .x = @floatFromInt(rContext.m_swapchain.m_extent.width),
+        //        .y = @floatFromInt(rContext.m_swapchain.m_extent.height),
+        //    },
+        //    c.ImVec2{ .x = 0, .y = 0 }, // default
+        //    c.ImVec2{ .x = 1, .y = 1 }, // default
+        //);
     }
 
     c.igEnd();

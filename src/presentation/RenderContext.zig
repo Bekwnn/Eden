@@ -23,17 +23,17 @@ const engineVersion = c.VK_MAKE_API_VERSION(0, 0, 1, 0);
 pub const RenderContextError = error{
     AlreadyInitialized,
     FailedToBeginCommandBuffer,
+    FailedToCheckInstanceExtensionProperties,
     FailedToCheckInstanceLayerProperties,
     FailedToCreateCommandBuffers,
     FailedToCreateCommandPool,
+    FailedToCreateDebugMessenger,
     FailedToCreateDescriptorPool,
     FailedToCreateDescriptorSets,
     FailedToCreateFences,
     FailedToCreateImageView,
     FailedToCreateInstance,
     FailedToCreateLogicDevice,
-    FailedToCreatePipelineLayout,
-    FailedToCreateRenderPass,
     FailedToCreateSampler,
     FailedToCreateSemaphores,
     FailedToCreateSurface,
@@ -46,6 +46,7 @@ pub const RenderContextError = error{
     FailedToResetCommandBuffer,
     FailedToResetFence,
     FailedToWait,
+    MissingEnabledExtension,
     MissingEnabledLayer,
     UninitializedShutdown,
 
@@ -100,11 +101,11 @@ pub const RenderContext = struct {
     m_surface: c.VkSurfaceKHR = undefined,
     m_physicalDevice: c.VkPhysicalDevice = undefined,
     m_logicalDevice: c.VkDevice = undefined,
-    //m_debugCallback: c.VkDebugReportCallbackEXT,
+    m_debugMessenger: c.VkDebugUtilsMessengerEXT = undefined,
 
     m_swapchain: Swapchain = undefined,
     // TODO should VkRenderPass live here? or in Swapchain? Or its own thing?
-    m_renderPass: c.VkRenderPass = undefined,
+    //m_renderPass: c.VkRenderPass = undefined,
 
     m_graphicsQueueIdx: ?u32 = null,
     m_graphicsQueue: c.VkQueue = undefined,
@@ -175,11 +176,16 @@ pub const RenderContext = struct {
             applicationVersion,
         );
 
+        if (builtin.mode == .Debug) {
+            std.debug.print("Creating debug messenger...\n", .{});
+            try SetupDebugMessenger();
+        }
+
         std.debug.print("Creating surface...\n", .{});
         try CreateSurface(window);
 
         std.debug.print("Creating physical device...\n", .{});
-        try PickPhysicalDevice(allocator, window);
+        try PickPhysicalDevice(allocator);
 
         std.debug.print("Creating logical device...\n", .{});
         try CreateLogicalDevice(allocator);
@@ -209,9 +215,6 @@ pub const RenderContext = struct {
         std.debug.print("Creating fences and semaphores...\n", .{});
         try CreateFencesAndSemaphores();
 
-        std.debug.print("Creating render pass...\n", .{});
-        try CreateRenderPass();
-
         std.debug.print("Creating descriptor allocators...\n", .{});
         try CreateDescriptorAllocators(allocator);
 
@@ -228,13 +231,6 @@ pub const RenderContext = struct {
         try newInstance.m_swapchain.CreateColorAndDepthResources(
             newInstance.m_logicalDevice,
             newInstance.m_msaaSamples,
-        );
-
-        std.debug.print("Creating frame buffers...\n", .{});
-        try newInstance.m_swapchain.CreateFrameBuffers(
-            allocator,
-            newInstance.m_logicalDevice,
-            newInstance.m_renderPass,
         );
 
         std.debug.print("Creating Imgui resources...\n", .{});
@@ -384,6 +380,46 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
     }
 }
 
+const enabledExtensions = [_][:0]const u8{
+    if (builtin.mode == .Debug) c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+};
+fn CheckExtensionSupport(allocator: Allocator) !void {
+    var extensionCount: u32 = 0;
+    try vkUtil.CheckVkSuccess(
+        c.vkEnumerateInstanceExtensionProperties(null, &extensionCount, null),
+        RenderContextError.FailedToCheckInstanceExtensionProperties,
+    );
+
+    const detectedExtensionProperties = try allocator.alloc(c.VkExtensionProperties, extensionCount);
+    try vkUtil.CheckVkSuccess(
+        c.vkEnumerateInstanceExtensionProperties(null, &extensionCount, detectedExtensionProperties.ptr),
+        RenderContextError.FailedToCheckInstanceExtensionProperties,
+    );
+
+    for (enabledExtensions) |enabledExtension| {
+        var extensionFound = false;
+
+        for (detectedExtensionProperties) |detectedExtension| {
+            const needle: []const u8 = enabledExtension;
+            const haystack: []const u8 = &detectedExtension.extensionName;
+            if (std.mem.startsWith(u8, haystack, needle)) {
+                extensionFound = true;
+                break;
+            }
+        }
+
+        if (!extensionFound) {
+            std.debug.print("Unable to find enabled instance extension \"{s}\"\n", .{enabledExtension});
+            std.debug.print("Extensions found:\n", .{});
+            for (detectedExtensionProperties) |detectedExtension| {
+                var trailingWhitespaceStripped = std.mem.tokenizeScalar(u8, &detectedExtension.extensionName, ' ');
+                std.debug.print("\"{s}\"\n", .{trailingWhitespaceStripped.next().?});
+            }
+            return RenderContextError.MissingEnabledExtension;
+        }
+    }
+}
+
 fn CreateSurface(window: *c.SDL_Window) !void {
     const rContext = try RenderContext.GetInstance();
     const result = c.SDL_Vulkan_CreateSurface(window, rContext.m_vkInstance, &rContext.m_surface);
@@ -408,15 +444,31 @@ fn CreateVkInstance(
         .pNext = null,
     };
 
-    //TODO handle return values
-    var extensionCount: c_uint = 0;
-    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, null);
-    const extensionNames = try allocator.alloc([*:0]const u8, extensionCount);
-    defer allocator.free(extensionNames);
-    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast(extensionNames.ptr));
-
     if (builtin.mode == .Debug) {
+        try CheckExtensionSupport(allocator);
         try CheckValidationLayerSupport(allocator);
+    }
+
+    // Note: this is only for vulkan instance extensions, not device extensions
+    //TODO handle return values
+    var sdlExtCount: c_uint = 0;
+    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &sdlExtCount, null);
+    const sdlExtNames = try allocator.alloc([*:0]const u8, sdlExtCount);
+    defer allocator.free(sdlExtNames);
+    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &sdlExtCount, @ptrCast(sdlExtNames.ptr));
+
+    // Merge SDL required extensions with our required extensions
+    // TODO: We're assuming vulkan handles duplicates gracefully (untested)
+    const extensionNames = try allocator.alloc([*:0]const u8, sdlExtNames.len + enabledExtensions.len);
+    defer allocator.free(extensionNames);
+    var nameIter: usize = 0;
+    for (sdlExtNames) |sdlExtName| {
+        extensionNames[nameIter] = sdlExtName;
+        nameIter += 1;
+    }
+    for (enabledExtensions) |enabledExtName| {
+        extensionNames[nameIter] = enabledExtName;
+        nameIter += 1;
     }
 
     const instanceInfo =
@@ -433,7 +485,7 @@ fn CreateVkInstance(
 
     const logLayersAndExtensions = true;
     if (logLayersAndExtensions) {
-        std.debug.print("Enabled Extensions:\n", .{});
+        std.debug.print("Enabled Instance Extensions:\n", .{});
         for (extensionNames) |extName| {
             std.debug.print(" {s}\n", .{extName});
         }
@@ -451,7 +503,66 @@ fn CreateVkInstance(
     );
 }
 
-fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
+fn SetupDebugMessenger() !void {
+    const severityFlags: c.VkDebugUtilsMessageSeverityFlagsEXT =
+        c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+        c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    const messageTypeFlags: c.VkDebugUtilsMessageTypeFlagsEXT =
+        c.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+        c.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+        c.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+
+    const messengerCreateInfo = c.VkDebugUtilsMessengerCreateInfoEXT{
+        .messageSeverity = severityFlags,
+        .messageType = messageTypeFlags,
+        .pfnUserCallback = &DebugMessengerCallback,
+    };
+
+    var rContext = try RenderContext.GetInstance();
+    const pfnTempFn = c.vkGetInstanceProcAddr(
+        rContext.m_vkInstance,
+        "vkCreateDebugUtilsMessengerEXT",
+    );
+    const pfnCreateDebugUtilsMessenger = @as(
+        c.PFN_vkCreateDebugUtilsMessengerEXT,
+        @ptrCast(pfnTempFn),
+    );
+
+    if (pfnCreateDebugUtilsMessenger) |createDebugUtilFn| {
+        try vkUtil.CheckVkSuccess(
+            createDebugUtilFn(
+                rContext.m_vkInstance,
+                &messengerCreateInfo,
+                null,
+                &rContext.m_debugMessenger,
+            ),
+            RenderContextError.FailedToCreateDebugMessenger,
+        );
+    } else {
+        return RenderContextError.FailedToCreateDebugMessenger;
+    }
+}
+
+fn DebugMessengerCallback(
+    severity: c.VkDebugUtilsMessageSeverityFlagBitsEXT,
+    msgType: c.VkDebugUtilsMessageTypeFlagsEXT,
+    callbackData: ?*const c.VkDebugUtilsMessengerCallbackDataEXT,
+    ext: ?*anyopaque,
+) callconv(.c) c.VkBool32 {
+    _ = severity;
+    _ = ext;
+
+    if (callbackData) |data| {
+        std.debug.print("\nvalidation error:\nmsgTypeFlags {}\nmessage: {s}\n", .{ msgType, data.pMessage });
+    } else {
+        std.debug.print("\nvalidation layer: type {} msg: <no message data>\n\n", .{msgType});
+    }
+
+    return c.VK_FALSE;
+}
+
+fn PickPhysicalDevice(allocator: Allocator) !void {
     const rContext = try RenderContext.GetInstance();
     var deviceCount: u32 = 0;
     try vkUtil.CheckVkSuccess(
@@ -472,7 +583,7 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
 
     //TODO rather than just picking first suitable device, could rate/score by some scheme and pick the best
     for (deviceList) |device| {
-        if (try PhysicalDeviceIsSuitable(allocator, device, window, rContext.m_surface, &requiredFeatures)) {
+        if (try PhysicalDeviceIsSuitable(allocator, device, rContext.m_surface, &requiredFeatures)) {
             rContext.m_physicalDevice = device;
             rContext.m_msaaSamples = try GetDeviceMaxUsableSampleCount();
             rContext.m_maxDescriptorSets = try GetDeviceMaxDescriptorSets();
@@ -485,9 +596,9 @@ fn PickPhysicalDevice(allocator: Allocator, window: *c.SDL_Window) !void {
 
 const requiredDeviceExtensions = [_][*]const u8{
     c.VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        //c.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, // required by DEPTH_STENCIL_RESOLVE
-        //c.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // required by DYNAMIC_RENDERING
-        //c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+    //c.VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, // required by DEPTH_STENCIL_RESOLVE
+    //c.VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // required by DYNAMIC_RENDERING
+    c.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 };
 var requiredFeatures13 = c.VkPhysicalDeviceVulkan13Features{
     .sType = c.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -513,7 +624,6 @@ const requiredFeatures = c.VkPhysicalDeviceFeatures2{
 fn PhysicalDeviceIsSuitable(
     allocator: Allocator,
     device: c.VkPhysicalDevice,
-    window: *c.SDL_Window,
     surface: c.VkSurfaceKHR,
     enabledFeatures: *const c.VkPhysicalDeviceFeatures2,
 ) !bool {
@@ -552,13 +662,6 @@ fn PhysicalDeviceIsSuitable(
             graphicsSupportExists = true;
         }
     }
-
-    //TODO ensure we hve all required extensions, compare the extensions we got to check all requiredExtensions exist
-    //TODO handle return values
-    var extensionCount: c_uint = 0;
-    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, null);
-    const extensionNames = try allocator.alloc([*]const u8, extensionCount);
-    _ = c.SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, @ptrCast(extensionNames.ptr));
 
     const swapchainSupport = try swapchain.QuerySwapchainSupport(
         allocator,
@@ -955,14 +1058,14 @@ fn InitImgui(window: *c.SDL_Window) !void {
         .DescriptorPool = rContext.m_imguiPool,
         .MinImageCount = 3,
         .ImageCount = 3,
-        .UseDynamicRendering = false,
+        .UseDynamicRendering = true,
         .PipelineRenderingCreateInfo = c.VkPipelineRenderingCreateInfoKHR{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
             .colorAttachmentCount = 1,
             .pColorAttachmentFormats = &rContext.m_swapchain.m_format.format,
         },
         .MSAASamples = rContext.m_msaaSamples,
-        .RenderPass = rContext.m_renderPass,
+        .RenderPass = null,
     };
 
     _ = c.ImGui_ImplVulkan_Init(&imguiInitInfo);
@@ -970,94 +1073,6 @@ fn InitImgui(window: *c.SDL_Window) !void {
     _ = c.ImGui_ImplVulkan_CreateFontsTexture();
 
     //TODO create cleanup function, destory m_imguiPool
-}
-
-// Recreated if swapchain is updated
-pub fn CreateRenderPass() !void {
-    const rContext = try RenderContext.GetInstance();
-    const colorAttachment = c.VkAttachmentDescription{
-        .format = rContext.m_swapchain.m_format.format,
-        .samples = rContext.m_msaaSamples,
-        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .flags = 0,
-    };
-    const colorAttachmentRef = c.VkAttachmentReference{
-        .attachment = 0,
-        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    };
-    const depthAttachment = c.VkAttachmentDescription{
-        .format = try FindDepthFormat(),
-        .samples = rContext.m_msaaSamples,
-        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .flags = 0,
-    };
-    const depthAttachmentRef = c.VkAttachmentReference{
-        .attachment = 1,
-        .layout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    };
-    const colorAttachmentResolve = c.VkAttachmentDescription{
-        .format = rContext.m_swapchain.m_format.format,
-        .samples = c.VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = c.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = c.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .flags = 0,
-    };
-    const colorAttachmentResolveRef = c.VkAttachmentReference{
-        .attachment = 2,
-        .layout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    };
-    const subpass = c.VkSubpassDescription{
-        .flags = 0,
-        .pipelineBindPoint = c.VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .inputAttachmentCount = 0,
-        .pInputAttachments = null,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentRef,
-        .pResolveAttachments = &colorAttachmentResolveRef,
-        .pDepthStencilAttachment = &depthAttachmentRef,
-        .preserveAttachmentCount = 0,
-        .pPreserveAttachments = null,
-    };
-    const dependency = c.VkSubpassDependency{
-        .srcSubpass = c.VK_SUBPASS_EXTERNAL,
-        .dstSubpass = 0,
-        .srcStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        .srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        .dstStageMask = c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | c.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-        .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | c.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        .dependencyFlags = 0,
-    };
-    const attachments = [_]c.VkAttachmentDescription{ colorAttachment, depthAttachment, colorAttachmentResolve };
-    const renderPassInfo = c.VkRenderPassCreateInfo{
-        .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = attachments.len,
-        .pAttachments = &attachments,
-        .subpassCount = 1,
-        .pSubpasses = &subpass,
-        .dependencyCount = 1,
-        .pDependencies = &dependency,
-        .pNext = null,
-        .flags = 0,
-    };
-
-    try vkUtil.CheckVkSuccess(
-        c.vkCreateRenderPass(rContext.m_logicalDevice, &renderPassInfo, null, &rContext.m_renderPass),
-        RenderContextError.FailedToCreateRenderPass,
-    );
 }
 
 //TODO shared function used by swapchain.zig; should this live here?

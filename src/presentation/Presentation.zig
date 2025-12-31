@@ -115,26 +115,66 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         RenderLoopError.FailedToBeginCommandBuffer,
     );
 
+    // transition image to rendering format
+    const renderMemoryBarrier = c.VkImageMemoryBarrier{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .image = rContext.m_swapchain.m_images[imageIndex],
+        .subresourceRange = .{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+
+    c.vkCmdPipelineBarrier(
+        commandBuffer,
+        c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, //src
+        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, //dst
+        0,
+        0,
+        null,
+        0,
+        null,
+        1,
+        &renderMemoryBarrier,
+    );
+
+    // setup to begin rendering
     const clearColor = c.VkClearValue{
         .color = c.VkClearColorValue{ .float32 = [_]f32{ 0.05, 0.1, 0.15, 1.0 } },
     };
     const clearDepth = c.VkClearValue{
         .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
     };
-    const clearValues = [_]c.VkClearValue{ clearColor, clearDepth };
-    const renderPassInfo = c.VkRenderPassBeginInfo{
-        .sType = c.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = rContext.m_renderPass,
-        .framebuffer = rContext.m_swapchain.m_frameBuffers[imageIndex],
+    _ = clearDepth; //TODO
+
+    const colorAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView = rContext.m_swapchain.m_imageViews[imageIndex],
+        .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = clearColor,
+        .pNext = null,
+    };
+    const renderingInfo = c.VkRenderingInfoKHR{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
         .renderArea = c.VkRect2D{
+            .extent = rContext.m_swapchain.m_extent,
             .offset = c.VkOffset2D{
                 .x = 0,
                 .y = 0,
             },
-            .extent = rContext.m_swapchain.m_extent,
         },
-        .clearValueCount = 2,
-        .pClearValues = &clearValues,
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentInfo,
+        .flags = 0,
         .pNext = null,
     };
 
@@ -147,7 +187,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     var batchDraws = try OrganizeDraws();
     defer batchDraws.deinit();
 
-    c.vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, c.VK_SUBPASS_CONTENTS_INLINE);
+    c.vkCmdBeginRendering(commandBuffer, &renderingInfo);
     {
         try currentFrame.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
         try rContext.AllocateCurrentFrameGlobalDescriptors();
@@ -215,7 +255,36 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
         c.ImGui_ImplVulkan_RenderDrawData(c.igGetDrawData(), commandBuffer, null);
     }
-    c.vkCmdEndRenderPass(commandBuffer);
+    c.vkCmdEndRendering(commandBuffer);
+
+    // convert to present format
+    const presentMemoryBarrier = c.VkImageMemoryBarrier{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .image = rContext.m_swapchain.m_images[rContext.m_currentFrame], //TODO
+        .subresourceRange = .{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+
+    c.vkCmdPipelineBarrier(
+        commandBuffer,
+        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, //srcStageMask
+        c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        0,
+        0,
+        null,
+        0,
+        null,
+        1,
+        &presentMemoryBarrier,
+    );
 
     try vkUtil.CheckVkSuccess(
         c.vkEndCommandBuffer(commandBuffer),

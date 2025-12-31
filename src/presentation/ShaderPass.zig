@@ -148,6 +148,12 @@ pub const ShaderPass = struct {
             });
         }
 
+        const dynamicPipelineInfo = c.VkPipelineRenderingCreateInfo{
+            .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .colorAttachmentCount = 1,
+            .pColorAttachmentFormats = &rContext.m_swapchain.m_format.format,
+            .pNext = null,
+        };
         const pipelineInfo = c.VkGraphicsPipelineCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .stageCount = @intCast(pipelineShaderStageInfos.items.len),
@@ -162,11 +168,11 @@ pub const ShaderPass = struct {
             .pColorBlendState = &colorBlendingState,
             .pDynamicState = null,
             .layout = newShaderPass.m_pipelineLayout,
-            .renderPass = rContext.m_renderPass,
+            .renderPass = null,
             .subpass = 0,
             .basePipelineHandle = null,
             .basePipelineIndex = -1,
-            .pNext = null,
+            .pNext = &dynamicPipelineInfo,
             .flags = 0,
         };
 

@@ -151,20 +151,7 @@ pub const RenderContext = struct {
     ) !void {
         if (instance != null) return RenderContextError.AlreadyInitialized;
 
-        instance = RenderContext{
-            .m_vkInstance = undefined,
-            .m_surface = undefined,
-            .m_physicalDevice = undefined,
-            .m_logicalDevice = undefined,
-            //.m_debugCallback = undefined,
-
-            .m_swapchain = undefined,
-
-            .m_graphicsQueueIdx = null,
-            .m_graphicsQueue = undefined,
-            .m_presentQueueIdx = null,
-            .m_presentQueue = undefined,
-        };
+        instance = RenderContext{};
 
         var newInstance = try RenderContext.GetInstance();
 
@@ -553,11 +540,44 @@ fn DebugMessengerCallback(
     _ = severity;
     _ = ext;
 
-    if (callbackData) |data| {
-        std.debug.print("\nvalidation error:\nmsgTypeFlags {}\nmessage: {s}\n", .{ msgType, data.pMessage });
-    } else {
-        std.debug.print("\nvalidation layer: type {} msg: <no message data>\n\n", .{msgType});
+    std.debug.print("\nmessage type: ", .{});
+
+    // type is a bit flag, accumulate which ones exist
+    // https://docs.vulkan.org/refpages/latest/refpages/source/VkDebugUtilsMessageTypeFlagBitsEXT.html
+    var messageTypeStrs = [4]?[]const u8{ null, null, null, null };
+    if (msgType & c.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT != 0) {
+        messageTypeStrs[0] = "General";
     }
+    if (msgType & c.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT != 0) {
+        messageTypeStrs[1] = "Validation";
+    }
+    if (msgType & c.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT != 0) {
+        messageTypeStrs[2] = "Performance";
+    }
+    if (msgType & c.VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT != 0) {
+        messageTypeStrs[3] = "Device Address Binding";
+    }
+    var isFirstType = true;
+    for (messageTypeStrs) |maybeTypeStr| {
+        if (maybeTypeStr) |msgTypeStr| {
+            if (isFirstType) {
+                isFirstType = false;
+            } else {
+                std.debug.print(" | ", .{});
+            }
+            std.debug.print("{s}", .{msgTypeStr});
+        }
+    }
+    std.debug.print("\n", .{});
+
+    if (callbackData) |data| {
+        std.debug.print("message: {s}\n", .{data.pMessage});
+    } else {
+        std.debug.print("msg: <no message data>\n", .{});
+    }
+
+    //TODO dump call site stack trace if relevant
+    // ex.: std.debug.dumpStackTrace(stackTraceGoesHere);
 
     return c.VK_FALSE;
 }

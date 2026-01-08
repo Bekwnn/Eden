@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const DeletionQueue = @import("../coreutil/DeletionQueue.zig").DeletionQueue;
 const Buffer = @import("Buffer.zig").Buffer;
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
@@ -501,9 +501,13 @@ fn SetupDebugMessenger() !void {
         c.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 
     const messengerCreateInfo = c.VkDebugUtilsMessengerCreateInfoEXT{
+        .sType = c.VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
         .messageSeverity = severityFlags,
         .messageType = messageTypeFlags,
         .pfnUserCallback = &DebugMessengerCallback,
+        .pUserData = null,
+        .flags = 0,
+        .pNext = null,
     };
 
     var rContext = try RenderContext.GetInstance();
@@ -576,8 +580,8 @@ fn DebugMessengerCallback(
         std.debug.print("msg: <no message data>\n", .{});
     }
 
-    //TODO dump call site stack trace if relevant
-    // ex.: std.debug.dumpStackTrace(stackTraceGoesHere);
+    // Very verbose, toggle on and off for debugging
+    std.debug.dumpCurrentStackTrace(@returnAddress());
 
     return c.VK_FALSE;
 }
@@ -605,7 +609,9 @@ fn PickPhysicalDevice(allocator: Allocator) !void {
     for (deviceList) |device| {
         if (try PhysicalDeviceIsSuitable(allocator, device, rContext.m_surface, &requiredFeatures)) {
             rContext.m_physicalDevice = device;
-            rContext.m_msaaSamples = try GetDeviceMaxUsableSampleCount();
+            //TODO fix msaa in dynamic rendering
+            //rContext.m_msaaSamples = try GetDeviceMaxUsableSampleCount();
+            rContext.m_msaaSamples = c.VK_SAMPLE_COUNT_1_BIT;
             rContext.m_maxDescriptorSets = try GetDeviceMaxDescriptorSets();
             return;
         }

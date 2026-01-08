@@ -2,7 +2,7 @@ const std = @import("std");
 const debug = std.debug;
 const allocator = std.heap.page_allocator;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const ColorRGBA = @import("../math/Color.zig").ColorRGBA;
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
@@ -116,14 +116,14 @@ pub fn InitializeScene() !void {
 
     // TODO make setting up a material parameter binding 1 call
     const textureParam = try TextureParam.init(allocator, uvTexture);
-    try texMaterialInst.m_materialInstanceParams.append(MaterialParam.init(textureParam, 1));
-    try texturedShaderEffect.m_instanceSetParams.append(ShaderEffect.DescriptorParam{
+    try texMaterialInst.m_materialInstanceParams.append(allocator, MaterialParam.init(textureParam, 1));
+    try texturedShaderEffect.m_instanceSetParams.append(allocator, ShaderEffect.DescriptorParam{
         .m_binding = 1,
         .m_descriptorType = c.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .m_shaderStageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
     });
 
-    try texturedShaderEffect.m_pushConstantRanges.append(c.VkPushConstantRange{
+    try texturedShaderEffect.m_pushConstantRanges.append(allocator, c.VkPushConstantRange{
         .offset = 0,
         .size = @sizeOf(Mat4x4),
         .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
@@ -151,13 +151,13 @@ pub fn InitializeScene() !void {
     // TODO make setting up a material parameter binding 1 call
     // COLOR MESH MAT
     const colorParam = try UniformParam.init(allocator, &coloredShaderBuffer, @sizeOf(@TypeOf(shaderColor)), 0);
-    try coloredMatInst.m_materialInstanceParams.append(MaterialParam.init(colorParam, 1));
-    try coloredShaderEffect.m_instanceSetParams.append(ShaderEffect.DescriptorParam{
+    try coloredMatInst.m_materialInstanceParams.append(allocator, MaterialParam.init(colorParam, 1));
+    try coloredShaderEffect.m_instanceSetParams.append(allocator, ShaderEffect.DescriptorParam{
         .m_binding = 1,
         .m_descriptorType = c.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .m_shaderStageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
     });
-    try coloredShaderEffect.m_pushConstantRanges.append(c.VkPushConstantRange{
+    try coloredShaderEffect.m_pushConstantRanges.append(allocator, c.VkPushConstantRange{
         .offset = 0,
         .size = @sizeOf(Mat4x4),
         .stageFlags = c.VK_SHADER_STAGE_VERTEX_BIT,
@@ -190,7 +190,6 @@ pub fn InitializeScene() !void {
             try currentScene.m_renderables.put(
                 name,
                 RenderObject.init(
-                    allocator,
                     name,
                     mesh,
                     if ((i + j) % 2 == 0) texMaterialInst else coloredMatInst,

@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const AutoHashMap = std.AutoHashMap;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const Color = @import("../math/Color.zig");
 const ColorRGBA = Color.ColorRGBA;
@@ -16,10 +16,11 @@ const Vec4 = @import("../math/Vec4.zig").Vec4;
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const Buffer = @import("Buffer.zig").Buffer;
 const Camera = @import("Camera.zig").Camera;
-const DebugDraw = @import("DebugDraw.zig");
+const debugDraw = @import("DebugDraw.zig");
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
 const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
+const editor = @import("Editor.zig");
 const GPUSceneData = @import("Scene.zig").GPUSceneData;
 const Material = @import("Material.zig").Material;
 const MaterialInstance = @import("MaterialInstance.zig").MaterialInstance;
@@ -98,7 +99,6 @@ pub const DrawStats = struct {
 pub var drawStats = DrawStats{};
 pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
     const rContext = try RenderContext.GetInstance();
-    const currentFrame = rContext.GetCurrentFrame();
 
     drawStats = DrawStats{};
     drawStats.m_renderablesInScene = sceneInit.GetCurrentScene().m_renderables.count();
@@ -121,7 +121,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
         .newLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .image = rContext.m_swapchain.m_images[imageIndex],
+        .image = rContext.m_swapchain.m_swapchainImages[imageIndex],
         .subresourceRange = .{
             .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
@@ -151,18 +151,29 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     const clearDepth = c.VkClearValue{
         .depthStencil = c.VkClearDepthStencilValue{ .depth = 1.0, .stencil = 0 },
     };
-    _ = clearDepth; //TODO
 
-    const colorAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
+    // TODO handle no editor version
+    //  create a version of this function that just performs GameRenderLoop
+    const editorViewportFrameData = try editor.GetCurrentViewportFrameData();
+    const editorViewportColorAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView = rContext.m_swapchain.m_imageViews[imageIndex],
+        .imageView = editorViewportFrameData.m_colorTexture.m_imageView,
         .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = clearColor,
         .pNext = null,
     };
-    const renderingInfo = c.VkRenderingInfoKHR{
+    const editorViewportDepthAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView = editorViewportFrameData.m_depthTexture.m_imageView,
+        .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = clearDepth,
+        .pNext = null,
+    };
+    const editorViewportRenderingInfo = c.VkRenderingInfoKHR{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
         .renderArea = c.VkRect2D{
             .extent = rContext.m_swapchain.m_extent,
@@ -173,86 +184,58 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         },
         .layerCount = 1,
         .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentInfo,
+        .pColorAttachments = &editorViewportColorAttachmentInfo,
+        .pDepthAttachment = &editorViewportDepthAttachmentInfo,
+        .pStencilAttachment = null,
         .flags = 0,
         .pNext = null,
     };
 
-    const drawCommands = @as(
-        [*]c.VkDrawIndirectCommand,
-        @ptrCast(@alignCast(currentFrame.m_indirectDrawBuffer.m_mappedData orelse @panic("!"))),
-    )[0..renderContext.FrameData.MAX_INDIRECT_DRAW];
-    _ = drawCommands;
-
-    var batchDraws = try OrganizeDraws();
-    defer batchDraws.deinit();
-
-    c.vkCmdBeginRendering(commandBuffer, &renderingInfo);
+    // render to texture for editor viewport
+    c.vkCmdBeginRendering(commandBuffer, &editorViewportRenderingInfo);
     {
-        try currentFrame.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
-        try rContext.AllocateCurrentFrameGlobalDescriptors();
+        try WorldRenderLoop(commandBuffer);
+    }
+    c.vkCmdEndRendering(commandBuffer);
 
-        try AllocateMaterialDescriptorSets(&currentFrame.m_descriptorAllocator);
-
-        try UpdateUniformSceneBuffer();
-
-        // TODO this should be automatic for all params that need updating
-        try sceneInit.UpdateColoredShaderBuffer();
-
-        try WriteDescriptors();
-
-        var batchDrawIter = batchDraws.iterator();
-        while (batchDrawIter.next()) |renderBatch| {
-            try renderBatch.value_ptr.m_matInst.m_parentMaterial.BindMaterial(commandBuffer);
-            try renderBatch.value_ptr.m_matInst.BindMaterialInstance(commandBuffer);
-
-            // TODO move to/create "bind mesh" function
-            if (renderBatch.value_ptr.m_mesh.m_bufferData) |*meshBufferData| {
-                const offsets = [_]c.VkDeviceSize{0};
-                const vertexBuffers = [_]c.VkBuffer{
-                    meshBufferData.m_vertexBuffer.m_buffer,
-                };
-                c.vkCmdBindVertexBuffers(
-                    commandBuffer,
-                    0,
-                    1,
-                    &vertexBuffers,
-                    &offsets,
-                );
-                c.vkCmdBindIndexBuffer(
-                    commandBuffer,
-                    meshBufferData.m_indexBuffer.m_buffer,
-                    0,
-                    c.VK_INDEX_TYPE_UINT32,
-                );
-            } else {
-                return RenderLoopError.NoMeshBufferData;
-            }
-
-            //TODO indirect draw calls w/ compute shader culling
-            const objLayout = renderBatch.value_ptr.m_matInst.GetObjectDescriptorSetLayout();
-            for (renderBatch.value_ptr.m_renderables.items) |renderableEntry| {
-                if (objLayout) |layout| {
-                    try renderableEntry.value_ptr.AllocateDescriptorSet(&currentFrame.m_descriptorAllocator, layout);
-                }
-                try renderableEntry.value_ptr.BindPerObjectData(commandBuffer);
-                c.vkCmdDrawIndexed(
-                    commandBuffer,
-                    @intCast(renderableEntry.value_ptr.m_mesh.m_indices.items.len),
-                    1,
-                    0,
-                    0,
-                    0,
-                );
-                drawStats.m_renderablesDrawn += 1;
-            }
-            drawStats.m_batches += 1;
-        }
-
-        if (DebugDraw.ShouldDraw()) {
-            try DebugDraw.Draw(commandBuffer);
-        }
-
+    const swapchainColorAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView = rContext.m_swapchain.m_colorImage.m_imageView,
+        .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = clearColor,
+        .pNext = null,
+    };
+    const swapchainDepthAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView = rContext.m_swapchain.m_depthImage.m_imageView,
+        .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
+        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = clearDepth,
+        .pNext = null,
+    };
+    const swapchainRenderingInfo = c.VkRenderingInfoKHR{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
+        .renderArea = c.VkRect2D{
+            .extent = rContext.m_swapchain.m_extent,
+            .offset = c.VkOffset2D{
+                .x = 0,
+                .y = 0,
+            },
+        },
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &swapchainColorAttachmentInfo,
+        .pDepthAttachment = &swapchainDepthAttachmentInfo,
+        .pStencilAttachment = null,
+        .flags = 0,
+        .pNext = null,
+    };
+    // render to swapchain
+    c.vkCmdBeginRendering(commandBuffer, &swapchainRenderingInfo);
+    {
         c.ImGui_ImplVulkan_RenderDrawData(c.igGetDrawData(), commandBuffer, null);
     }
     c.vkCmdEndRendering(commandBuffer);
@@ -263,7 +246,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         .oldLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .newLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .image = rContext.m_swapchain.m_images[rContext.m_currentFrame], //TODO
+        .image = rContext.m_swapchain.m_colorImage.m_image,
         .subresourceRange = .{
             .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
@@ -290,6 +273,84 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         c.vkEndCommandBuffer(commandBuffer),
         RenderLoopError.FailedToEndCommandBuffer,
     );
+}
+
+fn WorldRenderLoop(cmd: c.VkCommandBuffer) !void {
+    const rContext = try RenderContext.GetInstance();
+    const currentFrame = rContext.GetCurrentFrame();
+
+    const drawCommands = @as(
+        [*]c.VkDrawIndirectCommand,
+        @ptrCast(@alignCast(currentFrame.m_indirectDrawBuffer.m_mappedData orelse @panic("!"))),
+    )[0..renderContext.FrameData.MAX_INDIRECT_DRAW];
+    _ = drawCommands;
+
+    var batchDraws = try OrganizeDraws();
+    defer batchDraws.deinit();
+
+    try currentFrame.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
+    try rContext.AllocateCurrentFrameGlobalDescriptors();
+
+    try AllocateMaterialDescriptorSets(&currentFrame.m_descriptorAllocator);
+
+    try UpdateUniformSceneBuffer();
+
+    // TODO this should be automatic for all params that need updating
+    try sceneInit.UpdateColoredShaderBuffer();
+
+    try WriteDescriptors();
+
+    var batchDrawIter = batchDraws.iterator();
+    while (batchDrawIter.next()) |renderBatch| {
+        try renderBatch.value_ptr.m_matInst.m_parentMaterial.BindMaterial(cmd);
+        try renderBatch.value_ptr.m_matInst.BindMaterialInstance(cmd);
+
+        // consider moving to/create "bind mesh" function
+        if (renderBatch.value_ptr.m_mesh.m_bufferData) |*meshBufferData| {
+            const offsets = [_]c.VkDeviceSize{0};
+            const vertexBuffers = [_]c.VkBuffer{
+                meshBufferData.m_vertexBuffer.m_buffer,
+            };
+            c.vkCmdBindVertexBuffers(
+                cmd,
+                0,
+                1,
+                &vertexBuffers,
+                &offsets,
+            );
+            c.vkCmdBindIndexBuffer(
+                cmd,
+                meshBufferData.m_indexBuffer.m_buffer,
+                0,
+                c.VK_INDEX_TYPE_UINT32,
+            );
+        } else {
+            return RenderLoopError.NoMeshBufferData;
+        }
+
+        //TODO indirect draw calls w/ compute shader culling
+        const objLayout = renderBatch.value_ptr.m_matInst.GetObjectDescriptorSetLayout();
+        for (renderBatch.value_ptr.m_renderables.items) |renderableEntry| {
+            if (objLayout) |layout| {
+                try renderableEntry.value_ptr.AllocateDescriptorSet(&currentFrame.m_descriptorAllocator, layout);
+            }
+            try renderableEntry.value_ptr.BindPerObjectData(cmd);
+            c.vkCmdDrawIndexed(
+                cmd,
+                @intCast(renderableEntry.value_ptr.m_mesh.m_indices.items.len),
+                1,
+                0,
+                0,
+                0,
+            );
+            drawStats.m_renderablesDrawn += 1;
+        }
+        drawStats.m_batches += 1;
+    }
+
+    if (debugDraw.ShouldDraw()) {
+        try debugDraw.Draw(cmd);
+    }
 }
 
 const DrawBatch = struct {
@@ -326,12 +387,12 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
             getPutResult.value_ptr.* = DrawBatch{
                 .m_mesh = renderableEntry.value_ptr.m_mesh,
                 .m_matInst = renderableEntry.value_ptr.m_materialInstance,
-                .m_renderables = ArrayList(Scene.RenderableContainer.Entry).init(allocator),
+                .m_renderables = .empty,
             };
         }
 
         // add current renderable to the draw batch
-        try getPutResult.value_ptr.m_renderables.append(renderableEntry);
+        try getPutResult.value_ptr.m_renderables.append(allocator, renderableEntry);
     }
     firstTimeBoundsDraw = false;
     return batches;
@@ -352,18 +413,18 @@ fn IsVisible(camera: *const Camera, renderable: *const RenderObject) !bool {
 
     //TODO delete and remove error union
     if (firstTimeBoundsDraw) {
-        _ = try DebugDraw.CreateDebugCircle(
+        _ = try debugDraw.CreateDebugCircle(
             boundsOrigin,
             Vec3.yAxis,
             renderableBounds.m_sphereRadius,
             ColorRGBA.presets.Green,
         );
-        _ = try DebugDraw.CreateDebugBox(
+        _ = try debugDraw.CreateDebugBox(
             boundsOrigin,
             renderableBounds.m_extents,
             ColorRGBA.presets.Yellow,
         );
-        _ = try DebugDraw.CreateDebugLine(
+        _ = try debugDraw.CreateDebugLine(
             boundsOrigin,
             boundsOrigin.Add(Vec3.xAxis.GetScaled(renderableBounds.m_extents.Length())),
             ColorRGBA.presets.Magenta,

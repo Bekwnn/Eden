@@ -2,20 +2,19 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 pub const DescriptorWriter = struct {
     const Self = @This();
 
-    m_imageInfos: ArrayList(c.VkDescriptorImageInfo),
-    m_bufferInfos: ArrayList(c.VkDescriptorBufferInfo),
-    m_writes: ArrayList(c.VkWriteDescriptorSet),
+    m_imageInfos: ArrayList(c.VkDescriptorImageInfo) = .empty,
+    m_bufferInfos: ArrayList(c.VkDescriptorBufferInfo) = .empty,
+    m_writes: ArrayList(c.VkWriteDescriptorSet) = .empty,
+    m_allocator: Allocator,
 
     pub fn init(allocator: Allocator) Self {
         return Self{
-            .m_imageInfos = ArrayList(c.VkDescriptorImageInfo).init(allocator),
-            .m_bufferInfos = ArrayList(c.VkDescriptorBufferInfo).init(allocator),
-            .m_writes = ArrayList(c.VkWriteDescriptorSet).init(allocator),
+            .m_allocator = allocator,
         };
     }
 
@@ -27,11 +26,14 @@ pub const DescriptorWriter = struct {
         layout: c.VkImageLayout,
         descriptorType: c.VkDescriptorType,
     ) !void {
-        try self.m_imageInfos.append(c.VkDescriptorImageInfo{
-            .sampler = sampler,
-            .imageView = image,
-            .imageLayout = layout,
-        });
+        try self.m_imageInfos.append(
+            self.m_allocator,
+            c.VkDescriptorImageInfo{
+                .sampler = sampler,
+                .imageView = image,
+                .imageLayout = layout,
+            },
+        );
         const imageInfo = &self.m_imageInfos.items[self.m_imageInfos.items.len - 1];
 
         const write = c.VkWriteDescriptorSet{
@@ -46,7 +48,7 @@ pub const DescriptorWriter = struct {
             .pNext = null,
         };
 
-        try self.m_writes.append(write);
+        try self.m_writes.append(self.m_allocator, write);
     }
 
     pub fn WriteBuffer(
@@ -57,11 +59,14 @@ pub const DescriptorWriter = struct {
         offset: usize,
         descriptorType: c.VkDescriptorType,
     ) !void {
-        try self.m_bufferInfos.append(c.VkDescriptorBufferInfo{
-            .buffer = buffer,
-            .offset = offset,
-            .range = size,
-        });
+        try self.m_bufferInfos.append(
+            self.m_allocator,
+            c.VkDescriptorBufferInfo{
+                .buffer = buffer,
+                .offset = offset,
+                .range = size,
+            },
+        );
         const descriptorBufferInfo = &self.m_bufferInfos.items[self.m_bufferInfos.items.len - 1];
 
         const write = c.VkWriteDescriptorSet{
@@ -76,7 +81,7 @@ pub const DescriptorWriter = struct {
             .pNext = null,
         };
 
-        try self.m_writes.append(write);
+        try self.m_writes.append(self.m_allocator, write);
     }
 
     pub fn Clear(self: *Self) void {

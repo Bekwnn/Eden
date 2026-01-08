@@ -2,7 +2,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
@@ -16,12 +16,13 @@ pub const Material = struct {
     m_name: []const u8,
     m_shaderPass: ShaderPass = undefined,
     m_materialDescriptorSet: ?c.VkDescriptorSet = null,
-    m_materialParams: ArrayList(MaterialParam),
+    m_materialParams: ArrayList(MaterialParam) = .empty,
+    m_allocator: Allocator,
 
     pub fn init(allocator: Allocator, name: []const u8) Material {
         return Material{
             .m_name = name,
-            .m_materialParams = ArrayList(MaterialParam).init(allocator),
+            .m_allocator = allocator,
         };
     }
 

@@ -1,4 +1,4 @@
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const std = @import("std");
 const ArrayList = std.ArrayList;
@@ -86,7 +86,7 @@ pub const ShaderPass = struct {
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
             .depthTestEnable = c.VK_TRUE,
             .depthWriteEnable = c.VK_TRUE,
-            .depthCompareOp = c.VK_COMPARE_OP_LESS,
+            .depthCompareOp = c.VK_COMPARE_OP_GREATER,
             .depthBoundsTestEnable = c.VK_FALSE,
             .stencilTestEnable = c.VK_FALSE,
             .pNext = null,
@@ -135,17 +135,20 @@ pub const ShaderPass = struct {
             .flags = 0,
         };
 
-        var pipelineShaderStageInfos = ArrayList(c.VkPipelineShaderStageCreateInfo).init(allocator);
+        var pipelineShaderStageInfos: ArrayList(c.VkPipelineShaderStageCreateInfo) = .empty;
         for (shaderEffect.m_shaderStages.items) |shaderStage| {
-            try pipelineShaderStageInfos.append(c.VkPipelineShaderStageCreateInfo{
-                .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                .stage = shaderStage.m_flags,
-                .module = shaderStage.m_shader,
-                .pName = "main",
-                .pSpecializationInfo = null,
-                .flags = 0,
-                .pNext = null,
-            });
+            try pipelineShaderStageInfos.append(
+                allocator,
+                c.VkPipelineShaderStageCreateInfo{
+                    .sType = c.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    .stage = shaderStage.m_flags,
+                    .module = shaderStage.m_shader,
+                    .pName = "main",
+                    .pSpecializationInfo = null,
+                    .flags = 0,
+                    .pNext = null,
+                },
+            );
         }
 
         const dynamicPipelineInfo = c.VkPipelineRenderingCreateInfo{
@@ -195,11 +198,20 @@ pub const ShaderPass = struct {
 fn CreatePipelineLayout(shaderEffect: *const ShaderEffect, allocator: Allocator) !c.VkPipelineLayout {
     const rContext = try RenderContext.GetInstance();
 
-    var setLayouts = ArrayList(c.VkDescriptorSetLayout).init(allocator);
-    try setLayouts.append(rContext.m_gpuSceneDescriptorLayout);
-    try setLayouts.append(shaderEffect.m_shaderDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout);
-    try setLayouts.append(shaderEffect.m_instanceDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout);
-    try setLayouts.append(shaderEffect.m_objectDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout);
+    var setLayouts: ArrayList(c.VkDescriptorSetLayout) = .empty;
+    try setLayouts.append(allocator, rContext.m_gpuSceneDescriptorLayout);
+    try setLayouts.append(
+        allocator,
+        shaderEffect.m_shaderDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout,
+    );
+    try setLayouts.append(
+        allocator,
+        shaderEffect.m_instanceDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout,
+    );
+    try setLayouts.append(
+        allocator,
+        shaderEffect.m_objectDescriptorSetLayout orelse rContext.m_emptyDescriptorSetLayout,
+    );
 
     const pipelineLayoutInfo = c.VkPipelineLayoutCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,

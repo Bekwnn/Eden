@@ -1,7 +1,7 @@
 //manages a texture asset for vulkan
 const std = @import("std");
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const imageFileUtil = @import("../coreutil/ImageFileUtil.zig");
 const Buffer = @import("Buffer.zig").Buffer;
 const RenderContext = @import("RenderContext.zig").RenderContext;
@@ -17,15 +17,16 @@ pub const TextureError = error{
     FailedToMapMemory,
 };
 
-//TODO should it be renamed to something else?
 pub const Texture = struct {
     m_name: []const u8,
     m_image: c.VkImage,
     m_memory: c.VkDeviceMemory,
     m_imageView: c.VkImageView,
+    m_extent: c.VkExtent2D,
     m_mipLevels: u32,
 
-    pub fn CreateTexture(
+    // consider adding a isSampled param instead of always setting VK_IMAGE_USAGE_SAMPLED_BIT
+    pub fn CreateTextureFromFile(
         name: []const u8,
         imagePath: []const u8,
     ) !Texture {
@@ -71,6 +72,7 @@ pub const Texture = struct {
             c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             &newTexture.m_image,
             &newTexture.m_memory,
+            &newTexture.m_extent,
         );
 
         try vkUtil.TransitionImageLayout(
@@ -121,6 +123,7 @@ pub const Texture = struct {
             c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             &depthTexture.m_image,
             &depthTexture.m_memory,
+            &depthTexture.m_extent,
         );
         depthTexture.m_imageView = try CreateImageView(
             depthTexture.m_image,
@@ -144,6 +147,7 @@ pub const Texture = struct {
         height: u32,
         msaaSamples: c.VkSampleCountFlagBits,
         colorFormat: c.VkFormat,
+        usageFlags: c.VkImageUsageFlags,
     ) !Texture {
         var colorTexture: Texture = undefined;
         try CreateImage(
@@ -154,11 +158,11 @@ pub const Texture = struct {
             msaaSamples,
             colorFormat,
             c.VK_IMAGE_TILING_OPTIMAL,
-            c.VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            usageFlags,
             c.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             &colorTexture.m_image,
             &colorTexture.m_memory,
+            &colorTexture.m_extent,
         );
         colorTexture.m_imageView = try CreateImageView(
             colorTexture.m_image,
@@ -188,6 +192,7 @@ pub fn CreateImage(
     properties: c.VkMemoryPropertyFlags,
     image: *c.VkImage,
     imageMemory: *c.VkDeviceMemory,
+    imageExtent: *c.VkExtent2D,
 ) !void {
     const imageInfo = c.VkImageCreateInfo{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -232,6 +237,11 @@ pub fn CreateImage(
         c.vkBindImageMemory(logicalDevice, image.*, imageMemory.*, 0),
         TextureError.FailedToBindMemory,
     );
+
+    imageExtent.* = c.VkExtent2D{
+        .width = width,
+        .height = height,
+    };
 }
 
 fn CalcTextureMipLevels(width: u32, height: u32) u32 {

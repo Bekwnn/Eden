@@ -6,9 +6,8 @@ const componentData = @import("ComponentData.zig");
 const GameWorld = gameWorld.GameWorld;
 const Entity = ent.Entity;
 const ArrayList = std.ArrayList;
-const mem = std.mem;
+const Allocator = std.mem.Allocator;
 
-const allocator = std.heap.page_allocator;
 const k_entityAllocChunk = 100; //scales with Entity sizeof
 
 const EntityError = error{
@@ -27,14 +26,16 @@ const EntityEntry = struct {
 };
 
 pub const EntityManager = struct {
-    m_entityFastTable: ArrayList(EntityFastLookup) = ArrayList(EntityFastLookup).init(allocator),
-    m_entities: ArrayList(EntityEntry) = ArrayList(EntityEntry).init(allocator),
+    m_entityFastTable: ArrayList(EntityFastLookup) = .empty,
+    m_entities: ArrayList(EntityEntry) = .empty,
     m_endOfEids: u32 = ent.GetEidStart(),
     m_firstFreeEntitySlot: u32 = 0, // potentially speed up KillEntity a bit on average...
+    m_allocator: Allocator,
     //TODO should eids be re-used?
 
-    pub fn Initialize() EntityManager {
-        return EntityManager{};
+    pub fn init(allocator: Allocator) EntityManager {
+        return EntityManager{ .m_allocator = allocator };
+
         // will probably do additional initialization later on...
     }
 
@@ -44,7 +45,7 @@ pub const EntityManager = struct {
         var newEntityIdx: u32 = 0;
         if (self.m_firstFreeEntitySlot == self.m_entities.len) { // append new
             const newEntry = Entity{ .m_eid = self.m_endOfEids };
-            try self.m_entities.append(EntityEntry{ .m_e = newEntry });
+            try self.m_entities.append(self.m_allocator, EntityEntry{ .m_e = newEntry });
             newEntityIdx = @as(u32, self.m_entities.len) - 1;
             self.m_firstFreeEntitySlot += 1;
         } else { // use existing freed slot
@@ -54,10 +55,13 @@ pub const EntityManager = struct {
                 self.m_firstFreeEntitySlot += 1;
             }
         }
-        try self.m_entityFastTable.append(EntityFastLookup{
-            .m_eid = self.m_endOfEids,
-            .m_idx = newEntityIdx,
-        }); //TODO should go back and delete entity if the lookup table has an issue
+        try self.m_entityFastTable.append(
+            self.m_allocator,
+            EntityFastLookup{
+                .m_eid = self.m_endOfEids,
+                .m_idx = newEntityIdx,
+            },
+        ); //TODO should go back and delete entity if the lookup table has an issue
         self.m_endOfEids += 1;
 
         return &(self.m_entities.items[newEntityIdx].m_e orelse return EntityError.Unknown);

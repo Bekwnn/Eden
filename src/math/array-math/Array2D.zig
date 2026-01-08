@@ -39,7 +39,7 @@ pub fn ArrayList2D(comptime ValType: type) type {
     return struct {
         const Self = @This();
 
-        m_array: ArrayList(ValType),
+        m_array: ArrayList(ValType) = .empty,
         m_width: usize,
         m_height: usize,
 

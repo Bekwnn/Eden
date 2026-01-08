@@ -1,4 +1,4 @@
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const std = @import("std");
 const ArrayList = std.ArrayList;
@@ -21,24 +21,28 @@ pub const DescriptorAllocator = struct {
         m_ratio: f32,
     };
 
-    m_poolRatios: ArrayList(PoolSizeRatio),
-    m_fullPools: ArrayList(c.VkDescriptorPool),
-    m_readyPools: ArrayList(c.VkDescriptorPool),
+    m_poolRatios: ArrayList(PoolSizeRatio) = .empty,
+    m_fullPools: ArrayList(c.VkDescriptorPool) = .empty,
+    m_readyPools: ArrayList(c.VkDescriptorPool) = .empty,
     m_setsPerPool: u32,
     m_allocator: Allocator,
 
     pub fn init(allocator: Allocator, device: c.VkDevice, initialSets: u32, poolRatios: []const PoolSizeRatio) !Self {
         var newDescriptorAllocator = Self{
-            .m_poolRatios = ArrayList(PoolSizeRatio).init(allocator),
-            .m_fullPools = ArrayList(c.VkDescriptorPool).init(allocator),
-            .m_readyPools = ArrayList(c.VkDescriptorPool).init(allocator),
             .m_setsPerPool = @intFromFloat(@as(f32, @floatFromInt(initialSets)) * 1.5),
             .m_allocator = allocator,
         };
 
-        try newDescriptorAllocator.m_poolRatios.appendSlice(poolRatios);
+        try newDescriptorAllocator.m_poolRatios.appendSlice(allocator, poolRatios);
 
-        try newDescriptorAllocator.m_readyPools.append(try newDescriptorAllocator.CreatePool(device, initialSets, poolRatios));
+        try newDescriptorAllocator.m_readyPools.append(
+            allocator,
+            try newDescriptorAllocator.CreatePool(
+                device,
+                initialSets,
+                poolRatios,
+            ),
+        );
 
         return newDescriptorAllocator;
     }
@@ -55,7 +59,7 @@ pub const DescriptorAllocator = struct {
                 c.vkResetDescriptorPool(device, pool, 0),
                 DescriptorAllocatorError.FailedToResetDescriptorPool,
             );
-            try self.m_readyPools.append(pool);
+            try self.m_readyPools.append(self.m_allocator, pool);
         }
         self.m_fullPools.clearRetainingCapacity();
     }
@@ -67,9 +71,9 @@ pub const DescriptorAllocator = struct {
         for (self.m_fullPools.items) |pool| {
             c.vkDestroyDescriptorPool(device, pool, null);
         }
-        self.m_poolRatios.deinit();
-        self.m_fullPools.deinit();
-        self.m_readyPools.deinit();
+        self.m_poolRatios.deinit(self.m_allocator);
+        self.m_fullPools.deinit(self.m_allocator);
+        self.m_readyPools.deinit(self.m_allocator);
     }
 
     // TODO should maybe be able to pass a pNext
@@ -89,7 +93,7 @@ pub const DescriptorAllocator = struct {
 
         // allocation failed, store pool in full pools and create new one
         if (result == c.VK_ERROR_OUT_OF_POOL_MEMORY or result == c.VK_ERROR_FRAGMENTED_POOL) {
-            try self.m_fullPools.append(poolToUse);
+            try self.m_fullPools.append(self.m_allocator, poolToUse);
 
             poolToUse = try self.GetPool(device);
             allocInfo.descriptorPool = poolToUse;
@@ -101,7 +105,7 @@ pub const DescriptorAllocator = struct {
             );
         }
 
-        try self.m_readyPools.append(poolToUse);
+        try self.m_readyPools.append(self.m_allocator, poolToUse);
         return descriptorSet;
     }
 
@@ -123,12 +127,15 @@ pub const DescriptorAllocator = struct {
     }
 
     fn CreatePool(self: *Self, device: c.VkDevice, setCount: u32, poolRatios: []const PoolSizeRatio) !c.VkDescriptorPool {
-        var poolSizes = ArrayList(c.VkDescriptorPoolSize).init(self.m_allocator);
+        var poolSizes: ArrayList(c.VkDescriptorPoolSize) = .empty;
         for (poolRatios) |poolRatio| {
-            try poolSizes.append(c.VkDescriptorPoolSize{
-                .type = poolRatio.m_descriptorType,
-                .descriptorCount = @intFromFloat(poolRatio.m_ratio * @as(f32, @floatFromInt(setCount))),
-            });
+            try poolSizes.append(
+                self.m_allocator,
+                c.VkDescriptorPoolSize{
+                    .type = poolRatio.m_descriptorType,
+                    .descriptorCount = @intFromFloat(poolRatio.m_ratio * @as(f32, @floatFromInt(setCount))),
+                },
+            );
         }
 
         const poolCreateInfo = c.VkDescriptorPoolCreateInfo{

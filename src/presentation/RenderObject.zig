@@ -2,7 +2,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const Mat4x4 = @import("../math/Mat4x4.zig").Mat4x4;
 const Transform = @import("../math/Transform.zig").Transform;
@@ -30,15 +30,14 @@ pub const RenderObject = struct {
 
     m_transform: Transform = Transform{},
     m_transformMat: Mat4x4 = Mat4x4{}, //TODO gpu takes transform in mat4 format, should they just live in a buffer somewhere?
-    m_objectMaterialParams: ArrayList(MaterialParam),
+    m_objectMaterialParams: ArrayList(MaterialParam) = .empty,
 
     //TODO create a default material/material instance
-    pub fn init(allocator: Allocator, name: []const u8, mesh: *Mesh, materialInst: *MaterialInstance) RenderObject {
+    pub fn init(name: []const u8, mesh: *Mesh, materialInst: *MaterialInstance) RenderObject {
         return RenderObject{
             .m_name = name,
             .m_mesh = mesh,
             .m_materialInstance = materialInst,
-            .m_objectMaterialParams = ArrayList(MaterialParam).init(allocator),
         };
     }
 

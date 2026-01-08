@@ -6,12 +6,13 @@ const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
 const sceneInit = @import("SceneInit.zig");
 const vkUtil = @import("VulkanUtil.zig");
+const Texture = @import("Texture.zig").Texture;
 
 const Quat = @import("../math/Quat.zig").Quat;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Vec2 = @import("../math/Vec2.zig").Vec2;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const input = @import("../Input.zig");
 
 const allocator = std.heap.page_allocator;
@@ -36,10 +37,11 @@ pub const EditorError = error{
     FailedToInitialize,
 };
 
-const ViewportFrameData = struct {
+//TODO resize texture on swapchain resize
+pub const ViewportFrameData = struct {
     m_descriptorSet: c.VkDescriptorSet,
-
-    m_imageView: c.VkImageView,
+    m_colorTexture: Texture,
+    m_depthTexture: Texture,
     m_sampler: c.VkSampler,
 
     pub fn GetId(self: *ViewportFrameData) c.ImTextureID {
@@ -47,7 +49,7 @@ const ViewportFrameData = struct {
     }
 };
 
-var viewportFrameData: std.ArrayList(ViewportFrameData) = undefined;
+var viewportFrameData: std.ArrayList(ViewportFrameData) = .empty;
 
 pub fn Initialize(window: *c.SDL_Window) !void {
     c.igGetIO_Nil().*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
@@ -56,10 +58,28 @@ pub fn Initialize(window: *c.SDL_Window) !void {
     // Initialize data for the render viewport
     const rContext = try RenderContext.GetInstance();
     const imageCount = rContext.m_swapchain.m_imageCount;
-    viewportFrameData = try std.ArrayList(ViewportFrameData).initCapacity(allocator, imageCount);
-    for (rContext.m_swapchain.m_imageViews, 0..imageCount) |vkimageview, _| {
+    try viewportFrameData.ensureTotalCapacity(allocator, imageCount);
+    for (0..imageCount) |_| {
         const curViewportData = viewportFrameData.addOneAssumeCapacity();
-        curViewportData.m_imageView = vkimageview;
+        curViewportData.m_colorTexture = try Texture.CreateColorImage(
+            rContext.m_logicalDevice,
+            rContext.m_swapchain.m_extent.width,
+            rContext.m_swapchain.m_extent.height,
+            rContext.m_msaaSamples,
+            rContext.m_swapchain.m_format.format,
+            c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                c.VK_IMAGE_USAGE_SAMPLED_BIT,
+        );
+
+        const depthFormat = try renderContext.FindDepthFormat();
+        curViewportData.m_depthTexture = try Texture.CreateDepthImage(
+            rContext.m_logicalDevice,
+            rContext.m_swapchain.m_extent.width,
+            rContext.m_swapchain.m_extent.height,
+            rContext.m_msaaSamples,
+            depthFormat,
+        );
+
         const samplerInfo = c.VkSamplerCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
             .magFilter = c.VK_FILTER_LINEAR,
@@ -92,7 +112,7 @@ pub fn Initialize(window: *c.SDL_Window) !void {
 
         curViewportData.m_descriptorSet = c.ImGui_ImplVulkan_AddTexture(
             curViewportData.m_sampler,
-            curViewportData.m_imageView,
+            curViewportData.m_colorTexture.m_imageView,
             c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         );
     }
@@ -103,10 +123,135 @@ pub fn Deinit() void {
         @panic("!");
     };
     for (viewportFrameData.items) |*vpFrameData| {
-        c.vkDestroyImageView(rContext.m_logicalDevice, vpFrameData.m_imageView, null);
+        vpFrameData.m_colorTexture.FreeTexture(rContext.m_logicalDevice);
         c.vkDestroySampler(rContext.m_logicalDevice, vpFrameData.m_sampler, null);
-        c.ImGui_ImplVulkan_RemoveTexture(vpFrameData.m_descriptorSet);
+        //TODO causing GPU crash:
+        // message: vkFreeDescriptorSets(): descriptorPool was created with
+        // VkDescriptorPoolCreateFl ags(0) (missing FREE_DESCRIPTOR_SET_BIT).
+        // The Vulkan spec states: descriptorPool must have been created with
+        // the VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT flag
+        // (https://vulkan.lunarg.com/doc/view/1.4.309.0/window s/antora/spec/latest/chapters/descriptorsets.html#VUID-vkFreeDescriptorSets-descriptorPoo l-00312)
+        //
+        //c.ImGui_ImplVulkan_RemoveTexture(vpFrameData.m_descriptorSet);
     }
+}
+
+fn TransitionImageLayout(
+    cmd: c.VkCommandBuffer,
+    image: c.VkImage,
+    oldLayout: c.VkImageLayout,
+    newLayout: c.VkImageLayout,
+) void {
+    const imageBarrier = c.VkImageMemoryBarrier2{
+        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = c.VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = c.VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = c.VK_ACCESS_TRANSFER_READ_BIT,
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .srcQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = c.VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = c.VkImageSubresourceRange{
+            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+        },
+        .pNext = null,
+    };
+
+    //TODO double check _BITs used here against the spec
+    c.vkCmdPipelineBarrier2(
+        cmd,
+        &c.VkDependencyInfo{
+            .sType = c.VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &imageBarrier,
+        },
+    );
+}
+
+pub fn GetCurrentViewportFrameData() !*ViewportFrameData {
+    const rContext = try RenderContext.GetInstance();
+    return &viewportFrameData.items[rContext.m_currentFrame];
+}
+
+pub fn CopyImageToViewport(
+    cmd: c.VkCommandBuffer,
+    srcImage: c.VkImage,
+    srcLayout: c.VkImageLayout,
+) !void {
+    const rContext = try RenderContext.GetInstance();
+    const currentFrameData = &viewportFrameData.items[rContext.m_currentFrame];
+
+    // Steps:
+    // 1. transition both images to transfer_src/dst format
+    // 2. perform copy
+    // 3. transition images to ???
+
+    //TODO make transition image layout util somewhere
+    TransitionImageLayout(
+        cmd,
+        srcImage,
+        srcLayout,
+        c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+    );
+
+    TransitionImageLayout(
+        cmd,
+        currentFrameData.m_colorTexture.m_image,
+        c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    );
+
+    // Actual copy step
+    c.vkCmdCopyImage(
+        cmd,
+        srcImage,
+        c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        currentFrameData.m_colorTexture.m_image,
+        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &c.VkImageCopy{
+            .srcOffset = c.VkOffset3D{ .x = 0, .y = 0, .z = 0 },
+            .dstOffset = c.VkOffset3D{ .x = 0, .y = 0, .z = 0 },
+            .srcSubresource = c.VkImageSubresourceLayers{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+                .mipLevel = 0,
+            },
+            .dstSubresource = c.VkImageSubresourceLayers{
+                .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+                .mipLevel = 0,
+            },
+            .extent = c.VkExtent3D{
+                .width = rContext.m_swapchain.m_extent.width,
+                .height = rContext.m_swapchain.m_extent.height,
+                .depth = 1,
+            },
+        },
+    );
+
+    // Transition SRC and DST back
+    TransitionImageLayout(
+        cmd,
+        srcImage,
+        c.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        srcLayout,
+    );
+
+    TransitionImageLayout(
+        cmd,
+        currentFrameData.m_colorTexture.m_image,
+        c.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    );
 }
 
 pub fn GetMainWindow() !*c.SDL_Window {

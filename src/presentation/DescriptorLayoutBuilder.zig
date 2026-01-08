@@ -1,4 +1,4 @@
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const std = @import("std");
 const ArrayList = std.ArrayList;
@@ -13,16 +13,17 @@ pub const DescriptorLayoutError = error{
 pub const DescriptorLayoutBuilder = struct {
     const Self = @This();
 
-    m_bindings: ArrayList(c.VkDescriptorSetLayoutBinding),
+    m_bindings: ArrayList(c.VkDescriptorSetLayoutBinding) = .empty,
+    m_allocator: Allocator,
 
     pub fn init(allocator: Allocator) Self {
         return Self{
-            .m_bindings = ArrayList(c.VkDescriptorSetLayoutBinding).init(allocator),
+            .m_allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.m_bindings.deinit();
+        self.m_bindings.deinit(self.m_allocator);
     }
 
     pub fn AddBinding(self: *Self, binding: u32, descriptorType: c.VkDescriptorType) !void {
@@ -34,7 +35,7 @@ pub const DescriptorLayoutBuilder = struct {
             .stageFlags = 0,
         };
 
-        try self.m_bindings.append(newBind);
+        try self.m_bindings.append(self.m_allocator, newBind);
     }
 
     pub fn Clear(self: *Self) void {

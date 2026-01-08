@@ -1,4 +1,4 @@
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const em = @import("../math/Math.zig");
 const std = @import("std");
 const ArrayList = std.ArrayList;
@@ -68,8 +68,11 @@ fn AssImp_ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
             allocator,
             importMesh.mNumVertices,
         ),
-        //TODO can we make the capacity/resize handling better?
-        .m_indices = ArrayList(u32).init(allocator),
+        // we assert later on that indices per face is 3
+        .m_indices = try ArrayList(u32).initCapacity(
+            allocator,
+            importMesh.mNumFaces * 3,
+        ),
         .m_bufferData = null,
     };
 
@@ -102,7 +105,7 @@ fn AssImp_ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
             return ImportError.BadDataCounts;
         }
         for (face.mIndices[0..face.mNumIndices]) |index| {
-            try returnMesh.m_indices.append(index);
+            returnMesh.m_indices.appendAssumeCapacity(index);
         }
     }
 

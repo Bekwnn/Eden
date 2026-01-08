@@ -2,7 +2,7 @@ const std = @import("std");
 const debug = std.debug;
 const allocator = std.heap.page_allocator;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const ColorRGBA = @import("../math/Color.zig").ColorRGBA;
 const Quat = @import("../math/Quat.zig").Quat;
@@ -24,24 +24,27 @@ var debugShaderEffect: ShaderEffect = undefined;
 
 //TODO reduce repeating for different primitives
 pub var debugLineVertexBuffers = [_]?Buffer{null} ** 2; //double buffered per frame
-pub var debugLines = std.ArrayList(DebugLine).init(allocator);
+pub var debugLines: std.ArrayList(DebugLine) = .empty;
 pub const DebugLine = struct {
     m_lines: [2]Vec3,
     m_color: ColorRGBA,
 };
 pub fn CreateDebugLine(start: Vec3, end: Vec3, color: ColorRGBA) !*DebugLine {
-    try debugLines.append(DebugLine{
-        .m_lines = [_]Vec3{
-            start,
-            end,
+    try debugLines.append(
+        allocator,
+        DebugLine{
+            .m_lines = [_]Vec3{
+                start,
+                end,
+            },
+            .m_color = color,
         },
-        .m_color = color,
-    });
+    );
     return &debugLines.items[debugLines.items.len - 1];
 }
 
 pub var debugCircleVertexBuffers = [_]?Buffer{null} ** 2;
-pub var debugCircles = std.ArrayList(DebugCircle).init(allocator);
+pub var debugCircles: std.ArrayList(DebugCircle) = .empty;
 pub const DebugCircle = struct {
     m_pos: Vec3,
     m_upDir: Vec3,
@@ -49,28 +52,34 @@ pub const DebugCircle = struct {
     m_color: ColorRGBA,
 };
 pub fn CreateDebugCircle(pos: Vec3, upDir: Vec3, radius: f32, color: ColorRGBA) !*DebugCircle {
-    try debugCircles.append(DebugCircle{
-        .m_pos = pos,
-        .m_upDir = upDir,
-        .m_radius = radius,
-        .m_color = color,
-    });
+    try debugCircles.append(
+        allocator,
+        DebugCircle{
+            .m_pos = pos,
+            .m_upDir = upDir,
+            .m_radius = radius,
+            .m_color = color,
+        },
+    );
     return &debugCircles.items[debugCircles.items.len - 1];
 }
 
 pub var debugBoxVertexBuffers = [_]?Buffer{null} ** 2;
-pub var debugBoxes = std.ArrayList(DebugBox).init(allocator);
+pub var debugBoxes: std.ArrayList(DebugBox) = .empty;
 pub const DebugBox = struct {
     m_center: Vec3,
     m_extents: Vec3,
     m_color: ColorRGBA,
 };
 pub fn CreateDebugBox(center: Vec3, extents: Vec3, color: ColorRGBA) !*DebugBox {
-    try debugBoxes.append(DebugBox{
-        .m_center = center,
-        .m_extents = extents,
-        .m_color = color,
-    });
+    try debugBoxes.append(
+        allocator,
+        DebugBox{
+            .m_center = center,
+            .m_extents = extents,
+            .m_color = color,
+        },
+    );
     return &debugBoxes.items[debugBoxes.items.len - 1];
 }
 
@@ -368,11 +377,14 @@ pub fn Init() !void {
         "src\\shaders\\compiled\\debug_colored-vert.spv",
         "src\\shaders\\compiled\\debug_colored-frag.spv",
     );
-    try debugShaderEffect.m_pushConstantRanges.append(c.VkPushConstantRange{
-        .offset = 0,
-        .size = @sizeOf(ColorRGBA),
-        .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
-    });
+    try debugShaderEffect.m_pushConstantRanges.append(
+        allocator,
+        c.VkPushConstantRange{
+            .offset = 0,
+            .size = @sizeOf(ColorRGBA),
+            .stageFlags = c.VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
+    );
     try debugShaderEffect.BuildLayouts(allocator);
 
     // create line list mat

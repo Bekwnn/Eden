@@ -1,4 +1,4 @@
-const c = @import("c.zig");
+const c = @import("c.zig").cLib;
 const std = @import("std");
 const debug = std.debug;
 const time = std.time;
@@ -64,7 +64,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
         const clampedDeltaNs = std.math.clamp(rawDeltaNs, minDeltaNs, maxDeltaNs);
         if (rawDeltaNs < minDeltaNs) {
             // sleep if exceeding max fps
-            time.sleep(minDeltaNs - rawDeltaNs);
+            std.Thread.sleep(minDeltaNs - rawDeltaNs);
         }
         const deltaT = @as(f32, @floatFromInt(clampedDeltaNs)) / @as(f32, @floatFromInt(time.ns_per_s));
 

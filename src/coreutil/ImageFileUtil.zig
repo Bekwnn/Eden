@@ -4,7 +4,7 @@ const allocator = std.heap.page_allocator;
 const mem = std.mem;
 
 const filePathUtils = @import("FilePathUtils.zig");
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 pub const ImageFileError = error{
     STBI_LoadFailed,

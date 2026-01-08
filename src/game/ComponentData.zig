@@ -9,7 +9,7 @@ pub const PhysicsComp = @import("ComponentData/PhysicsComp.zig").PhysicsComp;
 const std = @import("std");
 
 const ArrayList = std.ArrayList;
-const allocator = std.heap.page_allocator;
+const Allocator = std.mem.Allocator;
 
 pub const compTypeEnumCount: u32 = @typeInfo(EComponentType).@"enum".fields.len;
 pub const EComponentType = enum {
@@ -34,7 +34,16 @@ fn ComponentDataPair(comptime compType: type) type {
 
 fn ComponentDataArray(comptime compType: type) type {
     return struct {
-        m_compData: ArrayList(ComponentDataPair(compType)) = ArrayList(ComponentDataPair(compType)).init(allocator),
+        m_compData: ArrayList(ComponentDataPair(compType)) = .empty,
+        m_allocator: Allocator,
+
+        const Self = @This();
+
+        pub fn init(allocator: Allocator) Self {
+            return Self{
+                .m_allocator = allocator,
+            };
+        }
 
         pub fn GetComp(self: *ComponentDataArray(compType), id: u16) ?*compType {
             if (id >= self.m_compData.len) {
@@ -53,7 +62,7 @@ fn ComponentDataArray(comptime compType: type) type {
         }
 
         pub fn AddComp(self: *ComponentDataArray(compType), owner: u32) u16 {
-            self.m_compData.append(ComponentDataPair(compType){ .m_ownerEid = owner }) catch {
+            self.m_compData.append(self.m_allocator, ComponentDataPair(compType){ .m_ownerEid = owner }) catch {
                 @panic("Could not add new component to array.");
             };
             const addedCompId = @as(u16, self.m_compData.len - 1);
@@ -64,15 +73,22 @@ fn ComponentDataArray(comptime compType: type) type {
 }
 
 pub const ComponentManager = struct {
-    m_healthCompData: ComponentDataArray(HealthComp) = ComponentDataArray(HealthComp){},
-    m_inputCompData: ComponentDataArray(InputComp) = ComponentDataArray(InputComp){},
-    m_movementCompData: ComponentDataArray(MovementComp) = ComponentDataArray(MovementComp){},
-    m_sceneCompData: ComponentDataArray(SceneComp) = ComponentDataArray(SceneComp){},
-    m_transformCompData: ComponentDataArray(TransformComp) = ComponentDataArray(TransformComp){},
-    m_physicsCompData: ComponentDataArray(PhysicsComp) = ComponentDataArray(PhysicsComp){},
+    m_healthCompData: ComponentDataArray(HealthComp),
+    m_inputCompData: ComponentDataArray(InputComp),
+    m_movementCompData: ComponentDataArray(MovementComp),
+    m_sceneCompData: ComponentDataArray(SceneComp),
+    m_transformCompData: ComponentDataArray(TransformComp),
+    m_physicsCompData: ComponentDataArray(PhysicsComp),
 
-    pub fn Initialize() ComponentManager {
-        return ComponentManager{};
+    pub fn init(allocator: Allocator) ComponentManager {
+        return ComponentManager{
+            .m_healthCompData = ComponentDataArray(HealthComp).init(allocator),
+            .m_inputCompData = ComponentDataArray(InputComp).init(allocator),
+            .m_movementCompData = ComponentDataArray(MovementComp).init(allocator),
+            .m_sceneCompData = ComponentDataArray(SceneComp).init(allocator),
+            .m_transformCompData = ComponentDataArray(TransformComp).init(allocator),
+            .m_physicsCompData = ComponentDataArray(PhysicsComp).init(allocator),
+        };
     }
 
     fn SwitchOnCompType(self: *ComponentManager, comptime compType: type) *ComponentDataArray(compType) {

@@ -1,4 +1,4 @@
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -25,19 +25,21 @@ pub const ShaderEffect = struct {
         m_shaderStageFlags: c.VkShaderStageFlags,
     };
 
-    m_shaderStages: ArrayList(ShaderStage),
+    m_shaderStages: ArrayList(ShaderStage) = .empty,
     // set 0 descriptor layout: rContext gpuSceneData globals
     // set 1 descriptor layout: per shader layout
     m_shaderDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
-    m_shaderSetParams: ArrayList(DescriptorParam),
+    m_shaderSetParams: ArrayList(DescriptorParam) = .empty,
     // set 2 descriptor layout: per shader instance layout
     m_instanceDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
-    m_instanceSetParams: ArrayList(DescriptorParam),
+    m_instanceSetParams: ArrayList(DescriptorParam) = .empty,
     // set 3 per render object layout
     m_objectDescriptorSetLayout: ?c.VkDescriptorSetLayout = null,
-    m_objectSetParams: ArrayList(DescriptorParam),
+    m_objectSetParams: ArrayList(DescriptorParam) = .empty,
 
-    m_pushConstantRanges: ArrayList(c.VkPushConstantRange),
+    m_pushConstantRanges: ArrayList(c.VkPushConstantRange) = .empty,
+
+    m_allocator: Allocator,
 
     pub const ShaderStage = struct {
         m_shader: c.VkShaderModule,
@@ -46,11 +48,7 @@ pub const ShaderEffect = struct {
 
     pub fn CreateEmptyShader(allocator: Allocator) ShaderEffect {
         return ShaderEffect{
-            .m_shaderStages = ArrayList(ShaderStage).init(allocator),
-            .m_shaderSetParams = ArrayList(DescriptorParam).init(allocator),
-            .m_instanceSetParams = ArrayList(DescriptorParam).init(allocator),
-            .m_objectSetParams = ArrayList(DescriptorParam).init(allocator),
-            .m_pushConstantRanges = ArrayList(c.VkPushConstantRange).init(allocator),
+            .m_allocator = allocator,
         };
     }
 
@@ -60,13 +58,7 @@ pub const ShaderEffect = struct {
         vertShaderSource: []const u8,
         fragShaderSource: []const u8,
     ) !ShaderEffect {
-        var newShader = ShaderEffect{
-            .m_shaderStages = ArrayList(ShaderStage).init(allocator),
-            .m_shaderSetParams = ArrayList(DescriptorParam).init(allocator),
-            .m_instanceSetParams = ArrayList(DescriptorParam).init(allocator),
-            .m_objectSetParams = ArrayList(DescriptorParam).init(allocator),
-            .m_pushConstantRanges = ArrayList(c.VkPushConstantRange).init(allocator),
-        };
+        var newShader = ShaderEffect.CreateEmptyShader(allocator);
 
         try newShader.AddShaderStage(allocator, vertShaderSource, c.VK_SHADER_STAGE_VERTEX_BIT);
         try newShader.AddShaderStage(allocator, fragShaderSource, c.VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -101,10 +93,13 @@ pub const ShaderEffect = struct {
         shaderSource: []const u8,
         flags: c.VkShaderStageFlags,
     ) !void {
-        try self.m_shaderStages.append(ShaderStage{
-            .m_shader = try CreateShaderModule(allocator, shaderSource),
-            .m_flags = flags,
-        });
+        try self.m_shaderStages.append(
+            self.m_allocator,
+            ShaderStage{
+                .m_shader = try CreateShaderModule(allocator, shaderSource),
+                .m_flags = flags,
+            },
+        );
     }
 };
 
@@ -138,10 +133,10 @@ fn CheckAndFreeShaderModule(shader: c.VkShaderModule) void {
 
 // returns owned slice; caller needs to free
 fn ReadShaderFileAlloc(
-    comptime alignment: comptime_int,
+    comptime alignment: std.mem.Alignment,
     allocator: Allocator,
     relativeShaderPath: []const u8,
-) ![]align(alignment) const u8 {
+) ![]align(std.mem.Alignment.toByteUnits(alignment)) const u8 {
     std.debug.print("Reading shader {s}...\n", .{relativeShaderPath});
 
     var shaderDir = std.fs.cwd();
@@ -155,7 +150,7 @@ fn ReadShaderFileAlloc(
                 const shaderFile = try shaderDir.openFile(path, .{});
                 defer shaderFile.close();
 
-                const shaderCode: []align(alignment) u8 = try allocator.allocAdvancedWithRetAddr(
+                const shaderCode: []align(std.mem.Alignment.toByteUnits(alignment)) u8 = try allocator.allocAdvancedWithRetAddr(
                     u8,
                     alignment,
                     try shaderFile.getEndPos(),
@@ -171,7 +166,7 @@ fn ReadShaderFileAlloc(
 }
 
 fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.VkShaderModule {
-    const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFileAlloc(@alignOf(u32), allocator, relativeShaderPath);
+    const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFileAlloc(std.mem.Alignment.of(u32), allocator, relativeShaderPath);
     defer allocator.free(shaderCode);
 
     const createInfo = c.VkShaderModuleCreateInfo{

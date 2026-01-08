@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const debug = std.debug;
 const allocator = std.heap.page_allocator;
 
@@ -132,7 +132,7 @@ pub const AssetInventory = struct {
 
     // Takes ownership of name slice
     pub fn CreateTexture(self: *AssetInventory, name: []const u8, imagePath: []const u8) !*Texture {
-        const texture = try Texture.CreateTexture(name, imagePath);
+        const texture = try Texture.CreateTextureFromFile(name, imagePath);
         try self.m_textures.put(name, texture);
         return self.m_textures.getPtr(name) orelse @panic("Texture just created does not exist in hash map");
     }

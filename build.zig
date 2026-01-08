@@ -280,9 +280,14 @@ pub fn build(b: *std.Build) !void {
     const test_step = b.step("test", "Run tests");
     for (test_files) |test_file| {
         const test_artifact = b.addTest(.{
-            .root_source_file = b.path(test_file),
-            .optimize = optimizationMode,
-            .target = targetOptions,
+            .root_module = b.addModule(
+                "test_module",
+                std.Build.Module.CreateOptions{
+                    .root_source_file = b.path(test_file),
+                    .optimize = optimizationMode,
+                    .target = targetOptions,
+                },
+            ),
         });
         const run_test = b.addRunArtifact(test_artifact);
         test_step.dependOn(&run_test.step);

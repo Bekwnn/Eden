@@ -1,4 +1,4 @@
-pub usingnamespace @cImport({
+pub const cLib = @cImport({
     //Vulkan
     @cInclude("vulkan/vulkan.h");
 

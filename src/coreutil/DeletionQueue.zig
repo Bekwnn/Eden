@@ -1,5 +1,6 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
+const Allocator = std.mem.Allocator;
 
 //WIP
 //can this take something like a lambda or fn ptr & context?
@@ -8,6 +9,7 @@ pub const DeletionQueue = struct {
     const Self = @This();
 
     m_queue: ArrayList(fn () void),
+    m_allocator: Allocator,
 
     pub fn append(self: *Self, deleteFn: fn () void) !void {
         try self.m_queue.append(deleteFn);

@@ -2,7 +2,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const allocator = std.heap.page_allocator;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const Vec2 = @import("../math/Vec2.zig").Vec2;
 const Vec3 = @import("../math/Vec3.zig").Vec3;
 const Buffer = @import("Buffer.zig").Buffer;
@@ -47,8 +47,8 @@ pub const MeshBuffers = struct {
 
 pub const Mesh = struct {
     m_name: []const u8,
-    m_vertexData: ArrayList(VertexData),
-    m_indices: ArrayList(u32),
+    m_vertexData: ArrayList(VertexData) = .empty,
+    m_indices: ArrayList(u32) = .empty,
 
     m_bounds: Bounds = Bounds{},
 

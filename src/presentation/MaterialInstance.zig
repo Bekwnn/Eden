@@ -2,7 +2,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
@@ -15,13 +15,14 @@ pub const MaterialInstance = struct {
     m_name: []const u8,
     m_parentMaterial: *Material,
     m_instanceDescriptorSet: ?c.VkDescriptorSet = null,
-    m_materialInstanceParams: ArrayList(MaterialParam),
+    m_materialInstanceParams: ArrayList(MaterialParam) = .empty,
+    m_allocator: Allocator,
 
     pub fn init(allocator: Allocator, name: []const u8, parentMaterial: *Material) MaterialInstance {
         return MaterialInstance{
             .m_name = name,
             .m_parentMaterial = parentMaterial,
-            .m_materialInstanceParams = ArrayList(MaterialParam).init(allocator),
+            .m_allocator = allocator,
         };
     }
 

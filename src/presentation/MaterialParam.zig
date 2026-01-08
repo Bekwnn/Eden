@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const assert = std.debug.assert;
 
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 
 const AssetInventory = @import("AssetInventory.zig").AssetInventory;
 const Buffer = @import("Buffer.zig").Buffer;

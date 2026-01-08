@@ -1,4 +1,4 @@
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
 const vkUtil = @import("VulkanUtil.zig");

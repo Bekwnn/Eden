@@ -8,7 +8,7 @@ const debug = std.debug;
 const time = std.time;
 const Timer = time.Timer;
 const ArrayList = std.ArrayList;
-const allocator = std.heap.direct_allocator;
+const allocator = std.heap.page_allocator;
 
 var instance: GameWorld = undefined;
 
@@ -65,8 +65,8 @@ pub const GameWorld = struct {
 
 pub fn Initialize() void {
     instance = GameWorld{
-        .m_entityManager = EntityManager.Initialize(),
-        .m_componentManager = ComponentManager.Initialize(),
+        .m_entityManager = EntityManager.init(allocator),
+        .m_componentManager = ComponentManager.init(allocator),
     };
 }
 

@@ -1,4 +1,4 @@
-const c = @import("c.zig");
+const c = @import("c.zig").cLib;
 
 pub const ModifierKey = enum {
     Shift,

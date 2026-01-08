@@ -1,4 +1,4 @@
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const std = @import("std");
 const debug = std.debug;
 const allocator = std.heap.page_allocator;

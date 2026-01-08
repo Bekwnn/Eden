@@ -1,4 +1,4 @@
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const vkUtil = @import("VulkanUtil.zig");
 const renderContext = @import("RenderContext.zig");
 const RenderContext = renderContext.RenderContext;
@@ -23,17 +23,18 @@ pub const SwapchainSupportDetails = struct {
     presentModes: []c.VkPresentModeKHR,
 };
 
-//TODO remove frame buffers when dynamic rendering is working
 pub const Swapchain = struct {
     m_swapchain: c.VkSwapchainKHR,
-    m_imageCount: u32,
-    m_images: []c.VkImage,
-    m_format: c.VkSurfaceFormatKHR,
-    m_extent: c.VkExtent2D,
-    m_imageViews: []c.VkImageView,
-    m_currentImageIndex: u32,
+    m_imageCount: u32, //TODO can infer from .len?
+    // TODO would prefer to just have []ImageData, is there a way to make
+    // its Texture fields contain the swapchain image and image view?
+    m_swapchainImages: []c.VkImage,
+    m_swapchainImageViews: []c.VkImageView,
     m_depthImage: Texture,
     m_colorImage: Texture,
+    m_format: c.VkSurfaceFormatKHR,
+    m_extent: c.VkExtent2D,
+    m_currentImageIndex: u32,
 
     pub fn CreateSwapchain(
         allocator: Allocator,
@@ -53,17 +54,17 @@ pub const Swapchain = struct {
             swapchainSupport.presentModes,
         );
 
+        const imageCount = swapchainSupport.capabilities.minImageCount + 1;
         var newSwapchain = Swapchain{
             .m_swapchain = undefined,
-            .m_imageCount = swapchainSupport.capabilities.minImageCount + 1,
-            .m_images = undefined,
+            .m_imageCount = imageCount,
+            .m_swapchainImages = undefined,
+            .m_swapchainImageViews = undefined,
             .m_format = try ChooseSwapSurfaceFormat(swapchainSupport.formats),
             .m_extent = ChooseSwapExtent(swapchainSupport.capabilities),
-            .m_imageViews = undefined,
-            //.m_frameBuffers = undefined,
             .m_currentImageIndex = 0,
-            .m_depthImage = undefined,
             .m_colorImage = undefined,
+            .m_depthImage = undefined,
         };
 
         // ensure we're within max image count
@@ -119,31 +120,16 @@ pub const Swapchain = struct {
             SwapchainError.FailedToGetImages,
         );
 
-        newSwapchain.m_images = try allocator.alloc(c.VkImage, newSwapchain.m_imageCount);
         try vkUtil.CheckVkSuccess(
             c.vkGetSwapchainImagesKHR(
                 logicalDevice,
                 newSwapchain.m_swapchain,
                 &newSwapchain.m_imageCount,
-                &newSwapchain.m_images[0],
+                newSwapchain.m_swapchainImages.ptr,
             ),
             SwapchainError.FailedToGetImages,
         );
-
-        //CREATE IMAGE VIEWS START
-        newSwapchain.m_imageViews = try allocator.alloc(
-            c.VkImageView,
-            newSwapchain.m_images.len,
-        );
-        var i: u32 = 0;
-        while (i < newSwapchain.m_images.len) : (i += 1) {
-            newSwapchain.m_imageViews[i] = try texture.CreateImageView(
-                newSwapchain.m_images[i],
-                newSwapchain.m_format.format,
-                c.VK_IMAGE_ASPECT_COLOR_BIT,
-                1,
-            );
-        }
+        newSwapchain.m_swapchainImages.len = newSwapchain.m_imageCount;
 
         return newSwapchain;
     }
@@ -195,6 +181,8 @@ pub const Swapchain = struct {
             self.m_extent.height,
             msaaSamples,
             self.m_format.format,
+            c.VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+                c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         );
 
         std.debug.print("    Creating depth image...\n", .{});
@@ -210,7 +198,7 @@ pub const Swapchain = struct {
     fn FreeSwapchain(self: *Swapchain, logicalDevice: c.VkDevice) void {
         defer c.vkDestroySwapchainKHR(logicalDevice, self.m_swapchain, null);
         defer {
-            for (self.m_imageViews) |imageView| {
+            for (self.m_swapchainImageViews) |imageView| {
                 c.vkDestroyImageView(logicalDevice, imageView, null);
             }
         }
@@ -220,8 +208,8 @@ pub const Swapchain = struct {
         self: *Swapchain,
         logicalDevice: c.VkDevice,
     ) void {
-        self.m_depthImage.FreeTexture(logicalDevice);
         self.m_colorImage.FreeTexture(logicalDevice);
+        self.m_depthImage.FreeTexture(logicalDevice);
     }
 };
 

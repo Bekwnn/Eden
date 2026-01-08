@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("../c.zig");
+const c = @import("../c.zig").cLib;
 const debug = std.debug;
 const allocator = std.heap.page_allocator;
 

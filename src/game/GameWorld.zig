@@ -3,12 +3,12 @@ const Entity = @import("Entity.zig").Entity;
 const EntityManager = @import("EntityManager.zig").EntityManager;
 const behaviourSystems = @import("BehaviourSystems.zig");
 const ComponentManager = @import("ComponentData.zig").ComponentManager;
+const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const debug = std.debug;
 const time = std.time;
 const Timer = time.Timer;
 const ArrayList = std.ArrayList;
-const allocator = std.heap.page_allocator;
 
 var instance: GameWorld = undefined;
 

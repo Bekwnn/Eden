@@ -7,7 +7,7 @@ const debug = @import("std").debug;
 const Mesh = @import("Mesh.zig").Mesh;
 const VertexData = @import("Mesh.zig").VertexData;
 
-const allocator = std.heap.page_allocator;
+const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const ImporterLib = enum {
     AssImp,

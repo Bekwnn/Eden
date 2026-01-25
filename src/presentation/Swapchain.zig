@@ -125,11 +125,25 @@ pub const Swapchain = struct {
                 logicalDevice,
                 newSwapchain.m_swapchain,
                 &newSwapchain.m_imageCount,
-                newSwapchain.m_swapchainImages.ptr,
+                &newSwapchain.m_swapchainImages[0],
             ),
             SwapchainError.FailedToGetImages,
         );
         newSwapchain.m_swapchainImages.len = newSwapchain.m_imageCount;
+
+        newSwapchain.m_swapchainImageViews = try allocator.alloc(
+            c.VkImageView,
+            newSwapchain.m_swapchainImages.len,
+        );
+
+        for (newSwapchain.m_swapchainImages, 0..) |image, i| {
+            newSwapchain.m_swapchainImageViews[i] = try texture.CreateImageView(
+                image,
+                newSwapchain.m_format.format,
+                c.VK_IMAGE_ASPECT_COLOR_BIT,
+                1,
+            );
+        }
 
         return newSwapchain;
     }

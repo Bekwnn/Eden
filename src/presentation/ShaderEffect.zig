@@ -133,40 +133,30 @@ fn CheckAndFreeShaderModule(shader: c.VkShaderModule) void {
 
 // returns owned slice; caller needs to free
 fn ReadShaderFileAlloc(
-    comptime alignment: std.mem.Alignment,
+    comptime alignment: comptime_int,
     allocator: Allocator,
     relativeShaderPath: []const u8,
-) ![]align(std.mem.Alignment.toByteUnits(alignment)) const u8 {
-    std.debug.print("Reading shader {s}...\n", .{relativeShaderPath});
+) ![]align(alignment) const u8 {
+    std.debug.print("Reading shader [{s}]...\n", .{relativeShaderPath});
 
     var shaderDir = std.fs.cwd();
-    var splitShaderPath = std.mem.tokenizeScalar(u8, relativeShaderPath, '/');
 
-    while (splitShaderPath.next()) |path| {
-        shaderDir = shaderDir.openDir(path, .{}) catch |err| {
-            if (err != std.fs.Dir.OpenError.NotDir) {
-                return err;
-            } else {
-                const shaderFile = try shaderDir.openFile(path, .{});
-                defer shaderFile.close();
+    const shaderFile = try shaderDir.openFile(relativeShaderPath, .{});
+    defer shaderFile.close();
 
-                const shaderCode: []align(std.mem.Alignment.toByteUnits(alignment)) u8 = try allocator.allocAdvancedWithRetAddr(
-                    u8,
-                    alignment,
-                    try shaderFile.getEndPos(),
-                    @returnAddress(),
-                );
+    const shaderCode: []align(alignment) u8 = try allocator.allocAdvancedWithRetAddr(
+        u8,
+        std.mem.Alignment.fromByteUnits(alignment),
+        try shaderFile.getEndPos(),
+        @returnAddress(),
+    );
 
-                _ = try shaderFile.read(shaderCode);
-                return shaderCode;
-            }
-        };
-    }
-    return ShaderError.FailedToReadShaderFile;
+    _ = try shaderFile.read(shaderCode);
+    return shaderCode;
 }
 
 fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.VkShaderModule {
-    const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFileAlloc(std.mem.Alignment.of(u32), allocator, relativeShaderPath);
+    const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFileAlloc(@alignOf(u32), allocator, relativeShaderPath);
     defer allocator.free(shaderCode);
 
     const createInfo = c.VkShaderModuleCreateInfo{

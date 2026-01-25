@@ -55,8 +55,8 @@ pub const Texture = struct {
         );
 
         @memcpy(
-            @as([*]u8, @ptrCast(data))[0..imageSize],
-            @as([*]const u8, @ptrCast(image.m_imageData))[0..imageSize],
+            data[0..imageSize],
+            image.m_imageData[0..imageSize],
         );
         c.vkUnmapMemory(rContext.m_logicalDevice, stagingBuffer.m_memory);
 

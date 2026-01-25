@@ -15,7 +15,7 @@ const Vec2 = @import("../math/Vec2.zig").Vec2;
 const c = @import("../c.zig").cLib;
 const input = @import("../Input.zig");
 
-const allocator = std.heap.page_allocator;
+const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 var mainWindow: ?*c.SDL_Window = null;
 
@@ -44,7 +44,7 @@ pub const ViewportFrameData = struct {
     m_depthTexture: Texture,
     m_sampler: c.VkSampler,
 
-    pub fn GetId(self: *ViewportFrameData) c.ImTextureID {
+    pub fn GetId(self: *const ViewportFrameData) c.ImTextureID {
         return @as(c.ImTextureID, @intFromPtr(self.m_descriptorSet));
     }
 };
@@ -372,16 +372,25 @@ pub fn DrawViewport() !void {
 
     if (c.igBegin("Viewport", null, fixedWindowFlags | c.ImGuiWindowFlags_NoBackground)) {
         _ = c.igText("Viewport goes here.");
-        //const rContext = try RenderContext.GetInstance();
-        //c.igImage(
-        //    viewportFrameData.items[rContext.m_currentFrame].GetId(),
-        //    c.ImVec2{
-        //        .x = @floatFromInt(rContext.m_swapchain.m_extent.width),
-        //        .y = @floatFromInt(rContext.m_swapchain.m_extent.height),
-        //    },
-        //    c.ImVec2{ .x = 0, .y = 0 }, // default
-        //    c.ImVec2{ .x = 1, .y = 1 }, // default
-        //);
+
+        const curViewportFrameData = try GetCurrentViewportFrameData();
+        const windowX = c.igGetWindowWidth();
+        const windowY = c.igGetWindowHeight();
+        const frameX: f32 = @floatFromInt(curViewportFrameData.m_colorTexture.m_extent.width);
+        const frameY: f32 = @floatFromInt(curViewportFrameData.m_colorTexture.m_extent.height);
+        const scaleToFitX = frameX / windowX;
+        const scaleToFitY = frameY / windowY;
+        const scaleToFit = @min(scaleToFitX, scaleToFitY);
+
+        c.igImage(
+            curViewportFrameData.GetId(),
+            c.ImVec2{
+                .x = frameX * scaleToFit,
+                .y = frameY * scaleToFit,
+            },
+            c.ImVec2{ .x = 0, .y = 0 },
+            c.ImVec2{ .x = 1, .y = 1 },
+        );
     }
 
     c.igEnd();

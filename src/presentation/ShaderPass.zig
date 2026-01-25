@@ -151,10 +151,14 @@ pub const ShaderPass = struct {
             );
         }
 
+        // TODO consider using a depth+stencil format or adding stencil attachment?
         const dynamicPipelineInfo = c.VkPipelineRenderingCreateInfo{
             .sType = c.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+            .viewMask = std.mem.zeroes(u32),
             .colorAttachmentCount = 1,
             .pColorAttachmentFormats = &rContext.m_swapchain.m_format.format,
+            .depthAttachmentFormat = c.VK_FORMAT_D32_SFLOAT,
+            .stencilAttachmentFormat = c.VK_FORMAT_UNDEFINED,
             .pNext = null,
         };
         const pipelineInfo = c.VkGraphicsPipelineCreateInfo{

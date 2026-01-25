@@ -1,7 +1,7 @@
 const std = @import("std");
 const c = @import("../c.zig").cLib;
 const debug = std.debug;
-const allocator = std.heap.page_allocator;
+const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const StringHashMap = std.StringHashMap;
 const ArrayList = std.ArrayList;

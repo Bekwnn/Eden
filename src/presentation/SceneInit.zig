@@ -1,6 +1,6 @@
 const std = @import("std");
 const debug = std.debug;
-const allocator = std.heap.page_allocator;
+const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const c = @import("../c.zig").cLib;
 

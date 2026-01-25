@@ -1,7 +1,6 @@
 const std = @import("std");
 const c = @import("../c.zig").cLib;
 const debug = std.debug;
-const allocator = std.heap.page_allocator;
 
 const StringHashMap = std.StringHashMap;
 const ArrayList = std.ArrayList;
@@ -15,6 +14,7 @@ const RenderContext = @import("RenderContext.zig").RenderContext;
 const Scene = @import("Scene.zig").Scene;
 const assetImport = @import("AssetImport.zig");
 const filePathUtils = @import("../coreutil/FilePathUtils.zig");
+const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 var instance: ?AssetInventory = null;
 

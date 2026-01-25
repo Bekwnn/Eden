@@ -11,8 +11,11 @@ const RenderContext = @import("presentation/RenderContext.zig").RenderContext;
 const sdlInit = @import("presentation/SDLInit.zig");
 
 const imageFileUtil = @import("coreutil/ImageFileUtil.zig");
+const emem = @import("coreutil/Allocators.zig");
 
 pub fn main() !void {
+    defer emem.deinitDefaultAllocator();
+
     try sdlInit.InitSDL();
     defer c.SDL_Quit();
 
@@ -107,7 +110,7 @@ pub fn MainGameLoop(window: *c.SDL_Window) !void {
             c.igNewFrame();
             try editor.Draw(deltaT, rawDeltaNs);
             c.igRender(); // does not actually draw, drawing happens in RenderFrame()
-
+            //
             try presentation.RenderFrame(deltaT);
         }
     }

@@ -1,5 +1,5 @@
 const std = @import("std");
-const allocator = std.heap.page_allocator;
+const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const AutoHashMap = std.AutoHashMap;
@@ -200,20 +200,11 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
     const swapchainColorAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
         .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView = rContext.m_swapchain.m_colorImage.m_imageView,
+        .imageView = rContext.m_swapchain.m_swapchainImageViews[imageIndex],
         .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = clearColor,
-        .pNext = null,
-    };
-    const swapchainDepthAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
-        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView = rContext.m_swapchain.m_depthImage.m_imageView,
-        .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
-        .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = clearDepth,
         .pNext = null,
     };
     const swapchainRenderingInfo = c.VkRenderingInfoKHR{
@@ -228,7 +219,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .layerCount = 1,
         .colorAttachmentCount = 1,
         .pColorAttachments = &swapchainColorAttachmentInfo,
-        .pDepthAttachment = &swapchainDepthAttachmentInfo,
+        .pDepthAttachment = null,
         .pStencilAttachment = null,
         .flags = 0,
         .pNext = null,
@@ -246,7 +237,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         .oldLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .newLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .image = rContext.m_swapchain.m_colorImage.m_image,
+        .image = rContext.m_swapchain.m_swapchainImages[imageIndex],
         .subresourceRange = .{
             .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
@@ -516,7 +507,7 @@ fn AllocateMaterialDescriptorSets(dAllocator: *DescriptorAllocator) !void {
 }
 
 pub fn RenderFrame(deltaTime: f32) !void {
-    const swapchainAllocator = std.heap.page_allocator;
+    const swapchainAllocator = allocator;
 
     curTime += deltaTime;
     const rContext = try RenderContext.GetInstance();

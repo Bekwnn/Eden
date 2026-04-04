@@ -59,7 +59,7 @@ pub fn DebugPrintStruct(
                         fieldValue,
                     },
                 );
-            }
+            },
         }
     }
     if (options.newLine) {

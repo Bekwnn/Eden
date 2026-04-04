@@ -120,16 +120,20 @@ pub const Swapchain = struct {
             SwapchainError.FailedToGetImages,
         );
 
+        newSwapchain.m_swapchainImages = try allocator.alloc(
+            c.VkImage,
+            newSwapchain.m_imageCount,
+        );
+
         try vkUtil.CheckVkSuccess(
             c.vkGetSwapchainImagesKHR(
                 logicalDevice,
                 newSwapchain.m_swapchain,
                 &newSwapchain.m_imageCount,
-                &newSwapchain.m_swapchainImages[0],
+                newSwapchain.m_swapchainImages.ptr,
             ),
             SwapchainError.FailedToGetImages,
         );
-        newSwapchain.m_swapchainImages.len = newSwapchain.m_imageCount;
 
         newSwapchain.m_swapchainImageViews = try allocator.alloc(
             c.VkImageView,
@@ -195,8 +199,7 @@ pub const Swapchain = struct {
             self.m_extent.height,
             msaaSamples,
             self.m_format.format,
-            c.VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            c.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         );
 
         std.debug.print("    Creating depth image...\n", .{});

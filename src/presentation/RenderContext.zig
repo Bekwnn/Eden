@@ -328,8 +328,13 @@ pub const RenderContext = struct {
 };
 
 const enabledLayers = [_][:0]const u8{
-    if (builtin.mode == .Debug) "VK_LAYER_KHRONOS_validation",
-};
+    // release mode layers:
+} ++ if (builtin.mode == .Debug)
+    [_][:0]const u8{
+        "VK_LAYER_KHRONOS_validation",
+    }
+else
+    [_][:0]const u8{};
 fn CheckValidationLayerSupport(allocator: Allocator) !void {
     var layerCount: u32 = 0;
     try vkUtil.CheckVkSuccess(
@@ -368,8 +373,13 @@ fn CheckValidationLayerSupport(allocator: Allocator) !void {
 }
 
 const enabledExtensions = [_][:0]const u8{
-    if (builtin.mode == .Debug) c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-};
+    // release mode extensions:
+} ++ if (builtin.mode == .Debug)
+    [_][:0]const u8{
+        c.VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+    }
+else
+    [_][:0]const u8{};
 fn CheckExtensionSupport(allocator: Allocator) !void {
     var extensionCount: u32 = 0;
     try vkUtil.CheckVkSuccess(
@@ -861,6 +871,10 @@ fn CreateLogicalDevice(allocator: Allocator) !void {
             .pNext = null,
         };
     }
+
+    // query surface capabilities for supported usage flags
+    //var surfaceCapabilities: c.VkSurfaceCapabilitiesKHR = undefined;
+    //c.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(rContext.m_physicalDevice, rContext.m_surface, &surfaceCapabilities);
 
     // we should have verified earlier that requiredExtensions are all supported by this point
     const deviceCreateInfo = c.VkDeviceCreateInfo{

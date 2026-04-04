@@ -46,6 +46,7 @@ const RenderLoopError = error{
     FailedToQueueWaitIdle,
     FailedToResetCommandBuffer,
     FailedToResetFences,
+    FailedToTransitionImages,
     FailedToUpdateSceneUniforms,
     FailedToWaitForImageFence,
     FailedToWaitForInFlightFence,
@@ -115,33 +116,23 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         RenderLoopError.FailedToBeginCommandBuffer,
     );
 
-    // transition image to rendering format
-    const renderMemoryBarrier = c.VkImageMemoryBarrier{
-        .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .dstAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout = c.VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .image = rContext.m_swapchain.m_swapchainImages[imageIndex],
-        .subresourceRange = .{
-            .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        },
-    };
-
-    c.vkCmdPipelineBarrier(
+    TransitionSimpleImageLayout(
         commandBuffer,
-        c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, //src
-        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, //dst
-        0,
-        0,
-        null,
-        0,
-        null,
-        1,
-        &renderMemoryBarrier,
+        rContext.m_swapchain.m_swapchainImages[imageIndex],
+        c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        c.VK_IMAGE_LAYOUT_UNDEFINED,
+        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    );
+
+    const editorViewportFrameData = try editor.GetCurrentViewportFrameData();
+    TransitionSimpleImageLayout(
+        commandBuffer,
+        editorViewportFrameData.m_colorTexture.m_image,
+        c.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        c.VK_IMAGE_LAYOUT_UNDEFINED,
+        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     );
 
     // setup to begin rendering
@@ -154,27 +145,26 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
 
     // TODO handle no editor version
     //  create a version of this function that just performs GameRenderLoop
-    const editorViewportFrameData = try editor.GetCurrentViewportFrameData();
-    const editorViewportColorAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
-        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+    const editorViewportColorAttachmentInfo = c.VkRenderingAttachmentInfo{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = editorViewportFrameData.m_colorTexture.m_imageView,
-        .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
+        .imageLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = clearColor,
         .pNext = null,
     };
-    const editorViewportDepthAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
-        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+    const editorViewportDepthAttachmentInfo = c.VkRenderingAttachmentInfo{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = editorViewportFrameData.m_depthTexture.m_imageView,
-        .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
+        .imageLayout = c.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = c.VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue = clearDepth,
         .pNext = null,
     };
-    const editorViewportRenderingInfo = c.VkRenderingInfoKHR{
-        .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
+    const editorViewportRenderingInfo = c.VkRenderingInfo{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = c.VkRect2D{
             .extent = rContext.m_swapchain.m_extent,
             .offset = c.VkOffset2D{
@@ -186,7 +176,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .colorAttachmentCount = 1,
         .pColorAttachments = &editorViewportColorAttachmentInfo,
         .pDepthAttachment = &editorViewportDepthAttachmentInfo,
-        .pStencilAttachment = null,
+        .pStencilAttachment = &editorViewportDepthAttachmentInfo,
         .flags = 0,
         .pNext = null,
     };
@@ -198,8 +188,17 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     }
     c.vkCmdEndRendering(commandBuffer);
 
-    const swapchainColorAttachmentInfo = c.VkRenderingAttachmentInfoKHR{
-        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+    TransitionSimpleImageLayout(
+        commandBuffer,
+        editorViewportFrameData.m_colorTexture.m_image,
+        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        c.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    );
+
+    const swapchainColorAttachmentInfo = c.VkRenderingAttachmentInfo{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView = rContext.m_swapchain.m_swapchainImageViews[imageIndex],
         .imageLayout = c.VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
         .loadOp = c.VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -207,8 +206,8 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         .clearValue = clearColor,
         .pNext = null,
     };
-    const swapchainRenderingInfo = c.VkRenderingInfoKHR{
-        .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
+    const swapchainRenderingInfo = c.VkRenderingInfo{
+        .sType = c.VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = c.VkRect2D{
             .extent = rContext.m_swapchain.m_extent,
             .offset = c.VkOffset2D{
@@ -232,12 +231,34 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     c.vkCmdEndRendering(commandBuffer);
 
     // convert to present format
-    const presentMemoryBarrier = c.VkImageMemoryBarrier{
+    TransitionSimpleImageLayout(
+        commandBuffer,
+        rContext.m_swapchain.m_swapchainImages[imageIndex],
+        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    );
+
+    try vkUtil.CheckVkSuccess(
+        c.vkEndCommandBuffer(commandBuffer),
+        RenderLoopError.FailedToEndCommandBuffer,
+    );
+}
+
+fn TransitionSimpleImageLayout(
+    cmd: c.VkCommandBuffer,
+    image: c.VkImage,
+    srcStageMask: c.VkPipelineStageFlags,
+    dstStageMask: c.VkPipelineStageFlags,
+    oldLayout: c.VkImageLayout,
+    newLayout: c.VkImageLayout,
+) void {
+    const memoryBarrier = c.VkImageMemoryBarrier{
         .sType = c.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = c.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout = c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .newLayout = c.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .image = rContext.m_swapchain.m_swapchainImages[imageIndex],
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .image = image,
         .subresourceRange = .{
             .aspectMask = c.VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
@@ -248,21 +269,16 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     };
 
     c.vkCmdPipelineBarrier(
-        commandBuffer,
-        c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, //srcStageMask
-        c.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        cmd,
+        srcStageMask,
+        dstStageMask,
         0,
         0,
         null,
         0,
         null,
         1,
-        &presentMemoryBarrier,
-    );
-
-    try vkUtil.CheckVkSuccess(
-        c.vkEndCommandBuffer(commandBuffer),
-        RenderLoopError.FailedToEndCommandBuffer,
+        &memoryBarrier,
     );
 }
 

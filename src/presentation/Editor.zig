@@ -370,30 +370,43 @@ pub fn DrawViewport() !void {
         c.ImGuiCond_None,
     );
 
-    if (c.igBegin("Viewport", null, fixedWindowFlags | c.ImGuiWindowFlags_NoBackground)) {
-        _ = c.igText("Viewport goes here.");
+    c.igPushStyleColor_Vec4(c.ImGuiCol_WindowBg, c.ImVec4{ .x = 0, .y = 0, .z = 0, .w = 1 });
 
+    if (c.igBegin("Viewport", null, fixedWindowFlags)) {
         const curViewportFrameData = try GetCurrentViewportFrameData();
-        const windowX = c.igGetWindowWidth();
-        const windowY = c.igGetWindowHeight();
+        var contentRegionSize: c.ImVec2 = undefined;
+        c.igGetContentRegionAvail(&contentRegionSize);
         const frameX: f32 = @floatFromInt(curViewportFrameData.m_colorTexture.m_extent.width);
         const frameY: f32 = @floatFromInt(curViewportFrameData.m_colorTexture.m_extent.height);
-        const scaleToFitX = frameX / windowX;
-        const scaleToFitY = frameY / windowY;
+        const scaleToFitX = contentRegionSize.x / frameX;
+        const scaleToFitY = contentRegionSize.y / frameY;
         const scaleToFit = @min(scaleToFitX, scaleToFitY);
+        const imageSize = c.ImVec2{
+            .x = frameX * scaleToFit,
+            .y = frameY * scaleToFit,
+        };
 
+        // Add padding to start of horizontal or vertical
+        if (scaleToFitX < scaleToFitY) {
+            const yPadding = contentRegionSize.y - imageSize.y;
+            c.igSetCursorPosY(c.igGetCursorPosY() + yPadding * 0.5);
+        } else if (scaleToFitY < scaleToFitX) {
+            const xPadding = contentRegionSize.x - imageSize.x;
+            c.igSetCursorPosX(c.igGetCursorPosX() + xPadding * 0.5);
+        }
+
+        // Draw scene texture
         c.igImage(
             curViewportFrameData.GetId(),
-            c.ImVec2{
-                .x = frameX * scaleToFit,
-                .y = frameY * scaleToFit,
-            },
-            c.ImVec2{ .x = 0, .y = 0 },
-            c.ImVec2{ .x = 1, .y = 1 },
+            imageSize,
+            c.ImVec2{ .x = 0.0, .y = 0.0 },
+            c.ImVec2{ .x = 1.0, .y = 1.0 },
         );
     }
 
     c.igEnd();
+
+    c.igPopStyleColor(1);
 }
 
 //TODO delete eventually
@@ -443,7 +456,15 @@ pub fn Draw(deltaT: f32, rawDeltaNs: u64) !void {
     try DrawBottomTray();
     try DrawSceneInspector();
     try DrawGlobalSettings();
+
+    c.igPushStyleVar_Vec2(
+        c.ImGuiStyleVar_WindowPadding,
+        c.ImVec2{ .x = 0, .y = 0 },
+    );
+
     try DrawViewport();
+
+    c.igPopStyleVar(1);
 
     //try DrawFloatingDebugWindow(deltaT, rawDeltaNs);
 }

@@ -1,4 +1,5 @@
-pub const EntityBehaviour = @import("BehaviourSystems/EntityBehaviour.zig");
+const EntityBehaviour = @import("BehaviourSystems/EntityBehaviour.zig");
+const TestMovementBehaviour = @import("BehaviourSystems/TestMovementBehaviour.zig");
 
 //TODO ideally we somehow build out this list at compile time with each behaviour subscribing to it from their file
 // rather than having to have a big centralized list with everything
@@ -6,6 +7,7 @@ pub const EntityBehaviour = @import("BehaviourSystems/EntityBehaviour.zig");
 // Variable frame-rate update
 pub const s_update = [_]*const fn () void{
     EntityBehaviour.EntityUpdateBehaviour,
+    TestMovementBehaviour.TestMovementUpdateBehaviour,
 };
 
 // Fixed delta time update
@@ -16,6 +18,7 @@ pub const s_fixedUpdate = [_]*const fn () void{
 // Entity spawn event
 pub const s_onSpawn = [_]*const fn (u32) void{
     EntityBehaviour.EntityOnSpawnBehaviour,
+    TestMovementBehaviour.TestMovementOnSpawnBehaviour,
 };
 
 // Entity destroyed event

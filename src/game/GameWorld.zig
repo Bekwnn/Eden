@@ -2,7 +2,8 @@ const std = @import("std");
 const Entity = @import("Entity.zig").Entity;
 const EntityManager = @import("EntityManager.zig").EntityManager;
 const behaviourSystems = @import("BehaviourSystems.zig");
-const ComponentManager = @import("ComponentData.zig").ComponentManager;
+const compData = @import("ComponentData.zig");
+const ComponentManager = compData.ComponentManager;
 const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const debug = std.debug;
@@ -26,40 +27,48 @@ pub const GameWorld = struct {
     pub fn Update(self: *GameWorld, deltaT: f32) void {
         deltaTime = deltaT;
 
-        var i: u32 = 0;
-        while (i < self.m_updateBehaviours.len) {
-            defer i += 1;
-            self.m_updateBehaviours[i]();
+        for (self.m_updateBehaviours) |updateBehaviour| {
+            updateBehaviour();
         }
     }
 
     pub fn FixedUpdate(self: *GameWorld) void {
-        var i: u32 = 0;
-        while (i < self.m_fixedUpdateBehaviours.len) {
-            defer i += 1;
-            self.m_fixedUpdateBehaviours[i]();
+        for (self.m_fixedUpdateBehaviours) |fixedUpdateBehaviour| {
+            fixedUpdateBehaviour();
         }
     }
 
+    //TODO we probably want to be able to create entities with all their
+    // components in place instead of creating them and then adding them
     pub fn CreateEntity(self: *GameWorld) *Entity {
         const newEntity = instance.m_entityManager.CreateEntity() catch |err| {
             debug.panic("{}", .{err});
         };
-        var i: u32 = 0;
-        while (i < self.m_onSpawnBehaviours.len) {
-            defer i += 1;
-            self.m_onSpawnBehaviours[i](newEntity.m_eid);
+        for (self.m_onSpawnBehaviours) |onSpawnBehaviour| {
+            onSpawnBehaviour(newEntity.m_eid);
         }
         return newEntity;
     }
 
     pub fn KillEntity(self: *GameWorld, eid: u32) bool {
-        var i: u32 = 0;
-        while (i < self.m_onDestroyBehaviours.len) {
-            defer i += 1;
-            self.m_onDestroyBehaviours[i](eid);
+        for (self.m_onDestroyBehaviours) |onDestroyBehaviour| {
+            onDestroyBehaviour(eid);
         }
         return self.m_entityManager.KillEntity(eid);
+    }
+
+    // TODO actual error return values
+    // in one case failedToFindComponentType
+    // in another failedToFindCreatedComponent
+    pub fn AddComponent(self: *GameWorld, compType: type, entity: *Entity) *compType {
+        const newCompId = self.m_componentManager.AddComponent(compType, entity.m_eid);
+        const compIdx = compData.GetCompIdx() orelse @panic("!");
+        entity.m_compIds[compIdx] = newCompId;
+        return self.m_componentManager.GetComponent(compType, newCompId) orelse @panic("!");
+    }
+
+    pub fn RemoveComponent(self: *GameWorld, compType: type, entity: *Entity) void {
+        self.m_componentManager.
     }
 };
 

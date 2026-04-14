@@ -20,7 +20,7 @@ const debugDraw = @import("DebugDraw.zig");
 const DescriptorAllocator = @import("DescriptorAllocator.zig").DescriptorAllocator;
 const DescriptorLayoutBuilder = @import("DescriptorLayoutBuilder.zig").DescriptorLayoutBuilder;
 const DescriptorWriter = @import("DescriptorWriter.zig").DescriptorWriter;
-const editor = @import("Editor.zig");
+const editor = @import("editor/Editor.zig");
 const GPUSceneData = @import("Scene.zig").GPUSceneData;
 const Material = @import("Material.zig").Material;
 const MaterialInstance = @import("MaterialInstance.zig").MaterialInstance;
@@ -125,7 +125,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
         c.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     );
 
-    const editorViewportFrameData = try editor.GetCurrentViewportFrameData();
+    const editorViewportFrameData = try editor.viewport.GetCurrentViewportFrameData();
     TransitionSimpleImageLayout(
         commandBuffer,
         editorViewportFrameData.m_colorTexture.m_image,

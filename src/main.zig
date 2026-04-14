@@ -6,7 +6,7 @@ const time = std.time;
 const gameWorld = @import("game/GameWorld.zig");
 
 const presentation = @import("presentation/Presentation.zig");
-const editor = @import("presentation/Editor.zig");
+const editor = @import("presentation/editor/Editor.zig");
 const RenderContext = @import("presentation/RenderContext.zig").RenderContext;
 const sdlInit = @import("presentation/SDLInit.zig");
 

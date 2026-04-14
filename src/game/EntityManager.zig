@@ -31,7 +31,7 @@ pub const EntityManager = struct {
     m_endOfEids: u32 = ent.GetEidStart(),
     m_firstFreeEntitySlot: u32 = 0, // potentially speed up KillEntity a bit on average...
     m_allocator: Allocator,
-    //TODO should eids be re-used?
+    //TODO eids should be reused
 
     pub fn init(allocator: Allocator) EntityManager {
         return EntityManager{ .m_allocator = allocator };

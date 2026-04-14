@@ -2,24 +2,31 @@
 pub const HealthComp = @import("ComponentData/HealthComp.zig").HealthComp;
 pub const InputComp = @import("ComponentData/InputComp.zig").InputComp;
 pub const MovementComp = @import("ComponentData/MovementComp.zig").MovementComp;
+pub const PhysicsComp = @import("ComponentData/PhysicsComp.zig").PhysicsComp;
 pub const SceneComp = @import("ComponentData/SceneComp.zig").SceneComp;
 pub const TransformComp = @import("ComponentData/TransformComp.zig").TransformComp;
-pub const PhysicsComp = @import("ComponentData/PhysicsComp.zig").PhysicsComp;
+
+const Entity = @import("Entity.zig").Entity;
+
+pub const componentTypes = type[_]{
+    HealthComp,
+    InputComp,
+    MovementComp,
+    PhysicsComp,
+    SceneComp,
+    TransformComp,
+};
+
+pub fn GetCompIdx(compType: type) ?usize {
+    for (componentTypes, 0..) |curType, i| {
+        if (curType == compType) return i;
+    }
+}
 
 const std = @import("std");
 
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
-
-pub const compTypeEnumCount: u32 = @typeInfo(EComponentType).@"enum".fields.len;
-pub const EComponentType = enum {
-    Health,
-    Input,
-    Movement,
-    Scene,
-    Transform,
-    Physics,
-};
 
 //TODO
 // There should be some sanity checking/assurance that we're fetching the component
@@ -53,6 +60,16 @@ fn ComponentDataArray(comptime compType: type) type {
             }
         }
 
+        pub fn GetEntityComp(self: *ComponentDataArray(compType), entity: *const Entity) ?*compType {
+            // TODO fetch compId from entity and GetComp with that instead
+            for (self.m_compData) |*compDataPair| {
+                if (compDataPair.m_ownerEid == entity.m_eid) {
+                    return &compDataPair.m_data;
+                }
+            }
+            return null;
+        }
+
         pub fn GetOwnerId(self: *ComponentDataArray(compType), id: u16) ?u32 {
             if (id >= self.m_compData.len) {
                 return null;
@@ -69,6 +86,10 @@ fn ComponentDataArray(comptime compType: type) type {
             //TODO add compId to entity's m_componentIds
             return addedCompId;
         }
+
+        pub fn RemoveComp(self: *ComponentDataArray(compType), compId: u16) void {
+            //TODO we need to handle removal, but it's an arraylist
+        }
     };
 }
 
@@ -76,9 +97,9 @@ pub const ComponentManager = struct {
     m_healthCompData: ComponentDataArray(HealthComp),
     m_inputCompData: ComponentDataArray(InputComp),
     m_movementCompData: ComponentDataArray(MovementComp),
+    m_physicsCompData: ComponentDataArray(PhysicsComp),
     m_sceneCompData: ComponentDataArray(SceneComp),
     m_transformCompData: ComponentDataArray(TransformComp),
-    m_physicsCompData: ComponentDataArray(PhysicsComp),
 
     pub fn init(allocator: Allocator) ComponentManager {
         return ComponentManager{
@@ -104,8 +125,12 @@ pub const ComponentManager = struct {
     }
 
     //TODO const?
-    pub fn GetComponent(self: *ComponentManager, comptime compType: type, compID: u16) ?*compType {
-        return self.SwitchOnCompType(compType).GetComp(compID);
+    pub fn GetComponent(self: *ComponentManager, comptime compType: type, compId: u16) ?*compType {
+        return self.SwitchOnCompType(compType).GetComp(compId);
+    }
+
+    pub fn GetComponentFromEntity(self: *ComponentManager, comptime compType: type, entity: *const Entity) ?*compType {
+        return self.SwitchOnCompType(compType).GetEntityComp(entity);
     }
 
     pub fn GetComponentOwnerId(self: *ComponentManager, comptime compType: type, compID: u16) ?u32 {
@@ -115,5 +140,9 @@ pub const ComponentManager = struct {
     // returns componentID
     pub fn AddComponent(self: *ComponentManager, comptime compType: type, ownerEid: u32) u16 {
         return self.SwitchOnCompType(compType).AddComp(ownerEid);
+    }
+
+    pub fn RemoveComponent(self: *ComponentManager, comptime compType: type, compId: u16) void {
+        self.SwitchOnCompType(compType).RemoveComp(compId);
     }
 };

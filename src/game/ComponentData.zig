@@ -1,30 +1,8 @@
-// TODO this is a lot of annoying typing per component, anyway to comptime it?
-pub const HealthComp = @import("ComponentData/HealthComp.zig").HealthComp;
-pub const InputComp = @import("ComponentData/InputComp.zig").InputComp;
-pub const MovementComp = @import("ComponentData/MovementComp.zig").MovementComp;
-pub const PhysicsComp = @import("ComponentData/PhysicsComp.zig").PhysicsComp;
-pub const SceneComp = @import("ComponentData/SceneComp.zig").SceneComp;
-pub const TransformComp = @import("ComponentData/TransformComp.zig").TransformComp;
+const compTypes = @import("ComponentTypes.zig");
 
 const Entity = @import("Entity.zig").Entity;
 
-pub const componentTypes = type[_]{
-    HealthComp,
-    InputComp,
-    MovementComp,
-    PhysicsComp,
-    SceneComp,
-    TransformComp,
-};
-
-pub fn GetCompIdx(compType: type) ?usize {
-    for (componentTypes, 0..) |curType, i| {
-        if (curType == compType) return i;
-    }
-}
-
 const std = @import("std");
-
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
@@ -93,56 +71,50 @@ fn ComponentDataArray(comptime compType: type) type {
     };
 }
 
-pub const ComponentManager = struct {
-    m_healthCompData: ComponentDataArray(HealthComp),
-    m_inputCompData: ComponentDataArray(InputComp),
-    m_movementCompData: ComponentDataArray(MovementComp),
-    m_physicsCompData: ComponentDataArray(PhysicsComp),
-    m_sceneCompData: ComponentDataArray(SceneComp),
-    m_transformCompData: ComponentDataArray(TransformComp),
-
-    pub fn init(allocator: Allocator) ComponentManager {
-        return ComponentManager{
-            .m_healthCompData = ComponentDataArray(HealthComp).init(allocator),
-            .m_inputCompData = ComponentDataArray(InputComp).init(allocator),
-            .m_movementCompData = ComponentDataArray(MovementComp).init(allocator),
-            .m_sceneCompData = ComponentDataArray(SceneComp).init(allocator),
-            .m_transformCompData = ComponentDataArray(TransformComp).init(allocator),
-            .m_physicsCompData = ComponentDataArray(PhysicsComp).init(allocator),
-        };
+pub fn ComponentManager() type {
+    var fields: [compTypes.len]std.builtin.Type.StructField = undefined;
+    for (compTypes) |cType, i| {
+        
     }
+    return @Type(.{ .Struct = .{
+        .{ .name = , .type = , .default_value, .is_comptime = false, 
 
-    fn SwitchOnCompType(self: *ComponentManager, comptime compType: type) *ComponentDataArray(compType) {
-        return switch (compType) {
-            HealthComp => &self.m_healthCompData,
-            InputComp => &self.m_inputCompData,
-            MovementComp => &self.m_movementCompData,
-            SceneComp => &self.m_sceneCompData,
-            TransformComp => &self.m_transformCompData,
-            PhysicsComp => &self.m_physicsCompData,
-            else => @compileError("Component type not known."),
-        };
-    }
+    }});
+    return struct {
 
-    //TODO const?
-    pub fn GetComponent(self: *ComponentManager, comptime compType: type, compId: u16) ?*compType {
-        return self.SwitchOnCompType(compType).GetComp(compId);
-    }
+        pub fn init(allocator: Allocator) ComponentManager {
+            return ComponentManager{
+                
+                .m_healthCompData = ComponentDataArray(HealthComp).init(allocator),
+                .m_inputCompData = ComponentDataArray(InputComp).init(allocator),
+                .m_movementCompData = ComponentDataArray(MovementComp).init(allocator),
+                .m_sceneCompData = ComponentDataArray(SceneComp).init(allocator),
+                .m_transformCompData = ComponentDataArray(TransformComp).init(allocator),
+                .m_physicsCompData = ComponentDataArray(PhysicsComp).init(allocator),
+            };
+        }
 
-    pub fn GetComponentFromEntity(self: *ComponentManager, comptime compType: type, entity: *const Entity) ?*compType {
-        return self.SwitchOnCompType(compType).GetEntityComp(entity);
-    }
+        //TODO const?
+        pub fn GetComponent(self: *ComponentManager, comptime compType: type, compId: u16) ?*compType {
+            return self.SwitchOnCompType(compType).GetComp(compId);
+        }
 
-    pub fn GetComponentOwnerId(self: *ComponentManager, comptime compType: type, compID: u16) ?u32 {
-        return self.SwitchOnCompType(compType).GetOwnerId(compID);
-    }
+        pub fn GetComponentFromEntity(self: *ComponentManager, comptime compType: type, entity: *const Entity) ?*compType {
+            return self.SwitchOnCompType(compType).GetEntityComp(entity);
+        }
 
-    // returns componentID
-    pub fn AddComponent(self: *ComponentManager, comptime compType: type, ownerEid: u32) u16 {
-        return self.SwitchOnCompType(compType).AddComp(ownerEid);
-    }
+        pub fn GetComponentOwnerId(self: *ComponentManager, comptime compType: type, compID: u16) ?u32 {
+            return self.SwitchOnCompType(compType).GetOwnerId(compID);
+        }
 
-    pub fn RemoveComponent(self: *ComponentManager, comptime compType: type, compId: u16) void {
-        self.SwitchOnCompType(compType).RemoveComp(compId);
-    }
-};
+        // returns componentID
+        pub fn AddComponent(self: *ComponentManager, comptime compType: type, ownerEid: u32) u16 {
+            return self.SwitchOnCompType(compType).AddComp(ownerEid);
+        }
+
+        pub fn RemoveComponent(self: *ComponentManager, comptime compType: type, compId: u16) void {
+            self.SwitchOnCompType(compType).RemoveComp(compId);
+        }
+
+    };
+}

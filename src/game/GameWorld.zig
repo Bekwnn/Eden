@@ -68,7 +68,8 @@ pub const GameWorld = struct {
     }
 
     pub fn RemoveComponent(self: *GameWorld, compType: type, entity: *Entity) void {
-        self.m_componentManager.
+        const compId = self.m_componentManager.GetComponentFromEntity(compType, entity) orelse return;
+        self.m_componentManager.RemoveComponent(compType, compId);
     }
 };
 

@@ -66,7 +66,8 @@ fn ComponentDataArray(comptime compType: type) type {
         }
 
         pub fn RemoveComp(self: *ComponentDataArray(compType), compId: u16) void {
-            //TODO we need to handle removal, but it's an arraylist
+            //TODO assert valid id
+            self.m_compData.orderedRemove()
         }
     };
 }

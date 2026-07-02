@@ -10,7 +10,7 @@ const k_eidEnd: u32 = k_eidStart + k_eidCount;
 pub const Entity = struct {
     m_eid: u32 = 0,
     // TODO hash map instead?
-    m_componentIds: [componentData.compTypes.len]?u16 = [_]?u16{null} ** componentData.compTypes.len,
+    m_componentIds: [componentData.componentTypes.len]?u16 = [_]?u16{null} ** componentData.componentTypes.len,
 };
 
 // Just says whether or not an eid is in the range of [eidStart, eidEnd)

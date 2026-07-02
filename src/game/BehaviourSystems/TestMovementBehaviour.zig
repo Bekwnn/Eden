@@ -41,8 +41,8 @@ fn TestMovementOnSpawn(data: BehaviourTuple) void {
 // TODO create a generic version of this "gather component tuple"
 // pattern to reduce typing so much
 pub fn TestMovementUpdateBehaviour() void {
+    movementCurTime += gameWorld.deltaTime;
     const gw = &gameWorld.WritableInstance();
-    movementCurTime += gw.deltaTime;
     const entityManager: *EntityManager = &gw.m_entityManager;
     const compManager: *ComponentManager = &gw.m_componentManager;
     for (entityManager.m_entities.items) |*entityPair| {
@@ -56,18 +56,15 @@ pub fn TestMovementUpdateBehaviour() void {
     }
 }
 
-pub fn TestMovementOnSpawnBehaviour() void {
+pub fn TestMovementOnSpawnBehaviour(eid: u32) void {
     const gw = &gameWorld.WritableInstance();
-    movementCurTime += gw.deltaTime;
     const entityManager: *EntityManager = &gw.m_entityManager;
     const compManager: *ComponentManager = &gw.m_componentManager;
-    for (entityManager.m_entities.items) |*entityPair| {
-        const entity = &(entityPair.m_e orelse continue);
-        const entTransform = compManager.GetComponentFromEntity(TransformComp, entity) orelse continue;
-        const entMovement = compManager.GetComponentFromEntity(MovementComp, entity) orelse continue;
-        TestMovementOnSpawn(.{
-            .m_movement = entMovement,
-            .m_transform = entTransform,
-        });
-    }
+    const entity = entityManager.GetEntity(eid) orelse return;
+    const entTransform = compManager.GetComponentFromEntity(TransformComp, entity) orelse return;
+    const entMovement = compManager.GetComponentFromEntity(MovementComp, entity) orelse return;
+    TestMovementOnSpawn(.{
+        .m_movement = entMovement,
+        .m_transform = entTransform,
+    });
 }

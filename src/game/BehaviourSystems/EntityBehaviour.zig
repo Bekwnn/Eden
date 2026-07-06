@@ -10,8 +10,8 @@ fn EntityUpdate(self: *Entity) void {
 
 pub fn EntityUpdateBehaviour() void {
     const entityManager: *EntityManager = &gameWorld.WritableInstance().m_entityManager;
-    for (entityManager.m_entities.items) |*entityPair| {
-        const entity = &(entityPair.m_e orelse continue);
+    for (entityManager.m_entityTable.m_entries.items) |*entityEntry| {
+        const entity = &(entityEntry.entry orelse continue);
         EntityUpdate(entity);
     }
 }
@@ -22,8 +22,8 @@ fn EntityFixedUpdate(self: *Entity) void {
 
 pub fn EntityFixedUpdateBehaviour() void {
     const entityManager: *EntityManager = &gameWorld.WritableInstance().m_entityManager;
-    for (entityManager.m_entities.items) |*entityPair| {
-        const entity = &(entityPair.m_e orelse continue);
+    for (entityManager.m_entityTable.m_entries.items) |*entityEntry| {
+        const entity = &(entityEntry.entry orelse continue);
         EntityFixedUpdate(entity);
     }
 }

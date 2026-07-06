@@ -7,25 +7,23 @@ pub const FastLookupError = error{
     Unknown,
 };
 
-//TODO genericize u32 usage to any integer type
-const FastLookupIndex = struct {
-    m_idx: ?u32,
-    m_id: u32,
-};
-
-// wrap entity optional because ArrayList hates optionals
-pub fn FastLookupEntry(ItemType: type) type {
-    return struct {
-        entry: ?ItemType,
-    };
-}
-
-pub fn FastLookupTable(ItemType: type, startId: u32, endId: u32) type {
+pub fn FastLookupTable(ItemType: type, startId: comptime_int, endId: comptime_int) type {
     return struct {
         const Self = @This();
 
+        //TODO genericize u32 usage to any integer type
+        pub const FastLookupIndex = struct {
+            m_idx: ?u32,
+            m_id: u32,
+        };
+
+        // wrap optional because ArrayList hates optionals
+        pub const FastLookupEntry = struct {
+            entry: ?ItemType,
+        };
+
         m_lookupTable: ArrayList(FastLookupIndex) = .empty,
-        m_entries: ArrayList(FastLookupEntry(ItemType)) = .empty,
+        m_entries: ArrayList(FastLookupEntry) = .empty,
         m_minId: u32 = startId,
         m_maxId: u32 = endId,
         m_endOfIds: u32 = startId,
@@ -60,14 +58,14 @@ pub fn FastLookupTable(ItemType: type, startId: u32, endId: u32) type {
             ); //TODO should go back and delete entity if the lookup table has an issue
             self.m_endOfIds += 1;
 
-            return newEntryIdx;
+            return self.m_entries.items[newEntryIdx].entry orelse return FastLookupError.Unknown;
         }
 
         // returns null if entity has been destoryed or doesn't exist
         pub fn GetItem(self: *Self, id: u32) ?*ItemType {
             const lookup = self.FastLookup(id) orelse return null;
             const entryIdx: u32 = lookup.m_idx orelse return null;
-            return self.m_entries.items[entryIdx].entry orelse return null;
+            return &(self.m_entries.items[entryIdx].entry orelse return null);
         }
 
         pub fn RemoveItem(self: *Self, id: u32) bool {

@@ -1,7 +1,10 @@
 const std = @import("std");
+
 const gameWorld = @import("GameWorld.zig");
 const ent = @import("Entity.zig");
 const componentData = @import("ComponentData.zig");
+
+const FastLookupTable = @import("../coreutil/FastLookupTable.zig").FastLookupTable;
 
 const GameWorld = gameWorld.GameWorld;
 const Entity = ent.Entity;
@@ -15,85 +18,31 @@ const EntityError = error{
     Unknown,
 };
 
-const EntityFastLookup = struct {
-    m_idx: ?u32,
-    m_eid: u32,
-};
-
-// wrap entity optional because ArrayList hates optionals for some reason...
-const EntityEntry = struct {
-    m_e: ?Entity,
-};
-
 pub const EntityManager = struct {
-    m_entityFastTable: ArrayList(EntityFastLookup) = .empty,
-    m_entities: ArrayList(EntityEntry) = .empty,
-    m_endOfEids: u32 = ent.GetEidStart(),
-    m_firstFreeEntitySlot: u32 = 0, // potentially speed up KillEntity a bit on average...
+    const EntityTable = FastLookupTable(Entity, ent.k_eidStart, ent.k_eidEnd);
+
+    m_entityTable: EntityTable,
     m_allocator: Allocator,
-    //TODO eids should be reused
 
     pub fn init(allocator: Allocator) EntityManager {
-        return EntityManager{ .m_allocator = allocator };
-
-        // will probably do additional initialization later on...
+        return EntityManager{
+            .m_allocator = allocator,
+            .m_entityTable = EntityTable{},
+        };
     }
 
     pub fn CreateEntity(self: *EntityManager) !*Entity {
         if (!ent.CheckEid(self.m_endOfEids)) return EntityError.MaxEntities;
 
-        var newEntityIdx: u32 = 0;
-        if (self.m_firstFreeEntitySlot == self.m_entities.len) { // append new
-            const newEntry = Entity{ .m_eid = self.m_endOfEids };
-            try self.m_entities.append(self.m_allocator, EntityEntry{ .m_e = newEntry });
-            newEntityIdx = @as(u32, self.m_entities.len) - 1;
-            self.m_firstFreeEntitySlot += 1;
-        } else { // use existing freed slot
-            self.m_entities.items[self.m_firstFreeEntitySlot].m_e = Entity{ .m_eid = self.m_endOfEids };
-            newEntityIdx = self.m_firstFreeEntitySlot;
-            while (self.m_firstFreeEntitySlot < self.m_entities.len and self.m_entities.items[self.m_firstFreeEntitySlot].m_e != null) {
-                self.m_firstFreeEntitySlot += 1;
-            }
-        }
-        try self.m_entityFastTable.append(
-            self.m_allocator,
-            EntityFastLookup{
-                .m_eid = self.m_endOfEids,
-                .m_idx = newEntityIdx,
-            },
-        ); //TODO should go back and delete entity if the lookup table has an issue
-        self.m_endOfEids += 1;
-
-        return &(self.m_entities.items[newEntityIdx].m_e orelse return EntityError.Unknown);
+        return try self.m_entityTable.InsertEntry(Entity{});
     }
 
     // returns null if entity has been destoryed or doesn't exist
-    pub fn GetEntity(self: *EntityManager, eid: u32) ?Entity {
-        const lookup = self.FastLookup(eid) orelse return null;
-        const entityIdx: u32 = lookup.m_idx orelse return null;
-        return self.m_entities.items[entityIdx].m_e orelse return null;
+    pub fn GetEntity(self: *EntityManager, eid: u32) ?*Entity {
+        return self.m_entityTable.GetItem(eid);
     }
 
     pub fn KillEntity(self: *EntityManager, eid: u32) bool {
-        const lookup = self.FastLookup(eid) orelse return false;
-        const entityIdx: u32 = lookup.m_idx orelse return false;
-
-        // free the entity data
-        self.m_entities.items[entityIdx].m_e = null;
-        if (entityIdx < self.m_firstFreeEntitySlot) {
-            self.m_firstFreeEntitySlot = entityIdx;
-        }
-
-        // the eid is now forever null in the lookup table
-        lookup.m_idx = null;
-
-        return true;
-    }
-
-    fn FastLookup(self: *EntityManager, eid: u32) ?*EntityFastLookup {
-        if (!ent.CheckEid(eid) or eid >= self.m_endOfEids) {
-            return null;
-        }
-        return &self.m_entityFastTable.items[eid - ent.GetEidStart()];
+        return self.m_entityTable.RemoveItem(eid);
     }
 };

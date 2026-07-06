@@ -2,8 +2,9 @@ const MovementComp = @import("../ComponentData/MovementComp.zig").MovementComp;
 const TransformComp = @import("../ComponentData/TransformComp.zig").TransformComp;
 
 const gameWorld = @import("../GameWorld.zig");
-const EntityManager = @import("../EntityManager.zig");
-const ComponentManager = @import("../ComponentData.zig").ComponentManager;
+const EntityManager = @import("../EntityManager.zig").EntityManager;
+//TODO COMPMANAGER
+//const ComponentManager = @import("../ComponentData.zig").ComponentManager;
 
 const Vec3 = @import("../../math/Vec3.zig").Vec3;
 
@@ -42,29 +43,33 @@ fn TestMovementOnSpawn(data: BehaviourTuple) void {
 // pattern to reduce typing so much
 pub fn TestMovementUpdateBehaviour() void {
     movementCurTime += gameWorld.deltaTime;
-    const gw = &gameWorld.WritableInstance();
+    const gw = gameWorld.WritableInstance();
     const entityManager: *EntityManager = &gw.m_entityManager;
-    const compManager: *ComponentManager = &gw.m_componentManager;
-    for (entityManager.m_entities.items) |*entityPair| {
-        const entity = &(entityPair.m_e orelse continue);
-        const entTransform = compManager.GetComponentFromEntity(TransformComp, entity) orelse continue;
-        const entMovement = compManager.GetComponentFromEntity(MovementComp, entity) orelse continue;
-        TestMovementUpdate(.{
-            .m_movement = entMovement,
-            .m_transform = entTransform,
-        });
+    //TODO COMPMANAGER
+    //const compManager: *ComponentManager = &gw.m_componentManager;
+    for (entityManager.m_entityTable.m_entries.items) |*entityEntry| {
+        const entity = &(entityEntry.entry orelse continue);
+        _ = entity;
+        //const entTransform = compManager.GetComponentFromEntity(TransformComp, entity) orelse continue;
+        //const entMovement = compManager.GetComponentFromEntity(MovementComp, entity) orelse continue;
+        //TestMovementUpdate(.{
+        //    .m_movement = entMovement,
+        //    .m_transform = entTransform,
+        //});
     }
 }
 
 pub fn TestMovementOnSpawnBehaviour(eid: u32) void {
-    const gw = &gameWorld.WritableInstance();
+    const gw = gameWorld.WritableInstance();
     const entityManager: *EntityManager = &gw.m_entityManager;
-    const compManager: *ComponentManager = &gw.m_componentManager;
+    //TODO COMPMANAGER
+    //const compManager: *ComponentManager = &gw.m_componentManager;
     const entity = entityManager.GetEntity(eid) orelse return;
-    const entTransform = compManager.GetComponentFromEntity(TransformComp, entity) orelse return;
-    const entMovement = compManager.GetComponentFromEntity(MovementComp, entity) orelse return;
-    TestMovementOnSpawn(.{
-        .m_movement = entMovement,
-        .m_transform = entTransform,
-    });
+    _ = entity;
+    //const entTransform = compManager.GetComponentFromEntity(TransformComp, entity) orelse return;
+    //const entMovement = compManager.GetComponentFromEntity(MovementComp, entity) orelse return;
+    //TestMovementOnSpawn(.{
+    //    .m_movement = entMovement,
+    //    .m_transform = entTransform,
+    //});
 }

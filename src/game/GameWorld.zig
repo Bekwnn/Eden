@@ -3,7 +3,8 @@ const Entity = @import("Entity.zig").Entity;
 const EntityManager = @import("EntityManager.zig").EntityManager;
 const behaviourSystems = @import("BehaviourSystems.zig");
 const compData = @import("ComponentData.zig");
-const ComponentManager = compData.ComponentManager;
+//TODO COMPMANAGER
+//const ComponentManager = compData.ComponentManager;
 const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const debug = std.debug;
@@ -18,7 +19,7 @@ pub var deltaTime: f32 = 1.0 / 60.0;
 
 pub const GameWorld = struct {
     m_entityManager: EntityManager,
-    m_componentManager: ComponentManager,
+    //m_componentManager: ComponentManager,
     m_updateBehaviours: [behaviourSystems.s_update.len]*const fn () void = behaviourSystems.s_update,
     m_fixedUpdateBehaviours: [behaviourSystems.s_fixedUpdate.len]*const fn () void = behaviourSystems.s_fixedUpdate,
     m_onSpawnBehaviours: [behaviourSystems.s_onSpawn.len]*const fn (u32) void = behaviourSystems.s_onSpawn,
@@ -75,7 +76,8 @@ pub const GameWorld = struct {
 pub fn Initialize() void {
     instance = GameWorld{
         .m_entityManager = EntityManager.init(allocator),
-        .m_componentManager = ComponentManager.init(allocator),
+        //TODO COMPMANAGER
+        //.m_componentManager = ComponentManager.init(allocator),
     };
 }
 

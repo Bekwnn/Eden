@@ -1,7 +1,6 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
-const fs = std.fs;
-const path = fs.path;
+const Io = std.Io;
 
 const filePathUtils = @import("src/coreutil/FilePathUtils.zig");
 
@@ -10,7 +9,7 @@ const ShaderCleanError = error{
     Remake,
 };
 fn cleanCompiledShaders() !void {
-    const cwdDir = fs.cwd();
+    const cwdDir = Io.Dir.cwd();
 
     // delete entire compiled dir and remake
     cwdDir.deleteTree(compiledShaderDirName) catch return ShaderCleanError.Delete;
@@ -20,12 +19,12 @@ fn cleanCompiledShaders() !void {
 const shaderDirName = "src\\shaders";
 const compiledShaderDirName = "src\\shaders\\compiled";
 
-//TODO building shaders should maybe occur as a secondary step since adding system command like this
-// results in build failures if the shader doesn't compile. Ideally we want to instead have a runtime
-// crash or detect a shader error and use a bright pink error shader material or something.
+//TODO shader compilation should be moved to its own sub-program
+// apparently io is going to probably be illegal in build.zig
+// plus having it be its own program would be good for shader hot-reloading
 fn buildAllShaders(b: *std.Build, exe: anytype, shouldDebugLog: bool) !void {
-    const cwd = std.fs.cwd();
-    var shaderDir = (try cwd.openDir(shaderDirName, std.fs.Dir.OpenOptions{ .iterate = true })).iterate();
+    const cwd = Io.Dir.cwd();
+    var shaderDir = (try cwd.openDir(b.graph.io, shaderDirName, std.fs.Dir.OpenOptions{ .iterate = true })).iterate();
     while (try shaderDir.next()) |dirItem| {
         if (dirItem.kind == std.fs.Dir.Entry.Kind.file) {
             // skip vim files
@@ -52,14 +51,15 @@ fn buildAllShaders(b: *std.Build, exe: anytype, shouldDebugLog: bool) !void {
                 std.debug.print("relative compiled shader path: {s}\n", .{relativeOut});
             }
 
-            // example glslc usage: glslc -o oceanshader-vert.spv oceanshader.vert
-            const glslc_cmd = b.addSystemCommand(&[_][]const u8{
-                "glslc",
+            // can you really not specify output file? cmon guys...
+            const slang_cmd = b.addSystemCommand(&[_][]const u8{
+                "slangc",
+                "-matrix-layout-row-major",
                 "-o",
                 relativeOut,
                 relativeIn,
             });
-            exe.step.dependOn(&glslc_cmd.step);
+            exe.step.dependOn(&slang_cmd.step);
         }
     }
 }
@@ -71,10 +71,12 @@ const BuildConfig = struct {
 };
 
 fn LoadBuildConfig(b: *std.Build, configFileName: []const u8) !BuildConfig {
-    const buildConfigFile = try std.fs.cwd().openFile(configFileName, .{});
+    const buildConfigFile = try Io.Dir.cwd().openFile(b.graph.io, configFileName, .{});
     defer buildConfigFile.close();
 
-    const buildConfigContents = try buildConfigFile.readToEndAlloc(b.allocator, 4096); //arbitrary max file size
+    var buildConfigFileBuffer: [4096]u8 = undefined;
+    var buildConfigReader = buildConfigFile.reader(b.graph.io, &buildConfigFileBuffer);
+    const buildConfigContents = buildConfigReader.interface.allocRemaining(b.allocator, 4096);
     defer b.allocator.free(buildConfigContents);
 
     const parsedBuildConfig = try std.json.parseFromSlice(BuildConfig, b.allocator, buildConfigContents, .{});

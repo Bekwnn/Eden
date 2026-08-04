@@ -8,12 +8,12 @@ const ShaderCleanError = error{
     Delete,
     Remake,
 };
-fn cleanCompiledShaders() !void {
+fn cleanCompiledShaders(b: *std.Build) !void {
     const cwdDir = Io.Dir.cwd();
 
     // delete entire compiled dir and remake
-    cwdDir.deleteTree(compiledShaderDirName) catch return ShaderCleanError.Delete;
-    cwdDir.makeDir(compiledShaderDirName) catch return ShaderCleanError.Remake;
+    cwdDir.deleteTree(b.graph.io, compiledShaderDirName) catch return ShaderCleanError.Delete;
+    cwdDir.createDir(b.graph.io, compiledShaderDirName, Io.File.Permissions.default_dir) catch return ShaderCleanError.Remake;
 }
 
 const shaderDirName = "src\\shaders";
@@ -24,9 +24,9 @@ const compiledShaderDirName = "src\\shaders\\compiled";
 // plus having it be its own program would be good for shader hot-reloading
 fn buildAllShaders(b: *std.Build, exe: anytype, shouldDebugLog: bool) !void {
     const cwd = Io.Dir.cwd();
-    var shaderDir = (try cwd.openDir(b.graph.io, shaderDirName, std.fs.Dir.OpenOptions{ .iterate = true })).iterate();
-    while (try shaderDir.next()) |dirItem| {
-        if (dirItem.kind == std.fs.Dir.Entry.Kind.file) {
+    var shaderDir = (try cwd.openDir(b.graph.io, shaderDirName, std.Io.Dir.OpenOptions{ .iterate = true })).iterate();
+    while (try shaderDir.next(b.graph.io)) |dirItem| {
+        if (dirItem.kind == Io.File.Kind.file) {
             // skip vim files
             // TODO would be nice if there was instead some pattern matching .gitignore type file in the directory
             // or a list of valid shader file extensions
@@ -72,11 +72,11 @@ const BuildConfig = struct {
 
 fn LoadBuildConfig(b: *std.Build, configFileName: []const u8) !BuildConfig {
     const buildConfigFile = try Io.Dir.cwd().openFile(b.graph.io, configFileName, .{});
-    defer buildConfigFile.close();
+    defer buildConfigFile.close(b.graph.io);
 
     var buildConfigFileBuffer: [4096]u8 = undefined;
     var buildConfigReader = buildConfigFile.reader(b.graph.io, &buildConfigFileBuffer);
-    const buildConfigContents = buildConfigReader.interface.allocRemaining(b.allocator, 4096);
+    const buildConfigContents = try buildConfigReader.interface.allocRemaining(b.allocator, Io.Limit.unlimited);
     defer b.allocator.free(buildConfigContents);
 
     const parsedBuildConfig = try std.json.parseFromSlice(BuildConfig, b.allocator, buildConfigContents, .{});
@@ -90,15 +90,16 @@ fn GetVulkanRootPathAlloc(b: *std.Build, buildConfig: *const BuildConfig) ![]con
         return buildConfig.VulkanPath;
     } else {
         // If build config just has "default" instead of a path, we have to dig it up ourselves. Assumes default install location
-        // TODO: non-windows maybe
-        var dir: std.fs.Dir = try std.fs.openDirAbsolute("C:/VulkanSDK", .{ .iterate = true });
-        defer dir.close();
+        // TODO: non-windows
+        const vulkanSDKRoot = "C:/VulkanSDK";
+        var dir: Io.Dir = try Io.Dir.openDirAbsolute(b.graph.io, vulkanSDKRoot, .{ .iterate = true });
+        defer dir.close(b.graph.io);
 
         std.debug.print("Vulkan dirs found:\n", .{});
 
         var dirIter = dir.iterate();
         var newestVulkanDir: ?[]const u8 = null;
-        while (try dirIter.next()) |entry| {
+        while (try dirIter.next(b.graph.io)) |entry| {
             if (entry.kind == .directory) {
                 std.debug.print("{s}\n", .{entry.name});
                 if (newestVulkanDir == null) {
@@ -113,11 +114,16 @@ fn GetVulkanRootPathAlloc(b: *std.Build, buildConfig: *const BuildConfig) ![]con
             }
         }
 
-        if (newestVulkanDir == null) {
+        if (newestVulkanDir) |vulkanDir| {
+            const completePath = try std.mem.concat(
+                b.allocator,
+                u8,
+                &[_][]const u8{ vulkanSDKRoot, "/", vulkanDir },
+            );
+            return completePath;
+        } else {
             const VulkanPathError = error{DefaultRootPathNotFound};
             return VulkanPathError.DefaultRootPathNotFound;
-        } else {
-            return dir.realpathAlloc(b.allocator, newestVulkanDir.?);
         }
     }
 }
@@ -230,7 +236,7 @@ pub fn build(b: *std.Build) !void {
     });
     imgui_lib.root_module.addLibraryPath(.{ .cwd_relative = vulkanPathLib });
     imgui_lib.root_module.addIncludePath(.{ .cwd_relative = vulkanPathInclude });
-    exe.linkLibrary(imgui_lib);
+    exe.root_module.linkLibrary(imgui_lib);
     // --- IMGUI END ---
 
     // --- ASSIMP START ---
@@ -255,22 +261,21 @@ pub fn build(b: *std.Build) !void {
     // --- ASSIMP END ---
 
     // --- STB START ---
-    exe.addIncludePath(b.path("dependency/stb"));
+    exe.root_module.addIncludePath(b.path("dependency/stb"));
     const stb_flags = &[_][]const u8{
         "-std=c17",
     };
-    exe.addCSourceFile(.{
+    exe.root_module.addCSourceFile(.{
         .file = b.path("dependency/stb/stb_image_impl.c"),
         .flags = stb_flags,
     });
     // --- STB END ---
 
     // --- VMA START ---
-    exe.addIncludePath(b.path("dependency/vma"));
-    const vma_flags = &[_][]const u8{};
-    exe.addCSourceFile(.{
+    exe.root_module.addIncludePath(b.path("dependency/vma"));
+    exe.root_module.addCSourceFile(.{
         .file = b.path("dependency/vma/vk_mem_alloc.cpp"),
-        .flags = vma_flags,
+        .flags = &.{},
     });
     // --- VMA END ---
 
@@ -314,6 +319,6 @@ pub fn build(b: *std.Build) !void {
     // shaders to fail to compile without blocking the build. References to failed
     // or missing shaders would instead display with a generic error shader.
     const logShaderCompilation = true;
-    try cleanCompiledShaders();
+    try cleanCompiledShaders(b);
     try buildAllShaders(b, exe, logShaderCompilation);
 }

@@ -2,7 +2,7 @@ Eden is a minimal framework built on SDL and written in Zig.
 
 Eden is a general purpose engine for low level real-time simulations. It's primarily designed for writing performance-sensitive graphics/simulation experiments, but could also be used for games.
 
-Currently compiling on windows 10 with zig-0.15.2.
+Currently compiling on windows 10 with zig-0.16.0.
 
 The framework is currently pre-v0.1, but feel free to use it as a reference.
 

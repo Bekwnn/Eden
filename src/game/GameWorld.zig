@@ -5,7 +5,6 @@ const behaviourSystems = @import("BehaviourSystems.zig");
 const compData = @import("ComponentData.zig");
 //TODO COMPMANAGER
 //const ComponentManager = compData.ComponentManager;
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const debug = std.debug;
 const time = std.time;
@@ -73,7 +72,7 @@ pub const GameWorld = struct {
     }
 };
 
-pub fn Initialize() void {
+pub fn Initialize(allocator: std.mem.Allocator) void {
     instance = GameWorld{
         .m_entityManager = EntityManager.init(allocator),
         //TODO COMPMANAGER

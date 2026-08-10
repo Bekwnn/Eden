@@ -17,8 +17,6 @@ const Vec2 = @import("../../math/Vec2.zig").Vec2;
 const c = @import("../../c.zig").cLib;
 const input = @import("../../Input.zig");
 
-const allocator = @import("../../coreutil/Allocators.zig").defaultAllocator;
-
 var mainWindow: ?*c.SDL_Window = null;
 
 // TODO temp vars to setup widths of different docked windows
@@ -35,12 +33,12 @@ pub const fixedWindowFlags =
     c.ImGuiWindowFlags_NoMove |
     c.ImGuiWindowFlags_NoTitleBar;
 
-pub fn Initialize(window: *c.SDL_Window) !void {
+pub fn Initialize(allocator: std.mem.Allocator, window: *c.SDL_Window) !void {
     c.igGetIO_Nil().*.ConfigFlags |= c.ImGuiConfigFlags_DockingEnable;
     mainWindow = window;
 
     // Initialize data for the render viewport
-    try viewport.Initialize();
+    try viewport.Initialize(allocator);
 }
 
 pub fn Deinit() void {
@@ -183,10 +181,7 @@ pub fn DrawFloatingDebugWindow(deltaT: f32, rawDeltaNs: u64) !void {
     c.igEnd();
 }
 
-pub fn Draw(deltaT: f32, rawDeltaNs: u64) !void {
-    _ = deltaT;
-    _ = rawDeltaNs;
-
+pub fn Draw() !void {
     try DrawTopBar();
     try DrawBottomTray();
     try DrawSceneInspector();
@@ -200,8 +195,6 @@ pub fn Draw(deltaT: f32, rawDeltaNs: u64) !void {
     try viewport.DrawViewport();
 
     c.igPopStyleVar(1);
-
-    //try DrawFloatingDebugWindow(deltaT, rawDeltaNs);
 }
 
 //TODO temp function for camera movement

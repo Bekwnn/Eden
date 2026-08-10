@@ -3,6 +3,7 @@ const c = @import("../c.zig").cLib;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const Io = std.Io;
 
 const vkUtil = @import("VulkanUtil.zig");
 const RenderContext = @import("RenderContext.zig").RenderContext;
@@ -55,13 +56,14 @@ pub const ShaderEffect = struct {
     // caller must CheckAndFree
     pub fn CreateBasicShader(
         allocator: Allocator,
+        io: Io,
         vertShaderSource: []const u8,
         fragShaderSource: []const u8,
     ) !ShaderEffect {
         var newShader = ShaderEffect.CreateEmptyShader(allocator);
 
-        try newShader.AddShaderStage(allocator, vertShaderSource, c.VK_SHADER_STAGE_VERTEX_BIT);
-        try newShader.AddShaderStage(allocator, fragShaderSource, c.VK_SHADER_STAGE_FRAGMENT_BIT);
+        try newShader.AddShaderStage(allocator, io, vertShaderSource, c.VK_SHADER_STAGE_VERTEX_BIT);
+        try newShader.AddShaderStage(allocator, io, fragShaderSource, c.VK_SHADER_STAGE_FRAGMENT_BIT);
 
         return newShader;
     }
@@ -90,13 +92,14 @@ pub const ShaderEffect = struct {
     pub fn AddShaderStage(
         self: *Self,
         allocator: Allocator,
+        io: Io,
         shaderSource: []const u8,
         flags: c.VkShaderStageFlags,
     ) !void {
         try self.m_shaderStages.append(
             self.m_allocator,
             ShaderStage{
-                .m_shader = try CreateShaderModule(allocator, shaderSource),
+                .m_shader = try CreateShaderModule(allocator, io, shaderSource),
                 .m_flags = flags,
             },
         );
@@ -133,30 +136,38 @@ fn CheckAndFreeShaderModule(shader: c.VkShaderModule) void {
 
 // returns owned slice; caller needs to free
 fn ReadShaderFileAlloc(
-    comptime alignment: comptime_int,
     allocator: Allocator,
+    io: Io,
+    comptime alignment: comptime_int,
     relativeShaderPath: []const u8,
 ) ![]align(alignment) const u8 {
     std.debug.print("Reading shader [{s}]...\n", .{relativeShaderPath});
 
-    var shaderDir = std.fs.cwd();
+    var shaderDir = Io.Dir.cwd();
 
-    const shaderFile = try shaderDir.openFile(relativeShaderPath, .{});
-    defer shaderFile.close();
+    const shaderFile = try shaderDir.openFile(io, relativeShaderPath, .{});
+    defer shaderFile.close(io);
 
     const shaderCode: []align(alignment) u8 = try allocator.allocAdvancedWithRetAddr(
         u8,
         std.mem.Alignment.fromByteUnits(alignment),
-        try shaderFile.getEndPos(),
+        try shaderFile.length(io),
         @returnAddress(),
     );
 
-    _ = try shaderFile.read(shaderCode);
+    var readBuf: [1024]u8 = undefined;
+    var shaderReader = shaderFile.reader(io, &readBuf);
+    try shaderReader.interface.readSliceAll(shaderCode);
     return shaderCode;
 }
 
-fn CreateShaderModule(allocator: Allocator, relativeShaderPath: []const u8) !c.VkShaderModule {
-    const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFileAlloc(@alignOf(u32), allocator, relativeShaderPath);
+fn CreateShaderModule(allocator: Allocator, io: Io, relativeShaderPath: []const u8) !c.VkShaderModule {
+    const shaderCode: []align(@alignOf(u32)) const u8 = try ReadShaderFileAlloc(
+        allocator,
+        io,
+        @alignOf(u32),
+        relativeShaderPath,
+    );
     defer allocator.free(shaderCode);
 
     const createInfo = c.VkShaderModuleCreateInfo{

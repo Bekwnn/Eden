@@ -1,7 +1,6 @@
 const c = @import("../c.zig").cLib;
 const std = @import("std");
 const debug = std.debug;
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const SDLInitError = error{
     //TODO

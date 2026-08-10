@@ -1,7 +1,4 @@
 const std = @import("std");
-const debug = std.debug;
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
-const mem = std.mem;
 
 const filePathUtils = @import("FilePathUtils.zig");
 const c = @import("../c.zig").cLib;
@@ -19,17 +16,17 @@ pub const ImageFile = struct {
     m_freed: bool,
 
     pub fn FreeImage(self: *ImageFile) void {
-        debug.assert(!self.m_freed);
+        std.debug.assert(!self.m_freed);
         c.stbi_image_free(self.m_imageData);
         self.m_freed = true;
     }
 };
 
-pub fn LoadImage(cwdRelativePath: []const u8) !ImageFile {
+pub fn LoadImage(allocator: std.mem.Allocator, io: std.Io, cwdRelativePath: []const u8) !ImageFile {
     var width: c_int = undefined;
     var height: c_int = undefined;
     var channels: c_int = undefined;
-    const imagePath = try filePathUtils.CwdToAbsolute(allocator, cwdRelativePath);
+    const imagePath = try filePathUtils.CwdToAbsolute(allocator, io, cwdRelativePath);
     defer allocator.free(imagePath);
     const image = c.stbi_load(imagePath.ptr, &width, &height, &channels, c.STBI_rgb_alpha); //TODO adjustable format
     if (image == null) {

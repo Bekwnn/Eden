@@ -1,6 +1,5 @@
 const std = @import("std");
 const debug = std.debug;
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const c = @import("../c.zig").cLib;
 
@@ -29,7 +28,7 @@ pub const DebugLine = struct {
     m_lines: [2]Vec3,
     m_color: ColorRGBA,
 };
-pub fn CreateDebugLine(start: Vec3, end: Vec3, color: ColorRGBA) !*DebugLine {
+pub fn CreateDebugLine(allocator: std.mem.Allocator, start: Vec3, end: Vec3, color: ColorRGBA) !*DebugLine {
     try debugLines.append(
         allocator,
         DebugLine{
@@ -51,7 +50,7 @@ pub const DebugCircle = struct {
     m_radius: f32,
     m_color: ColorRGBA,
 };
-pub fn CreateDebugCircle(pos: Vec3, upDir: Vec3, radius: f32, color: ColorRGBA) !*DebugCircle {
+pub fn CreateDebugCircle(allocator: std.mem.Allocator, pos: Vec3, upDir: Vec3, radius: f32, color: ColorRGBA) !*DebugCircle {
     try debugCircles.append(
         allocator,
         DebugCircle{
@@ -71,7 +70,7 @@ pub const DebugBox = struct {
     m_extents: Vec3,
     m_color: ColorRGBA,
 };
-pub fn CreateDebugBox(center: Vec3, extents: Vec3, color: ColorRGBA) !*DebugBox {
+pub fn CreateDebugBox(allocator: std.mem.Allocator, center: Vec3, extents: Vec3, color: ColorRGBA) !*DebugBox {
     try debugBoxes.append(
         allocator,
         DebugBox{
@@ -87,20 +86,20 @@ pub fn ShouldDraw() bool {
     return debugLines.items.len != 0 or debugCircles.items.len != 0;
 }
 
-pub fn FillDebugVertexBuffers() !void {
+pub fn FillDebugVertexBuffers(allocator: std.mem.Allocator) !void {
     if (debugLines.items.len != 0) {
-        try FillDebugLineVertexBuffer();
+        try FillDebugLineVertexBuffer(allocator);
     }
     if (debugCircles.items.len != 0) {
-        try FillDebugCircleVertexBuffer();
+        try FillDebugCircleVertexBuffer(allocator);
     }
     if (debugBoxes.items.len != 0) {
-        try FillDebugBoxVertexBuffer();
+        try FillDebugBoxVertexBuffer(allocator);
     }
 }
 
 //TODO don't recreate vertex buffer every frame
-fn FillDebugLineVertexBuffer() !void {
+fn FillDebugLineVertexBuffer(allocator: std.mem.Allocator) !void {
     const rContext = try RenderContext.GetInstance();
     const debugLineBuffer = &debugLineVertexBuffers[rContext.m_currentFrame];
 
@@ -133,7 +132,7 @@ fn FillDebugLineVertexBuffer() !void {
 // TODO we should accomodate varying vert counts and have m_sides field per circle
 const debugCircleNumSides = 8;
 //TODO don't recreate vertex buffer every frame
-fn FillDebugCircleVertexBuffer() !void {
+fn FillDebugCircleVertexBuffer(allocator: std.mem.Allocator) !void {
     const rContext = try RenderContext.GetInstance();
     const debugCircleBuffer = &debugCircleVertexBuffers[rContext.m_currentFrame];
 
@@ -176,7 +175,7 @@ fn FillDebugCircleVertexBuffer() !void {
 }
 
 const debugBoxNumVerts = 24;
-fn FillDebugBoxVertexBuffer() !void {
+fn FillDebugBoxVertexBuffer(allocator: std.mem.Allocator) !void {
     const rContext = try RenderContext.GetInstance();
     const debugBoxBuffer = &debugBoxVertexBuffers[rContext.m_currentFrame];
 
@@ -290,8 +289,8 @@ pub fn PushDebugColor(cmd: c.VkCommandBuffer, pipelineLayout: c.VkPipelineLayout
     );
 }
 
-pub fn Draw(cmd: c.VkCommandBuffer) !void {
-    try FillDebugVertexBuffers();
+pub fn Draw(allocator: std.mem.Allocator, cmd: c.VkCommandBuffer) !void {
+    try FillDebugVertexBuffers(allocator);
 
     const assetInventory = try AssetInventory.GetInstance();
     const currentFrameIdx = (try RenderContext.GetInstance()).m_currentFrame;
@@ -368,12 +367,13 @@ pub fn Draw(cmd: c.VkCommandBuffer) !void {
     }
 }
 
-pub fn Init() !void {
+pub fn Init(allocator: std.mem.Allocator, io: std.Io) !void {
     const inventory = try AssetInventory.GetInstance();
 
     // build base shader effect
     debugShaderEffect = try ShaderEffect.CreateBasicShader(
         allocator,
+        io,
         "src\\shaders\\compiled\\debug_colored-vert.spv",
         "src\\shaders\\compiled\\debug_colored-frag.spv",
     );
@@ -388,27 +388,29 @@ pub fn Init() !void {
     try debugShaderEffect.BuildLayouts(allocator);
 
     // create line list mat
-    const debugLineListMat = try inventory.CreateMaterial("debug_line_list_mat");
-    _ = try inventory.CreateMaterialInstance("debug_line_list_mat_inst", debugLineListMat);
+    const debugLineListMat = try inventory.CreateMaterial(allocator, "debug_line_list_mat");
+    _ = try inventory.CreateMaterialInstance(allocator, "debug_line_list_mat_inst", debugLineListMat);
 
     debug.print("Building debug line ShaderPass...\n", .{});
     debugLineListMat.m_shaderPass = try InitDebugMat(
+        allocator,
         c.VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
         c.VK_POLYGON_MODE_LINE,
     );
 
     // create line strip mat
-    const debugLineStripMat = try inventory.CreateMaterial("debug_line_strip_mat");
-    _ = try inventory.CreateMaterialInstance("debug_line_strip_mat_inst", debugLineStripMat);
+    const debugLineStripMat = try inventory.CreateMaterial(allocator, "debug_line_strip_mat");
+    _ = try inventory.CreateMaterialInstance(allocator, "debug_line_strip_mat_inst", debugLineStripMat);
 
     debug.print("Building debug line strip ShaderPass...\n", .{});
     debugLineStripMat.m_shaderPass = try InitDebugMat(
+        allocator,
         c.VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
         c.VK_POLYGON_MODE_LINE,
     );
 }
 
-fn InitDebugMat(topology: c.VkPrimitiveTopology, polygonMode: c.VkPolygonMode) !ShaderPass {
+fn InitDebugMat(allocator: std.mem.Allocator, topology: c.VkPrimitiveTopology, polygonMode: c.VkPolygonMode) !ShaderPass {
     const debugLineBindingDesc = c.VkVertexInputBindingDescription{
         .binding = 0,
         .stride = @sizeOf(Vec3),

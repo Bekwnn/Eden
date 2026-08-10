@@ -1,6 +1,5 @@
 const std = @import("std");
 const debug = std.debug;
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const c = @import("../c.zig").cLib;
 
@@ -28,7 +27,7 @@ const TextureParam = materialParam.TextureParam;
 const UniformParam = materialParam.UniformParam;
 
 //TODO move scene out to world or something
-var currentScene = Scene{};
+var currentScene: Scene = undefined;
 
 var texturedShaderEffect: ShaderEffect = undefined;
 var coloredShaderEffect: ShaderEffect = undefined;
@@ -44,23 +43,25 @@ pub fn GetCurrentScene() *Scene {
     return &currentScene;
 }
 
-pub fn InitializeScene() !void {
-    try DebugDraw.Init();
+pub fn InitializeScene(allocator: std.mem.Allocator, io: std.Io) !void {
+    currentScene = Scene.Initialize(allocator);
+
+    try DebugDraw.Init(allocator, io);
 
     std.debug.print("Initializing scene...\n", .{});
 
     // init hardcoded test currentScene:
     var inventory = try AssetInventory.GetInstance();
 
-    const mesh = try inventory.CreateMesh("monkey", "test-assets\\test.obj");
+    const mesh = try inventory.CreateMesh(allocator, io, "monkey", "test-assets\\test.obj");
 
-    const uvTexture = try inventory.CreateTexture("uv_test", "test-assets\\test.png");
+    const uvTexture = try inventory.CreateTexture(allocator, io, "uv_test", "test-assets\\test.png");
 
-    const texMaterial = try inventory.CreateMaterial("textured_mat");
-    const texMaterialInst = try inventory.CreateMaterialInstance("textured_mat_inst", texMaterial);
+    const texMaterial = try inventory.CreateMaterial(allocator, "textured_mat");
+    const texMaterialInst = try inventory.CreateMaterialInstance(allocator, "textured_mat_inst", texMaterial);
 
-    const coloredMat = try inventory.CreateMaterial("colored_mat");
-    const coloredMatInst = try inventory.CreateMaterialInstance("colored_mat_inst", coloredMat);
+    const coloredMat = try inventory.CreateMaterial(allocator, "colored_mat");
+    const coloredMatInst = try inventory.CreateMaterialInstance(allocator, "colored_mat_inst", coloredMat);
 
     try currentScene.CreateCamera("default");
 
@@ -110,6 +111,7 @@ pub fn InitializeScene() !void {
     debug.print("Building basic_textured_mesh ShaderEffect...\n", .{});
     texturedShaderEffect = try ShaderEffect.CreateBasicShader(
         allocator,
+        io,
         "src\\shaders\\compiled\\basic_textured_mesh-vert.spv",
         "src\\shaders\\compiled\\basic_textured_mesh-frag.spv",
     );
@@ -144,6 +146,7 @@ pub fn InitializeScene() !void {
     debug.print("Building basic_mesh ShaderEffect...\n", .{});
     coloredShaderEffect = try ShaderEffect.CreateBasicShader(
         allocator,
+        io,
         "src\\shaders\\compiled\\basic_mesh-vert.spv",
         "src\\shaders\\compiled\\basic_mesh-frag.spv",
     );

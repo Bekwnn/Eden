@@ -1,7 +1,6 @@
 const std = @import("std");
 const c = @import("../c.zig").cLib;
 const debug = std.debug;
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const StringHashMap = std.StringHashMap;
 const ArrayList = std.ArrayList;
@@ -46,12 +45,18 @@ pub const Scene = struct {
     pub const RenderableIter = RenderableContainer.Iterator;
     pub const RenderableEntry = RenderableContainer.Entry;
 
-    //TODO init and take an allocator instead?
-    m_cameras: StringHashMap(Camera) = StringHashMap(Camera).init(allocator),
-    m_renderables: RenderableContainer = RenderableContainer.init(allocator),
+    m_cameras: StringHashMap(Camera),
+    m_renderables: RenderableContainer,
 
     m_currentCamera: ?*Camera = null,
     m_defaultCamera: ?*Camera = null,
+
+    pub fn Initialize(allocator: std.mem.Allocator) Scene {
+        return Scene{
+            .m_cameras = StringHashMap(Camera).init(allocator),
+            .m_renderables = RenderableContainer.init(allocator),
+        };
+    }
 
     pub fn CreateCamera(self: *Self, name: []const u8) !void {
         try self.m_cameras.put(name, Camera{});

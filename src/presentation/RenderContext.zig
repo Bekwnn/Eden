@@ -591,7 +591,9 @@ fn DebugMessengerCallback(
     }
 
     // Very verbose, toggle on and off for debugging
-    std.debug.dumpCurrentStackTrace(@returnAddress());
+    std.debug.dumpCurrentStackTrace(.{
+        .first_address = @returnAddress(),
+    });
 
     return c.VK_FALSE;
 }

@@ -5,8 +5,6 @@ const RenderContext = renderContext.RenderContext;
 const Texture = @import("../Texture.zig").Texture;
 const vkUtil = @import("../VulkanUtil.zig");
 
-const allocator = @import("../../coreutil/Allocators.zig").defaultAllocator;
-
 const c = @import("../../c.zig").cLib;
 
 const std = @import("std");
@@ -29,7 +27,7 @@ pub const ViewportFrameData = struct {
 
 var viewportFrameData: std.ArrayList(ViewportFrameData) = .empty;
 
-pub fn Initialize() !void {
+pub fn Initialize(allocator: std.mem.Allocator) !void {
     const rContext = try RenderContext.GetInstance();
     const imageCount = rContext.m_swapchain.m_imageCount;
 

@@ -1,6 +1,5 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 const c = @import("../c.zig").cLib;
 const Vec2 = @import("../math/Vec2.zig").Vec2;

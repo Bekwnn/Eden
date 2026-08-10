@@ -10,8 +10,8 @@ pub const FilePathError = error{
 
 // Caller must free if successful
 // TODO: Only supports back slashes; process.GetCwdAlloc() returns a backslash'd path
-pub fn CwdToAbsolute(allocator: mem.Allocator, relativePath: []const u8) ![]u8 {
-    const cwdPath = try process.getCwdAlloc(allocator);
+pub fn CwdToAbsolute(allocator: mem.Allocator, io: std.Io, relativePath: []const u8) ![]u8 {
+    const cwdPath = try process.currentPathAlloc(io, allocator);
     defer allocator.free(cwdPath);
     const absolutePath = try allocator.alloc(u8, cwdPath.len + relativePath.len + 1);
     errdefer allocator.free(absolutePath);

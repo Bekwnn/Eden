@@ -7,8 +7,6 @@ const debug = @import("std").debug;
 const Mesh = @import("Mesh.zig").Mesh;
 const VertexData = @import("Mesh.zig").VertexData;
 
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
-
 const ImporterLib = enum {
     AssImp,
     Cgltf,
@@ -27,12 +25,10 @@ const ImportError = error{
     NotImplemented,
 };
 
-pub fn ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
-    _ = try std.fs.openFileAbsolute(filePath, .{}); //sanity check accessing the file before trying to import
-
+pub fn ImportMesh(allocator: std.mem.Allocator, filePath: []const u8, meshName: []const u8) !Mesh {
     switch (meshImportLib) {
         ImporterLib.AssImp => {
-            return AssImp_ImportMesh(filePath, meshName);
+            return AssImp_ImportMesh(allocator, filePath, meshName);
         },
         ImporterLib.Cgltf => {
             //return Cgltf_ImportMesh(filePath, meshName);
@@ -45,9 +41,7 @@ fn GetMeshNameFromFile(filePath: []const u8) []const u8 {
     return std.fs.path.basename(filePath);
 }
 
-fn AssImp_ImportMesh(filePath: []const u8, meshName: []const u8) !Mesh {
-    _ = try std.fs.openFileAbsolute(filePath, .{}); //sanity check accessing the file before trying to import
-
+fn AssImp_ImportMesh(allocator: std.mem.Allocator, filePath: []const u8, meshName: []const u8) !Mesh {
     const importedScene: *const c.aiScene = c.aiImportFile(filePath.ptr, c.aiProcess_Triangulate) orelse {
         const errStr = c.aiGetErrorString();
         debug.print("{s}\n", .{errStr[0..std.mem.len(errStr)]});

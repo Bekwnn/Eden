@@ -14,7 +14,6 @@ const RenderContext = @import("RenderContext.zig").RenderContext;
 const Scene = @import("Scene.zig").Scene;
 const assetImport = @import("AssetImport.zig");
 const filePathUtils = @import("../coreutil/FilePathUtils.zig");
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 
 var instance: ?AssetInventory = null;
 
@@ -30,10 +29,10 @@ const InventoryError = error{
 // video, materials, etc)
 
 pub const AssetInventory = struct {
-    m_meshes: StringHashMap(Mesh) = StringHashMap(Mesh).init(allocator),
-    m_materials: StringHashMap(Material) = StringHashMap(Material).init(allocator),
-    m_materialInstances: StringHashMap(MaterialInstance) = StringHashMap(MaterialInstance).init(allocator),
-    m_textures: StringHashMap(Texture) = StringHashMap(Texture).init(allocator),
+    m_meshes: StringHashMap(Mesh),
+    m_materials: StringHashMap(Material),
+    m_materialInstances: StringHashMap(MaterialInstance),
+    m_textures: StringHashMap(Texture),
 
     pub fn GetInstance() !*AssetInventory {
         if (instance) |*inst| {
@@ -43,14 +42,20 @@ pub const AssetInventory = struct {
         }
     }
 
-    pub fn Initialize() !void {
+    pub fn Initialize(allocator: std.mem.Allocator) !void {
         if (instance != null) return InventoryError.AlreadyInitialized;
-        instance = AssetInventory{};
+        instance = AssetInventory{
+            .m_meshes = StringHashMap(Mesh).init(allocator),
+            .m_materials = StringHashMap(Material).init(allocator),
+            .m_materialInstances = StringHashMap(MaterialInstance).init(allocator),
+            .m_textures = StringHashMap(Texture).init(allocator),
+        };
     }
 
     // Takes ownership of name slice
     pub fn CreateMaterial(
         self: *AssetInventory,
+        allocator: std.mem.Allocator,
         name: []const u8,
     ) !*Material {
         //TODO init pipeline
@@ -73,6 +78,7 @@ pub const AssetInventory = struct {
     // Takes ownership of name slice
     pub fn CreateMaterialInstance(
         self: *AssetInventory,
+        allocator: std.mem.Allocator,
         name: []const u8,
         parentMaterial: *Material,
     ) !*MaterialInstance {
@@ -102,13 +108,15 @@ pub const AssetInventory = struct {
     // Takes ownership of name slice
     pub fn CreateMesh(
         self: *AssetInventory,
+        allocator: std.mem.Allocator,
+        io: std.Io,
         name: []const u8,
         filePath: []const u8,
     ) !*Mesh {
-        const meshPath = try filePathUtils.CwdToAbsolute(allocator, filePath);
+        const meshPath = try filePathUtils.CwdToAbsolute(allocator, io, filePath);
         defer allocator.free(meshPath);
         //TODO avoid unnecessary copying on creation
-        var importResult = assetImport.ImportMesh(meshPath, name);
+        var importResult = assetImport.ImportMesh(allocator, meshPath, name);
         if (importResult) |*mesh| {
             try mesh.*.InitMesh();
             try self.m_meshes.put(name, mesh.*);
@@ -131,8 +139,14 @@ pub const AssetInventory = struct {
     }
 
     // Takes ownership of name slice
-    pub fn CreateTexture(self: *AssetInventory, name: []const u8, imagePath: []const u8) !*Texture {
-        const texture = try Texture.CreateTextureFromFile(name, imagePath);
+    pub fn CreateTexture(
+        self: *AssetInventory,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        name: []const u8,
+        imagePath: []const u8,
+    ) !*Texture {
+        const texture = try Texture.CreateTextureFromFile(allocator, io, name, imagePath);
         try self.m_textures.put(name, texture);
         return self.m_textures.getPtr(name) orelse @panic("Texture just created does not exist in hash map");
     }

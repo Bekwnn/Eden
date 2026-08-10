@@ -27,13 +27,15 @@ pub const Texture = struct {
 
     // consider adding a isSampled param instead of always setting VK_IMAGE_USAGE_SAMPLED_BIT
     pub fn CreateTextureFromFile(
+        allocator: std.mem.Allocator,
+        io: std.Io,
         name: []const u8,
         imagePath: []const u8,
     ) !Texture {
         const rContext = try RenderContext.GetInstance();
 
         std.debug.print("Loading Image {s} ...\n", .{imagePath});
-        var image = try imageFileUtil.LoadImage(imagePath);
+        var image = try imageFileUtil.LoadImage(allocator, io, imagePath);
         defer image.FreeImage();
 
         var newTexture: Texture = undefined;

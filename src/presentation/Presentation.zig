@@ -1,5 +1,4 @@
 const std = @import("std");
-const allocator = @import("../coreutil/Allocators.zig").defaultAllocator;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const AutoHashMap = std.AutoHashMap;
@@ -53,7 +52,7 @@ const RenderLoopError = error{
     NoMeshBufferData,
 };
 
-pub fn OnWindowResized(window: *c.SDL_Window) !void {
+pub fn OnWindowResized(allocator: std.mem.Allocator, window: *c.SDL_Window) !void {
     var rContext = try RenderContext.GetInstance();
     var width: c_int = 0;
     var height: c_int = 0;
@@ -67,6 +66,8 @@ pub fn OnWindowResized(window: *c.SDL_Window) !void {
 }
 
 pub fn Initialize(
+    allocator: std.mem.Allocator,
+    io: std.Io,
     window: *c.SDL_Window,
     applicationName: []const u8,
     applicationVersion: u32,
@@ -78,8 +79,8 @@ pub fn Initialize(
         applicationVersion,
     );
 
-    try AssetInventory.Initialize();
-    try sceneInit.InitializeScene();
+    try AssetInventory.Initialize(allocator);
+    try sceneInit.InitializeScene(allocator, io);
 }
 
 pub fn Shutdown() void {
@@ -98,7 +99,7 @@ pub const DrawStats = struct {
     m_renderablesInScene: u32 = 0,
 };
 pub var drawStats = DrawStats{};
-pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
+pub fn RecordCommandBuffer(allocator: std.mem.Allocator, commandBuffer: c.VkCommandBuffer, imageIndex: u32) !void {
     const rContext = try RenderContext.GetInstance();
 
     drawStats = DrawStats{};
@@ -184,7 +185,7 @@ pub fn RecordCommandBuffer(commandBuffer: c.VkCommandBuffer, imageIndex: u32) !v
     // render to texture for editor viewport
     c.vkCmdBeginRendering(commandBuffer, &editorViewportRenderingInfo);
     {
-        try WorldRenderLoop(commandBuffer);
+        try WorldRenderLoop(allocator, commandBuffer);
     }
     c.vkCmdEndRendering(commandBuffer);
 
@@ -282,7 +283,7 @@ fn TransitionSimpleImageLayout(
     );
 }
 
-fn WorldRenderLoop(cmd: c.VkCommandBuffer) !void {
+fn WorldRenderLoop(allocator: std.mem.Allocator, cmd: c.VkCommandBuffer) !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrame = rContext.GetCurrentFrame();
 
@@ -292,7 +293,7 @@ fn WorldRenderLoop(cmd: c.VkCommandBuffer) !void {
     )[0..renderContext.FrameData.MAX_INDIRECT_DRAW];
     _ = drawCommands;
 
-    var batchDraws = try OrganizeDraws();
+    var batchDraws = try OrganizeDraws(allocator);
     defer batchDraws.deinit();
 
     try currentFrame.m_descriptorAllocator.ClearPools(rContext.m_logicalDevice);
@@ -305,7 +306,7 @@ fn WorldRenderLoop(cmd: c.VkCommandBuffer) !void {
     // TODO this should be automatic for all params that need updating
     try sceneInit.UpdateColoredShaderBuffer();
 
-    try WriteDescriptors();
+    try WriteDescriptors(allocator);
 
     var batchDrawIter = batchDraws.iterator();
     while (batchDrawIter.next()) |renderBatch| {
@@ -356,7 +357,7 @@ fn WorldRenderLoop(cmd: c.VkCommandBuffer) !void {
     }
 
     if (debugDraw.ShouldDraw()) {
-        try debugDraw.Draw(cmd);
+        try debugDraw.Draw(allocator, cmd);
     }
 }
 
@@ -370,7 +371,7 @@ fn GetMatAndMeshKey(matInstance: *MaterialInstance, mesh: *Mesh) u128 {
     return (@as(u128, @intFromPtr(matInstance)) << 64) | @as(u128, @intFromPtr(mesh));
 }
 
-fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
+fn OrganizeDraws(allocator: std.mem.Allocator) !AutoHashMap(u128, DrawBatch) {
     var batches = AutoHashMap(u128, DrawBatch).init(allocator);
     errdefer batches.deinit();
 
@@ -379,7 +380,7 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
 
     var renderableIter = renderables.iterator();
     while (renderableIter.next()) |renderableEntry| {
-        if (!try IsVisible(try currentScene.GetCurrentCamera(), renderableEntry.value_ptr)) {
+        if (!try IsVisible(allocator, try currentScene.GetCurrentCamera(), renderableEntry.value_ptr)) {
             continue;
         }
 
@@ -406,7 +407,7 @@ fn OrganizeDraws() !AutoHashMap(u128, DrawBatch) {
 }
 
 var firstTimeBoundsDraw = true; //TODO delete
-fn IsVisible(camera: *const Camera, renderable: *const RenderObject) !bool {
+fn IsVisible(allocator: std.mem.Allocator, camera: *const Camera, renderable: *const RenderObject) !bool {
     const renderablePos = renderable.m_transform.m_position;
     const renderableRot = renderable.m_transform.m_rotation;
 
@@ -421,17 +422,20 @@ fn IsVisible(camera: *const Camera, renderable: *const RenderObject) !bool {
     //TODO delete and remove error union
     if (firstTimeBoundsDraw) {
         _ = try debugDraw.CreateDebugCircle(
+            allocator,
             boundsOrigin,
             Vec3.yAxis,
             renderableBounds.m_sphereRadius,
             ColorRGBA.presets.Green,
         );
         _ = try debugDraw.CreateDebugBox(
+            allocator,
             boundsOrigin,
             renderableBounds.m_extents,
             ColorRGBA.presets.Yellow,
         );
         _ = try debugDraw.CreateDebugLine(
+            allocator,
             boundsOrigin,
             boundsOrigin.Add(Vec3.xAxis.GetScaled(renderableBounds.m_extents.Length())),
             ColorRGBA.presets.Magenta,
@@ -448,7 +452,7 @@ fn IsVisible(camera: *const Camera, renderable: *const RenderObject) !bool {
     return true;
 }
 
-fn WriteDescriptors() !void {
+fn WriteDescriptors(allocator: std.mem.Allocator) !void {
     const rContext = try RenderContext.GetInstance();
     const currentFrame = rContext.GetCurrentFrame();
 
@@ -522,9 +526,7 @@ fn AllocateMaterialDescriptorSets(dAllocator: *DescriptorAllocator) !void {
     }
 }
 
-pub fn RenderFrame(deltaTime: f32) !void {
-    const swapchainAllocator = allocator;
-
+pub fn RenderFrame(allocator: std.mem.Allocator, deltaTime: f32) !void {
     curTime += deltaTime;
     const rContext = try RenderContext.GetInstance();
     const currentFrameData = rContext.GetCurrentFrame();
@@ -559,7 +561,7 @@ pub fn RenderFrame(deltaTime: f32) !void {
         &imageIndex,
     );
     if (acquireImageResult == c.VK_ERROR_OUT_OF_DATE_KHR) {
-        try rContext.m_swapchain.RecreateSwapchain(swapchainAllocator); // recreate swapchain and skip this frame
+        try rContext.m_swapchain.RecreateSwapchain(allocator); // recreate swapchain and skip this frame
         return;
     } else if (acquireImageResult != c.VK_SUCCESS and acquireImageResult != c.VK_SUBOPTIMAL_KHR) {
         return RenderLoopError.FailedToAcquireNextImage;
@@ -571,7 +573,7 @@ pub fn RenderFrame(deltaTime: f32) !void {
         RenderLoopError.FailedToResetCommandBuffer,
     );
 
-    try RecordCommandBuffer(currentFrameData.m_mainCommandBuffer, imageIndex);
+    try RecordCommandBuffer(allocator, currentFrameData.m_mainCommandBuffer, imageIndex);
 
     // submit commands
     const waitStages = [_]c.VkPipelineStageFlags{c.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -606,7 +608,7 @@ pub fn RenderFrame(deltaTime: f32) !void {
 
     const presentResult = c.vkQueuePresentKHR(rContext.m_presentQueue, &presentInfo);
     if (presentResult == c.VK_ERROR_OUT_OF_DATE_KHR or presentResult == c.VK_SUBOPTIMAL_KHR) {
-        try rContext.m_swapchain.RecreateSwapchain(swapchainAllocator);
+        try rContext.m_swapchain.RecreateSwapchain(allocator);
     } else if (presentResult != c.VK_SUCCESS) {
         return RenderLoopError.FailedToPresent;
     }

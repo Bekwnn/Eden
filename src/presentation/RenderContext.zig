@@ -95,6 +95,7 @@ pub const FrameData = struct {
 };
 
 pub const FRAMES_IN_FLIGHT = 2;
+pub const FENCE_TIMEOUT_NS = 9999999999;
 
 pub const RenderContext = struct {
     m_vkInstance: c.VkInstance = undefined,
@@ -225,26 +226,47 @@ pub const RenderContext = struct {
     }
 
     pub fn Shutdown(self: *RenderContext) void {
-        // TODO if (enableValidationLayers) destroy debug utils messenger
-        // TODO teardown out of date
-        defer c.vkDestroyInstance(self.m_vkInstance, null);
+        // wait for fences before shutting down
+        var frameFences: [FRAMES_IN_FLIGHT + 1]c.VkFence = undefined;
+        frameFences[0] = self.m_immediateFence;
+        for (self.m_frameData, 1..) |frame, idx| {
+            frameFences[idx] = frame.m_renderFence;
+        }
 
-        defer c.vkDestroySurfaceKHR(self.m_vkInstance, self.m_surface, null);
+        vkUtil.CheckVkSuccess(
+            c.vkWaitForFences(
+                self.m_logicalDevice,
+                frameFences.len,
+                &frameFences,
+                c.VK_TRUE,
+                FENCE_TIMEOUT_NS,
+            ),
+            RenderContextError.FailedToWait,
+        ) catch {
+            @panic("Shutdown failed to wait for fences!");
+        };
 
-        defer c.vkDestroyDevice(instance.?.m_logicalDevice, null);
+        {
+            // TODO if (enableValidationLayers) destroy debug utils messenger
+            defer c.vkDestroyInstance(self.m_vkInstance, null);
 
-        defer self.m_swapchain.DestroySwapchain();
+            defer c.vkDestroySurfaceKHR(self.m_vkInstance, self.m_surface, null);
 
-        defer {
-            for (&self.m_frameData) |*frameData| {
-                c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_swapchainSemaphore, null);
-                c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_renderSemaphore, null);
-                c.vkDestroyFence(self.m_logicalDevice, frameData.m_renderFence, null);
+            defer c.vkDestroyDevice(instance.?.m_logicalDevice, null);
 
-                frameData.m_descriptorAllocator.deinit(self.m_logicalDevice);
+            defer self.m_swapchain.DestroySwapchain();
 
-                // destroying the parent pool frees all command buffers allocated with it
-                c.vkDestroyCommandPool(self.m_logicalDevice, frameData.m_commandPool, null);
+            defer {
+                for (&self.m_frameData) |*frameData| {
+                    c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_swapchainSemaphore, null);
+                    c.vkDestroySemaphore(self.m_logicalDevice, frameData.m_renderSemaphore, null);
+                    c.vkDestroyFence(self.m_logicalDevice, frameData.m_renderFence, null);
+
+                    frameData.m_descriptorAllocator.deinit(self.m_logicalDevice);
+
+                    // destroying the parent pool frees all command buffers allocated with it
+                    c.vkDestroyCommandPool(self.m_logicalDevice, frameData.m_commandPool, null);
+                }
             }
         }
         instance = null;
@@ -321,7 +343,7 @@ pub const RenderContext = struct {
             RenderContextError.FailedToQueueSubmit,
         );
         try vkUtil.CheckVkSuccess(
-            c.vkWaitForFences(rContext.m_logicalDevice, 1, &rContext.m_immediateFence, true, 9999999999),
+            c.vkWaitForFences(rContext.m_logicalDevice, 1, &rContext.m_immediateFence, true, FENCE_TIMEOUT_NS),
             RenderContextError.FailedToWaitForFences,
         );
     }

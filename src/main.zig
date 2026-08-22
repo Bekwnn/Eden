@@ -8,7 +8,8 @@ const gameWorld = @import("game/GameWorld.zig");
 
 const presentation = @import("presentation/Presentation.zig");
 const editor = @import("presentation/editor/Editor.zig");
-const RenderContext = @import("presentation/RenderContext.zig").RenderContext;
+const renderContext = @import("presentation/RenderContext.zig");
+const RenderContext = renderContext.RenderContext;
 const sdlInit = @import("presentation/SDLInit.zig");
 
 const imageFileUtil = @import("coreutil/ImageFileUtil.zig");
@@ -49,7 +50,8 @@ pub fn main(init: std.process.Init) !void {
     frameTimestamp = std.Io.Timestamp.now(init.io, std.Io.Clock.real);
     try MainGameLoop(init.gpa, init.io, window);
 
-    // teardown
+    const rContext = try RenderContext.GetInstance();
+    rContext.Shutdown();
 }
 
 // if we hit min FPS, we clamp the deltaT to minFPS and let the game run in slow-mo

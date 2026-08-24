@@ -2,7 +2,7 @@ pub const HealthComp = @import("ComponentData/HealthComp.zig").HealthComp;
 pub const InputComp = @import("ComponentData/InputComp.zig").InputComp;
 pub const MovementComp = @import("ComponentData/MovementComp.zig").MovementComp;
 pub const PhysicsComp = @import("ComponentData/PhysicsComp.zig").PhysicsComp;
-pub const SceneComp = @import("ComponentData/SceneComp.zig").SceneComp;
+pub const StaticMeshComp = @import("ComponentData/StaticMeshComp.zig").StaticMeshComp;
 pub const TransformComp = @import("ComponentData/TransformComp.zig").TransformComp;
 
 pub const componentTypes = .{
@@ -10,7 +10,7 @@ pub const componentTypes = .{
     InputComp,
     MovementComp,
     PhysicsComp,
-    SceneComp,
+    StaticMeshComp,
     TransformComp,
 };
 

@@ -113,6 +113,7 @@ pub fn MainGameLoop(allocator: std.mem.Allocator, io: std.Io, window: *c.SDL_Win
             c.ImGui_ImplVulkan_NewFrame();
             c.ImGui_ImplSDL2_NewFrame();
 
+            //TODO ruminate on how the editor should fit into project structure
             try editor.UpdateCameraMovement(deltaT);
 
             c.igNewFrame();

@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const MovementComp = @import("../ComponentData/MovementComp.zig").MovementComp;
 const TransformComp = @import("../ComponentData/TransformComp.zig").TransformComp;
 
@@ -41,7 +43,8 @@ fn TestMovementOnSpawn(data: BehaviourTuple) void {
 
 // TODO create a generic version of this "gather component tuple"
 // pattern to reduce typing so much
-pub fn TestMovementUpdateBehaviour() void {
+pub fn EntityUpdate() void {
+    std.debug.print("TestMovement-EntityUpdate()!\n", .{});
     movementCurTime += gameWorld.deltaTime;
     const gw = gameWorld.WritableInstance();
     const entityManager: *EntityManager = &gw.m_entityManager;
@@ -59,7 +62,7 @@ pub fn TestMovementUpdateBehaviour() void {
     }
 }
 
-pub fn TestMovementOnSpawnBehaviour(eid: u32) void {
+pub fn EntityOnSpawn(eid: u32) void {
     const gw = gameWorld.WritableInstance();
     const entityManager: *EntityManager = &gw.m_entityManager;
     //TODO COMPMANAGER

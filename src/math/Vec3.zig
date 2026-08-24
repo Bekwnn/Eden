@@ -116,7 +116,6 @@ pub const Vec3 = extern struct {
         };
     }
 
-    //TODO panics in debug build only maybe?
     pub fn ScaleToSize(self: *Vec3, size: f32) void {
         const length = self.Length();
         if (length == 0.0) @panic("Trying to scale up a vector with length 0");

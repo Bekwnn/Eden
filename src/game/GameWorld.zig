@@ -24,26 +24,22 @@ pub const GameWorld = struct {
     // the behaviours operating on a given GameWorld? right now we only have 1 world
     // but it might make sense to have multiple worlds or scenes for certain
     // editor functionality/windows.
-    m_updateBehaviours: [behaviourSystems.s_update.len]?*const fn () void = behaviourSystems.s_update,
-    m_fixedUpdateBehaviours: [behaviourSystems.s_fixedUpdate.len]?*const fn () void = behaviourSystems.s_fixedUpdate,
-    m_onSpawnBehaviours: [behaviourSystems.s_onSpawn.len]?*const fn (u32) void = behaviourSystems.s_onSpawn,
-    m_onDestroyBehaviours: [behaviourSystems.s_onDestroy.len]?*const fn (u32) void = behaviourSystems.s_onDestroy,
+    m_updateBehaviours: [behaviourSystems.s_update.len]*const fn () void = behaviourSystems.s_update,
+    m_fixedUpdateBehaviours: [behaviourSystems.s_fixedUpdate.len]*const fn () void = behaviourSystems.s_fixedUpdate,
+    m_onSpawnBehaviours: [behaviourSystems.s_onSpawn.len]*const fn (u32) void = behaviourSystems.s_onSpawn,
+    m_onDestroyBehaviours: [behaviourSystems.s_onDestroy.len]*const fn (u32) void = behaviourSystems.s_onDestroy,
 
     pub fn Update(self: *GameWorld, deltaT: f32) void {
         deltaTime = deltaT;
 
         for (self.m_updateBehaviours) |updateBehaviour| {
-            if (updateBehaviour) |updateFn| {
-                updateFn();
-            }
+            updateBehaviour();
         }
     }
 
     pub fn FixedUpdate(self: *GameWorld) void {
         for (self.m_fixedUpdateBehaviours) |fixedUpdateBehaviour| {
-            if (fixedUpdateBehaviour) |fixedUpdateFn| {
-                fixedUpdateFn();
-            }
+            fixedUpdateBehaviour();
         }
     }
 
@@ -54,18 +50,14 @@ pub const GameWorld = struct {
             debug.panic("{}", .{err});
         };
         for (self.m_entityManager) |onSpawnBehaviour| {
-            if (onSpawnBehaviour) |onSpawnFn| {
-                onSpawnFn(newEntity.m_eid);
-            }
+            onSpawnBehaviour();
         }
         return newEntity;
     }
 
     pub fn KillEntity(self: *GameWorld, eid: u32) bool {
         for (behaviourSystems.s_onDestroy) |onDestroyBehaviour| {
-            if (onDestroyBehaviour) |onDestroyFn| {
-                onDestroyFn(eid);
-            }
+            onDestroyBehaviour(eid);
         }
         return self.m_entityManager.KillEntity(eid);
     }

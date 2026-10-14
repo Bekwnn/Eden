@@ -32,13 +32,22 @@ pub const VTable = struct {
         device: *Device,
         source: *Buffer,
         destination: *Buffer,
+        size: usize,
     ) DeviceError!void,
 
-    find_memory_type: *const fn (
+    upload_buffer: *const fn (
         device: *Device,
-        type_filter: u32,
-        //properties: MemoryProperties,
-    ) DeviceError!u32,
+        source: *Buffer,
+        offset: usize,
+        data: []const u8,
+    ) DeviceError!void,
+
+    //???
+    //find_memory_type: *const fn (
+    //    device: *Device,
+    //    type_filter: u32,
+    //    properties: MemoryProperties,
+    //) DeviceError!u32,
 
     wait_idle: *const fn (device: *Device) DeviceError!void,
 };

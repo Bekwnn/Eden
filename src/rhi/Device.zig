@@ -9,6 +9,7 @@ vtable: *const VTable,
 
 pub const DeviceError = error{};
 
+// for now only one device tied to the render instance exists at a time
 pub const VTable = struct {
     // consider making window *anyopaque
     // though support for non-SDL isn't planned

@@ -20,16 +20,27 @@ pub const VkDeviceError = error{
 pub const vtable: Device.VTable = .{
     .init = init,
     .deinit = deinit,
+    .create_swapchain = ,
+    .recreate_swapchain = ,
+    .destroy_swapchain = ,
+    .create_fence = ,
+    .destroy_fence = ,
+    .create_semaphore = ,
+    .destroy_semaphore = ,
+    .create_bind_group = ,
+    .destroy_bind_group = ,
     .create_buffer = create_buffer,
     .destroy_buffer = destroy_buffer,
     .copy_buffer = copy_buffer,
     .map_buffer = map_buffer,
-    .unmap_buffer = unmap_buffer,
+    .create_texture = ,
+    .destroy_texture = ,
+    .create_texture_view = ,
+    .destroy_texture_view = ,
     .wait_idle = wait_idle,
 };
 
-// render instance internals
-const RenderContext = struct {
+const DeviceContext = struct {
     m_vkInstance: c.VkInstance = undefined,
     m_surface: c.VkSurfaceKHR = undefined,
     m_physicalDevice: c.VkPhysicalDevice = undefined,
@@ -674,17 +685,4 @@ pub fn map_buffer(
         ),
         BufferError.FailedToMapData,
     );
-}
-
-// returns an error if memory already unmapped
-pub fn unmap_buffer(
-    self: *const Self,
-) !void {
-    if (self.m_mappedData == null) {
-        return BufferError.FailedToUnmapMemory;
-    }
-
-    const rContext = try RenderContext.GetInstance();
-    c.vkUnmapMemory(rContext.m_logicalDevice, self.m_memory);
-    self.m_mappedData = null;
 }

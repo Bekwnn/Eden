@@ -20,7 +20,7 @@ pub const VkDeviceError = error{
 pub const vtable: Device.VTable = .{
     .init = init,
     .deinit = deinit,
-    .create_swapchain = ,
+    .create_swapchain = create_swapchain,
     .recreate_swapchain = ,
     .destroy_swapchain = ,
     .create_fence = ,
@@ -40,6 +40,8 @@ pub const vtable: Device.VTable = .{
     .wait_idle = wait_idle,
 };
 
+const instance : ?DeviceContext = null;
+
 const DeviceContext = struct {
     m_vkInstance: c.VkInstance = undefined,
     m_surface: c.VkSurfaceKHR = undefined,
@@ -47,6 +49,10 @@ const DeviceContext = struct {
     m_logicalDevice: c.VkDevice = undefined,
     m_debugMessenger: c.VkDebugUtilsMessengerEXT = undefined,
 };
+
+pub fn get_context() !*DeviceContext {
+    return instance orelse VkDeviceError.NotInitialized;
+}
 
 pub fn init(
     self: *Self,
